@@ -70,13 +70,18 @@
     "updateTime": "2026-01-13"
   },
   "光圈科技": {
-    "regexCount": 1,
+    "regexCount": 0,
     "author": "Desharmonie",
     "updateTime": "2026-01-01"
   },
   "蓝胖": {
-    "regexCount": 1,
+    "regexCount": 0,
     "author": "Desharmonie",
     "updateTime": "2025-12-30"
+  },
+  "高文&琥珀": {
+    "regexCount": 1,
+    "author": "lili",
+    "updateTime": "2026-01-14"
   }
 }
