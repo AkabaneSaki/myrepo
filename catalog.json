@@ -7,7 +7,7 @@
   "妲丽安": {
     "regexCount": 2,
     "author": "随风渐变",
-    "updateTime": "2026-01-14"
+    "updateTime": "2026-01-15"
   },
   "奶龙": {
     "regexCount": 1,
@@ -27,7 +27,7 @@
   "类脑娘": {
     "regexCount": 1,
     "author": "lili",
-    "updateTime": "2026-01-11"
+    "updateTime": "2026-01-15"
   },
   "阿巴瑟": {
     "regexCount": 1,
@@ -83,5 +83,10 @@
     "regexCount": 1,
     "author": "lili",
     "updateTime": "2026-01-14"
+  },
+  "阿斯莫德": {
+    "regexCount": 0,
+    "author": "飛光飛光勸爾一杯酒",
+    "updateTime": "2026-01-15"
   }
 }
