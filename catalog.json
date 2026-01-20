@@ -2,118 +2,162 @@
   "奥托": {
     "regexCount": 2,
     "author": "lili",
-    "updateTime": "2026-01-17"
+    "updateTime": "2026-01-17",
+    "origin": "崩坏3rd",
+    "description": ""
   },
   "妲丽安": {
     "regexCount": 2,
     "author": "随风渐变",
     "updateTime": "2026-01-19",
     "origin": "丹特丽安的书架",
-    "description": "掌管幻书的黑之读姬，毒舌傲娇，嗜甜如命，知识与命运的引路人"
+    "description": ""
   },
   "奶龙": {
     "regexCount": 1,
     "author": "奶K1nn",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "奶龙",
+    "description": ""
   },
   "长颈鹿": {
     "regexCount": 5,
     "author": "仰望星空",
-    "updateTime": "2026-01-09"
+    "updateTime": "2026-01-09",
+    "origin": "歌剧少女",
+    "description": ""
   },
   "你怎么睡得着觉": {
     "regexCount": 0,
     "author": "lili",
-    "updateTime": "2026-01-05"
+    "updateTime": "2026-01-05",
+    "origin": "",
+    "description": ""
   },
   "类脑娘": {
     "regexCount": 1,
     "author": "lili",
-    "updateTime": "2026-01-15"
+    "updateTime": "2026-01-15",
+    "origin": "",
+    "description": ""
   },
   "阿巴瑟": {
     "regexCount": 1,
     "author": "超级强劲特别好名字",
-    "updateTime": "2026-01-12"
+    "updateTime": "2026-01-12",
+    "origin": "",
+    "description": ""
   },
   "强尼银手": {
     "regexCount": 1,
     "author": "超级强劲特别好名字",
-    "updateTime": "2026-01-09"
+    "updateTime": "2026-01-09",
+    "origin": "",
+    "description": ""
   },
   "薇洛": {
     "regexCount": 1,
     "author": "戰鬥直升貂",
-    "updateTime": "2026-01-16"
-  },
-  "重薇": {
-    "regexCount": 1,
-    "author": "戰鬥直升貂",
-    "updateTime": "2026-01-16"
+    "updateTime": "2026-01-16",
+    "origin": "原创",
+    "description": "咿？天真守护妖精｜治愈光环｜心象风景｜恩仇契印｜全肯定bot｜撒娇&抖M｜日常养成｜这个世界必须对主人温柔。"
   },
   "黑薇": {
     "regexCount": 1,
     "author": "戰鬥直升貂",
-    "updateTime": "2026-01-16"
+    "updateTime": "2026-01-16",
+    "origin": "原创",
+    "description": "咿！荆棘迷途妖精｜创伤虐心｜心象风景｜恩仇契印｜病娇潜质｜代价&守护｜攻防一体｜若世界不配温柔就由我来…"
+  },
+  "重薇": {
+    "regexCount": 1,
+    "author": "戰鬥直升貂",
+    "updateTime": "2026-01-16",
+    "origin": "原创",
+    "description": "咿？双生守护妖精｜一体双心｜心象风景｜恩仇契印｜柔光回返｜现在&残响｜心刃同存｜我们…会一起守护主人的。"
   },
   "艾莉亚": {
     "regexCount": 1,
     "author": "那什么阿法",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "",
+    "description": ""
   },
   "泡泡": {
     "regexCount": 1,
     "author": "xsbah",
-    "updateTime": "2026-01-06"
+    "updateTime": "2026-01-06",
+    "origin": "",
+    "description": ""
   },
   "迦勒底亚斯": {
     "regexCount": 1,
     "author": "那什么阿法",
-    "updateTime": "2026-01-13"
+    "updateTime": "2026-01-13",
+    "origin": "",
+    "description": ""
   },
   "光圈科技": {
     "regexCount": 0,
     "author": "Desharmonie",
-    "updateTime": "2026-01-01"
+    "updateTime": "2026-01-01",
+    "origin": "",
+    "description": ""
   },
   "蓝胖": {
     "regexCount": 0,
     "author": "Desharmonie",
-    "updateTime": "2025-12-30"
+    "updateTime": "2025-12-30",
+    "origin": "",
+    "description": ""
   },
   "阿斯莫德": {
     "regexCount": 0,
     "author": "飛光飛光勸爾一杯酒",
-    "updateTime": "2026-01-15"
+    "updateTime": "2026-01-15",
+    "origin": "",
+    "description": ""
   },
   "阿比盖尔（表）": {
     "regexCount": 1,
     "author": "风见幽泠",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "FGO",
+    "description": ""
   },
   "阿比盖尔（里）": {
     "regexCount": 1,
     "author": "风见幽泠",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "FGO",
+    "description": ""
   },
   "塔奇克马": {
     "regexCount": 1,
     "author": "Aoo",
-    "updateTime": "2026-01-11"
+    "updateTime": "2026-01-11",
+    "origin": "攻壳机动队",
+    "description": "吵闹的新生AI们与你一起探索A一串大陆 （智力制作，经验buff，隐身）"
   },
   "搞毛": {
     "regexCount": 1,
     "author": "Aoo",
-    "updateTime": "2026-01-18"
+    "updateTime": "2026-01-18",
+    "origin": "战锤40k",
+    "description": "搞哥毛哥为你提供俺寻思之力（力敏制作，风格化技能，奖励角色扮演）"
   },
   "猫": {
     "regexCount": 0,
     "author": "Aoo",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "N/A",
+    "description": "你没有系统，但是你养的猫有 （偏沉浸，提供简化的系统功能）"
   },
   "奈克罗德穆斯": {
     "regexCount": 0,
     "author": "擅长亡灵魔法的超重型铠装骑士",
-    "updateTime": "2026-01-19"
+    "updateTime": "2026-01-19",
+    "origin": "",
+    "description": ""
   }
 }
