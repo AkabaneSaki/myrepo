@@ -2,7 +2,7 @@
   "奥托": {
     "regexCount": 2,
     "author": "lili",
-    "updateTime": "2026-01-17",
+    "updateTime": "2026-01-22",
     "origin": "崩坏3rd",
     "description": ""
   },
@@ -11,21 +11,21 @@
     "author": "随风渐变",
     "updateTime": "2026-01-19",
     "origin": "丹特丽安的书架",
-    "description": ""
+    "description": "掌管幻书的黑之读姬，毒舌傲娇，嗜甜如命，知识与命运的引路人"
   },
   "奶龙": {
     "regexCount": 1,
     "author": "奶K1nn",
     "updateTime": "2026-01-19",
     "origin": "奶龙",
-    "description": ""
+    "description": "我是奶龙！我才是奶龙！"
   },
   "长颈鹿": {
     "regexCount": 5,
     "author": "仰望星空",
     "updateTime": "2026-01-09",
     "origin": "歌剧少女",
-    "description": ""
+    "description": "林中之马，命运的导演，闪耀的舞台剧(可搭配预设歌剧西幻文风)"
   },
   "你怎么睡得着觉": {
     "regexCount": 0,
@@ -37,23 +37,23 @@
   "类脑娘": {
     "regexCount": 1,
     "author": "lili",
-    "updateTime": "2026-01-15",
-    "origin": "",
+    "updateTime": "2026-01-22",
+    "origin": "类脑频道",
     "description": ""
   },
   "阿巴瑟": {
     "regexCount": 1,
     "author": "超级强劲特别好名字",
     "updateTime": "2026-01-12",
-    "origin": "",
-    "description": ""
+    "origin": "星际争霸",
+    "description": "在异虫进化大师阿巴瑟的指引下，通过杀戮与掠夺生物精华快速获取FP点数。利用FP和得到的基因序列来获取新技能，杀得越多你就越强。拥有改造身体的效果，包括调整契约对象的外貌。有异虫部队增援来避免被监禁几十轮对话。"
   },
   "强尼银手": {
     "regexCount": 1,
     "author": "超级强劲特别好名字",
     "updateTime": "2026-01-09",
-    "origin": "",
-    "description": ""
+    "origin": "赛博朋克2077",
+    "description": "由传奇摇滚小子强尼·银手担任核心 。该系统赋予宿主独特的赛博模式，让赛博朋克2077的技能在异世界产生效果。用金币购买赛博朋克原作的各种装备，使用FP和材料打造魔幻世界风格的义体、快速破解。拥有核弹作为终结手段避免被监禁几十轮对话。"
   },
   "薇洛": {
     "regexCount": 1,
@@ -87,8 +87,8 @@
     "regexCount": 1,
     "author": "xsbah",
     "updateTime": "2026-01-06",
-    "origin": "",
-    "description": ""
+    "origin": "克苏鲁神话",
+    "description": "猫娘,几乎全知但是不说偶尔绷不住,喜欢甜食甜食还有甜食,选择泡泡就是被外神眷顾的人啦,真的会有人不选吗？/n PS.其实最早设定是通过书本查阅本体知识的伪全知,但是哈基米扮演不好QAQ"
   },
   "迦勒底亚斯": {
     "regexCount": 1,
@@ -101,15 +101,15 @@
     "regexCount": 0,
     "author": "Desharmonie",
     "updateTime": "2026-01-01",
-    "origin": "",
-    "description": ""
+    "origin": "Dota2",
+    "description": "光圈科技™的CEO，以及CEO的秘书。这两个家伙试图在异世界开展市场调研，雇佣了<user>。"
   },
   "蓝胖": {
     "regexCount": 0,
     "author": "Desharmonie",
     "updateTime": "2025-12-30",
-    "origin": "",
-    "description": ""
+    "origin": "Dota2",
+    "description": "快乐的双头食人魔，受到幸运(抽卡)女神的委托来帮助<user>。"
   },
   "阿斯莫德": {
     "regexCount": 0,
@@ -123,14 +123,14 @@
     "author": "风见幽泠",
     "updateTime": "2026-01-19",
     "origin": "FGO",
-    "description": ""
+    "description": "外神巫女阿比盖尔，守护你的日常生活"
   },
   "阿比盖尔（里）": {
     "regexCount": 1,
     "author": "风见幽泠",
     "updateTime": "2026-01-19",
     "origin": "FGO",
-    "description": ""
+    "description": "外神巫女阿比盖尔，协助你的奇妙探险"
   },
   "塔奇克马": {
     "regexCount": 1,
@@ -159,5 +159,12 @@
     "updateTime": "2026-01-19",
     "origin": "",
     "description": ""
+  },
+  "读者": {
+    "regexCount": 1,
+    "author": "Angtuck",
+    "updateTime": "2026-01-22",
+    "origin": "原创",
+    "description": "故事的读者，不明存在，涵养很好的大小姐。"
   }
 }
