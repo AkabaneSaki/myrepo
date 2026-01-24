@@ -2,7 +2,7 @@
   "奥托": {
     "regexCount": 2,
     "author": "lili",
-    "updateTime": "2026-01-22",
+    "updateTime": "2026-01-24",
     "origin": "崩坏3rd",
     "description": ""
   },
@@ -37,7 +37,7 @@
   "类脑娘": {
     "regexCount": 1,
     "author": "lili",
-    "updateTime": "2026-01-22",
+    "updateTime": "2026-01-24",
     "origin": "类脑频道",
     "description": ""
   },
@@ -80,8 +80,8 @@
     "regexCount": 1,
     "author": "那什么阿法",
     "updateTime": "2026-01-19",
-    "origin": "",
-    "description": ""
+    "origin": "原创",
+    "description": "出发吧旅伴 无论是一成不变的日常还是终身难忘的冒险"
   },
   "泡泡": {
     "regexCount": 1,
@@ -115,7 +115,7 @@
     "regexCount": 0,
     "author": "飛光飛光勸爾一杯酒",
     "updateTime": "2026-01-15",
-    "origin": "",
+    "origin": "原创",
     "description": ""
   },
   "阿比盖尔（表）": {
@@ -163,8 +163,22 @@
   "读者": {
     "regexCount": 1,
     "author": "Angtuck",
-    "updateTime": "2026-01-22",
+    "updateTime": "2026-01-24",
     "origin": "原创",
     "description": "故事的读者，不明存在，涵养很好的大小姐。"
+  },
+  "莉莉": {
+    "regexCount": 0,
+    "author": "青砚",
+    "updateTime": "2026-01-24",
+    "origin": "ENDER LILIES",
+    "description": "来自《终焉之莉莉》的白巫女莉莉，在沉睡中等待着她的骑士大人，想和她的骑士大人一起虚度时光，连着恬静与慵懒，浪费在每一个清晨和午后。"
+  },
+  "区区": {
+    "regexCount": 0,
+    "author": "Aoo",
+    "updateTime": "2026-01-24",
+    "origin": "N/A",
+    "description": "和自称区区的浪漫派诗人一起吃喝玩乐逃命"
   }
 }
