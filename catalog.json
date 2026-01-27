@@ -2,7 +2,7 @@
   "奥托": {
     "regexCount": 2,
     "author": "lili",
-    "updateTime": "2026-01-26",
+    "updateTime": "2026-01-27",
     "origin": "崩坏3rd",
     "description": ""
   },
@@ -123,14 +123,14 @@
     "author": "风见幽泠",
     "updateTime": "2026-01-19",
     "origin": "FGO",
-    "description": "外神巫女阿比盖尔，守护你的日常生活"
+    "description": "外神巫女阿比盖尔，守护你的日常生活。可通过`/setvar key=system_skin 0`或者`/setvar key=system_skin 1`来切换头像的皮肤"
   },
   "阿比盖尔（里）": {
     "regexCount": 1,
     "author": "风见幽泠",
     "updateTime": "2026-01-19",
     "origin": "FGO",
-    "description": "外神巫女阿比盖尔，协助你的奇妙探险"
+    "description": "外神巫女阿比盖尔，协助你的奇妙探险。可通过`/setvar key=system_skin 0`或者`/setvar key=system_skin 1`来切换头像的皮肤"
   },
   "塔奇克马": {
     "regexCount": 1,
@@ -175,10 +175,24 @@
     "description": "来自《终焉之莉莉》的白巫女莉莉，在沉睡中等待着她的骑士大人，想和她的骑士大人一起虚度时光，连着恬静与慵懒，浪费在每一个清晨和午后。"
   },
   "区区": {
-    "regexCount": 0,
+    "regexCount": 1,
     "author": "Aoo",
-    "updateTime": "2026-01-24",
+    "updateTime": "2026-01-27",
     "origin": "N/A",
     "description": "和自称区区的浪漫派诗人一起吃喝玩乐逃命"
+  },
+  "月蚀": {
+    "regexCount": 1,
+    "author": "AkarisRotileAslovenia",
+    "updateTime": "2026-01-27",
+    "origin": "DNF",
+    "description": "适用于召唤师玩法的系统核心"
+  },
+  "灰姑娘": {
+    "regexCount": 1,
+    "author": "Angtuck",
+    "updateTime": "2026-01-26",
+    "origin": "原创",
+    "description": "自称辛德瑞拉的存在是自幻想的暗面渗出之物。用谎言装点褴褛，将它变成华服。培养合格的舞伴吧。"
   }
 }
