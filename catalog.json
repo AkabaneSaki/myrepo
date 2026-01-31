@@ -208,5 +208,12 @@
     "updateTime": "2026-01-31",
     "origin": "黎明之剑",
     "description": ""
+  },
+  "遗迹兵装": {
+    "regexCount": 0,
+    "author": "随风渐变",
+    "updateTime": "2026-01-31",
+    "origin": "原创",
+    "description": "人机!可能会影响上下文，如果效果可以的话后面会加美化吧"
   }
 }
