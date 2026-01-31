@@ -37,7 +37,7 @@
   "类脑娘": {
     "regexCount": 1,
     "author": "lili",
-    "updateTime": "2026-01-24",
+    "updateTime": "2026-01-31",
     "origin": "类脑频道",
     "description": ""
   },
@@ -191,8 +191,22 @@
   "灰姑娘": {
     "regexCount": 1,
     "author": "Angtuck",
-    "updateTime": "2026-01-29",
+    "updateTime": "2026-01-31",
     "origin": "原创",
     "description": "自称辛德瑞拉的存在是自幻想的暗面渗出之物。用谎言装点褴褛，将它变成华服。培养合格的舞伴吧。"
+  },
+  "小夜莺": {
+    "regexCount": 1,
+    "author": "FIshfish",
+    "updateTime": "2026-01-31",
+    "origin": "原创",
+    "description": ""
+  },
+  "高文&琥珀": {
+    "regexCount": 1,
+    "author": "lili",
+    "updateTime": "2026-01-31",
+    "origin": "黎明之剑",
+    "description": ""
   }
 }
