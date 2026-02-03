@@ -1,0 +1,17 @@
+{
+    "id": "de61c773-ba60-46df-8b7d-758bd44c51eb",
+    "scriptName": "大蓝象与棍父美化",
+    "findRegex": "/>\\s*(大蓝象|棍父)\\s*[:：]\\s*[「]([\\s\\S]*?)[」]/g",
+    "replaceString": "<div class=\"void-sys-box\" data-role=\"$1\"><div class=\"sys-head\">$1</div><div class=\"sys-body\">$2</div></div><style>\n/* --- 基础结构 (通用) --- */\n.void-sys-box {\n    position: relative;\n    margin: 25px 0;\n    padding: 20px 25px;\n    border-radius: 12px;\n    font-size: 1.05em;\n    line-height: 1.6;\n    display: flex;\n    flex-direction: column;\n    box-shadow: 0 4px 10px rgba(0,0,0,0.1);\n}\n.void-sys-box .sys-head {\n    position: absolute;\n    top: -12px;\n    left: 20px;\n    padding: 2px 12px;\n    border-radius: 6px;\n    font-size: 0.9em;\n    font-weight: bold;\n    letter-spacing: 1px;\n    box-shadow: 0 2px 5px rgba(0,0,0,0.2);\n}\n\n/* --- 大蓝象风格 (活力蓝) --- */\n.void-sys-box[data-role=\"大蓝象\"] {\n    /* 核心配色 */\n    --main-col: #03a9f4;\n    --bg-col: #e1f5fe;\n    --text-col: #01579b;\n\n    background: linear-gradient(135deg, #ffffff 0%, var(--bg-col) 100%);\n    border: 3px solid var(--main-col);\n    border-radius: 18px; /* 更圆润 */\n    font-family: 'Microsoft YaHei', 'Arial', sans-serif;\n    color: var(--text-col);\n}\n.void-sys-box[data-role=\"大蓝象\"] .sys-head {\n    background: var(--main-col);\n    color: #fff;\n}\n/* 大蓝象专属装饰：圆点背景 */\n.void-sys-box[data-role=\"大蓝象\"]::after {\n    content: '';\n    position: absolute;\n    top: 5px; right: 5px; bottom: 5px; left: 5px;\n    background-image: radial-gradient(var(--main-col) 10%, transparent 10%);\n    background-size: 10px 10px;\n    opacity: 0.1;\n    pointer-events: none;\n}\n\n/* --- 棍父风格 (复古糙) --- */\n.void-sys-box[data-role=\"棍父\"] {\n    /* 核心配色 */\n    --main-col: #3d405b;\n    --paper-col: #f4ece2;\n    --ink-col: #2b2d42;\n\n    background: var(--paper-col);\n    border: 3px double var(--main-col); /* 双线边框 */\n    border-radius: 4px; /* 方正 */\n    font-family: 'KaiTi', 'SimKai', 'Times New Roman', serif; /* 楷体/衬线 */\n    color: var(--ink-col);\n    font-weight: 600;\n}\n.void-sys-box[data-role=\"棍父\"] .sys-head {\n    background: var(--main-col);\n    color: var(--paper-col);\n    border: 1px solid var(--paper-col);\n    font-family: 'SimHei', sans-serif; /* 标题用黑体对比 */\n}\n</style>",
+    "trimStrings": [],
+    "placement": [
+        2
+    ],
+    "disabled": false,
+    "markdownOnly": true,
+    "promptOnly": false,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": 8
+}
