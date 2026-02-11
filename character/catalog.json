@@ -14,5 +14,29 @@
     "description": "陪伴你到世界尽头的龙姬绘璃奈酱。",
     "keywords": "天原绘璃奈, 璃奈, 天原, 小公主, 学院小公主, 人造龙姬",
     "keywords_secondary":"艾瑟嘉德, 学院区, 艾瑟嘉德学院区, 炼金术士协会, 绘璃奈, 天原绘璃奈, 天原"
+  },
+  "克瑞西达": {
+    "author": "Elfa",
+    "updateTime": "2026-02-07",
+    "origin": "原创",
+    "description": "",
+    "keywords": "表, 遗物, 古董, 克瑞西达",
+    "keywords_secondary":"拍卖会, 遗迹, 克瑞西达"
+  },
+  "金麟霍克": {
+    "author": "Aoo",
+    "updateTime": "2026-02-08",
+    "origin": "原创",
+    "description": "",
+    "keywords": "金鳞, 霍克, 银帆城, 金狮商会",
+    "keywords_secondary":""
+  },
+  "莱拉": {
+    "author": "Aoo",
+    "updateTime": "2026-01-16",
+    "origin": "原创",
+    "description": "",
+    "keywords": "暗影之手, 萨赫拉联邦, 舞女, 莱拉",
+    "keywords_secondary":""
   }
 }

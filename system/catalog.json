@@ -29,7 +29,7 @@
   },
   "迦勒底亚斯": {
     "regexCount": 1,
-    "author": "那什么阿法",
+    "author": "Elfa",
     "updateTime": "2026-01-13",
     "origin": "",
     "description": ""
@@ -99,7 +99,7 @@
   },
   "灰姑娘": {
     "regexCount": 1,
-    "author": "Angtuck",
+    "author": "Orchis",
     "updateTime": "2026-01-31",
     "origin": "原创",
     "description": "自称辛德瑞拉的存在是自幻想的暗面渗出之物。用谎言装点褴褛，将它变成华服。培养合格的舞伴吧。"
@@ -124,5 +124,12 @@
     "updateTime": "2026-02-11",
     "origin": "原创",
     "description": "陪伴你到世界尽头的龙姬绘璃奈酱。"
+  },
+  "圣剑": {
+    "regexCount": 1,
+    "author": "Elfa",
+    "updateTime": "2026-02-10",
+    "origin": "原创",
+    "description": ""
   }
 }
