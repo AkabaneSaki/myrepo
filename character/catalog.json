@@ -2,7 +2,7 @@
   "福尔摩斯": {
     "author": "Orchis",
     "updateTime": "2026-02-03",
-    "origin": "原创",
+    "origin": "福尔摩斯",
     "description": "",
     "keywords": "福尔摩斯, 侦探, 事务所",
     "keywords_secondary":""
@@ -38,5 +38,13 @@
     "description": "",
     "keywords": "暗影之手, 萨赫拉联邦, 舞女, 莱拉",
     "keywords_secondary":""
+  },
+  "套中人": {
+    "author": "Orchis",
+    "updateTime": "2026-02-14",
+    "origin": "套中人",
+    "description": "社恐少女诗灵，于诺斯加德联盟可遭遇",
+    "keywords": "套中人, 管理员, 档案馆, 樟脑球",
+    "keywords_secondary":"诗灵, 白曜城, 套中人, 诺斯加德"
   }
 }

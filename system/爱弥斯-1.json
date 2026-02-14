@@ -1,0 +1,17 @@
+{
+    "id": "5b4594ed-5be0-4456-9eaf-3eaea29f07c9",
+    "scriptName": "Amis_UI_Pink",
+    "findRegex": "/<Resonator name=\"爱弥斯\" mood=\"(.*?)\">([\\s\\S]*?)<\\/Resonator>/g",
+    "replaceString": "<div style=\"\n    background-color: rgba(255, 245, 247, 0.95); \n    border: 2px solid #FFB7C5; \n    border-radius: 15px; \n    padding: 12px 16px; \n    margin: 10px 5px; \n    box-shadow: 0 0 10px rgba(255, 183, 197, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.5); \n    color: #D65A83; \n    font-family: 'Microsoft YaHei', sans-serif;\n    position: relative;\n    backdrop-filter: blur(4px);\n\">\n    <div style=\"\n        position: absolute; \n        top: -10px; \n        left: 20px; \n        background: #FF69B4; \n        color: white; \n        padding: 2px 10px; \n        border-radius: 10px; \n        font-size: 0.8em; \n        box-shadow: 0 0 5px #FF69B4;\n        font-weight: bold;\n    \">\n        ⚡ AMIS-OS :: $1\n    </div>\n\n    <div style=\"\n        position: absolute;\n        bottom: 5px;\n        right: 10px;\n        font-size: 10px;\n        opacity: 0.5;\n        letter-spacing: 2px;\n    \">\n        ▮|||||||▮\n    </div>\n\n    <span style=\"line-height: 1.6; font-weight: 500;\">\n        $2\n    </span>\n</div>",
+    "trimStrings": [],
+    "placement": [
+        2
+    ],
+    "disabled": false,
+    "markdownOnly": true,
+    "promptOnly": false,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": 8
+}
