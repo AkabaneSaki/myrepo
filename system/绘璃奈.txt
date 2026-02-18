@@ -1,17 +1,17 @@
 <命定系统>
   命定系统:
 <%_
-const lastUserMsg = (getChatMessage(-1, 'user') || '').toString();
+var lastUserMsg = (getChatMessage(-1, 'user') || '').toString();
 
-const isBranch = /分枝/.test(lastUserMsg);
-const isStar = /命星/.test(lastUserMsg);
-const isWeave = /交织/.test(lastUserMsg);
-const isCrossroads = /歧路/.test(lastUserMsg);
-const isHunt = /寻猎/.test(lastUserMsg);
-const isEcho = /残响/.test(lastUserMsg);
-const isAnyGacha = isBranch || isStar || isWeave || isCrossroads || isHunt || isEcho;
+var isBranch = /分枝/.test(lastUserMsg);
+var isStar = /命星/.test(lastUserMsg);
+var isWeave = /交织/.test(lastUserMsg);
+var isCrossroads = /歧路/.test(lastUserMsg);
+var isHunt = /寻猎/.test(lastUserMsg);
+var isEcho = /残响/.test(lastUserMsg);
+var isAnyGacha = isBranch || isStar || isWeave || isCrossroads || isHunt || isEcho;
 
-const isContract = /契约|缔结/.test(lastUserMsg);
+var isContract = /契约|缔结/.test(lastUserMsg);
 _%>
     核心机制:
       1. 【超时空辉龙姬】: “绘璃奈”是盘踞高维位面的传奇古龙姬。她能够干涉各个世界线的时空、质能、生灭、命运。
