@@ -1,0 +1,17 @@
+{
+    "id": "34904634-c9a0-4cb0-b740-8747b989e966",
+    "scriptName": "命定核心-奥尔什方美化",
+    "findRegex": "/>\\s*奥尔什方\\s*[:：]\\s*[「]\\s*([\\s\\S]*?)\\s*[」]/g",
+    "replaceString": "<div style=\"\n    background-color: #f2ebe0;\n    border-radius: 20px;\n    border: 2px solid #666666;\n    padding: 10px;\n    margin: 10px 0;\n    font-family: 'gg sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;\n    display: flex;\n    align-items: flex-start;\n    gap: 16px;\n    color: #333333;\n    box-shadow: 0 2px 0px rgba(255, 255, 255, 0.8) inset, 0 2px 5px rgba(0,0,0,0.2);\n    box-sizing: border-box;\n\">\n    <div style=\"\n        width: 40px;\n        height: 40px;\n        border-radius: 50%;\n        background-image: url('https://p1.ssl.qhimg.com/dr/270_500_/t01354c47eec09e9a42.jpg?size=400x284');\n        background-size: cover;\n        background-position: center;\n        flex-shrink: 0;\n        cursor: pointer;\n        border: 1px solid #666666;\n    \" onclick=\"event.stopPropagation(); window.open(this.style.backgroundImage.slice(5, -2), '_blank')\"></div>\n    <div style=\"flex: 1; min-width: 0;\">\n        <div style=\"display: flex; align-items: center; margin-bottom: 4px;\">\n            <span style=\"font-weight: 600; font-size: 16px; color: #222222; margin-right: 4px;\">奥尔什方</span>\n            <span style=\"\n                background-color: #a05f43;\n                color: #f2ebe0;\n                font-size: 10px;\n                padding: 1px 4px;\n                border-radius: 3px;\n                text-transform: uppercase;\n                font-weight: bold;\n                vertical-align: middle;\n                display: inline-flex;\n                align-items: center;\n                height: 15px;\n            \">挚友</span>\n        </div>\n        <!-- 【正则替换核心区域】：提取的内容直接插入此处即可 -->\n        <div style=\"\n            font-size: 16px;\n            line-height: 1.5;\n            color: #333333;\n            white-space: pre-wrap; /* 保留换行/空格，适配[\\s\\S]匹配的所有字符 */\n            word-wrap: break-word; /* 超长文本自动换行，不溢出 */\n            word-break: break-all; /* 兼容特殊字符/长单词换行 */\n            overflow: visible; /* 内容不被隐藏 */\n            min-height: 1em; /* 空内容时也保留基础高度，避免布局塌陷 */\n        \">$1</div>\n    </div>\n</div>",
+    "trimStrings": [],
+    "placement": [
+        2
+    ],
+    "disabled": false,
+    "markdownOnly": true,
+    "promptOnly": false,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": 6
+}
