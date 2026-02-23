@@ -1,0 +1,15 @@
+{
+  "id": "5d31f319-2b41-40de-9388-0cbad32221d9",
+  "scriptName": "命定核心-白神莉莉美化",
+  "findRegex": "/>\\s*白神莉莉\\s*[:：]\\s*[「]\\s*([\\s\\S]*?)\\s*[」]/g",
+  "replaceString": "<div style=\"\n    /* 核心渐变背景：保留柔和的黄粉渐变 */\n    background: linear-gradient(135deg, #ffe888 0%, #ffb6c1 100%);\n    /* 更可爱的不规则圆角：模拟软萌气泡，右下更圆、左上略尖，增加萌感 */\n    border-radius: 20px 35px 35px 8px;\n    /* 可爱的双层边框：浅粉+奶黄，更有层次感 */\n    border: 2px solid #ffd6e0;\n    box-shadow: 0 0 0 3px #fff199, /* 外层奶黄边框，模拟双层萌边 */\n                0 4px 8px rgba(255, 158, 175, 0.2), \n                0 1px 0px rgba(255, 255, 255, 0.9) inset;\n    /* 调整内边距，适配去掉头像后的布局 */\n    padding: 15px 20px;\n    margin: 15px 0;\n    font-family: 'Comic Sans MS', '幼圆', 'Microsoft YaHei', sans-serif;\n    color: #8b4568;\n    box-sizing: border-box;\n    transition: all 0.3s ease;\n    position: relative;\n    top: 0;\n\">\n    <div style=\"width: 100%;\">\n        <div style=\"display: flex; align-items: center; margin-bottom: 8px;\">\n            <span style=\"\n                font-weight: 700;\n                font-size: 18px;\n                color: #e66788;\n                text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);\n                /* 名字添加可爱的小装饰：底部短线 */\n                border-bottom: 3px solid #fff199;\n                padding-bottom: 2px;\n            \">白神莉莉</span>\n        </div>\n        <!-- 内容区域 -->\n        <div style=\"\n            font-size: 16px;\n            line-height: 1.6;\n            color: #7a405a;\n            white-space: pre-wrap;\n            word-wrap: break-word;\n            word-break: break-all;\n            overflow: visible;\n            min-height: 1em;\n            padding: 4px 0;\n            text-shadow: 0 0 1px rgba(255, 255, 255, 0.8);\n        \">$1</div>\n    </div>\n    <!-- 整体hover特效 -->\n    <style>\n        div[style*=\"linear-gradient(135deg, #ffe888 0%, #ffb6c1 100%)\"]:hover {\n            transform: scale(1.01);\n            box-shadow: 0 0 0 3px #fff199,\n                        0 6px 12px rgba(255, 158, 175, 0.3), \n                        0 1px 0px rgba(255, 255, 255, 0.9) inset;\n            top: -2px;\n            background: linear-gradient(145deg, #ffe888 0%, #ffb6c1 100%);\n        }\n    </style>\n</div>",
+  "trimStrings": [],
+  "placement": [2],
+  "disabled": false,
+  "markdownOnly": true,
+  "promptOnly": false,
+  "runOnEdit": true,
+  "substituteRegex": 0,
+  "minDepth": null,
+  "maxDepth": null
+}
