@@ -62,10 +62,10 @@
     "origin": "攻壳机动队",
     "description": "吵闹的新生AI们与你一起探索A一串大陆 （智力制作，经验buff，隐身）"
   },
-  "搞毛": {
+  "搞毛二哥": {
     "regexCount": 1,
     "author": "Aoo",
-    "updateTime": "2026-02-04",
+    "updateTime": "2026-02-26",
     "origin": "战锤40k",
     "description": "搞哥毛哥为你提供俺寻思之力（力敏制作，风格化技能，奖励角色扮演）"
   },
@@ -93,7 +93,7 @@
   "月蚀": {
     "regexCount": 1,
     "author": "AkarisRotileAslovenia",
-    "updateTime": "2026-01-27",
+    "updateTime": "2026-02-26",
     "origin": "DNF",
     "description": "适用于召唤师玩法的系统核心"
   },
