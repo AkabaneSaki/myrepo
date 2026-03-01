@@ -173,5 +173,12 @@
     "updateTime": "2026-02-23",
     "origin": "原创",
     "description": "原创角色，使用卡组是来自游戏王vrains的淘气仙星。淘气仙星雌小鬼，对对手使用烧血吧！"
+  },
+  "汉弗莱": {
+    "regexCount": 0,
+    "author": "WatcherNinth",
+    "updateTime": "2026-02-07",
+    "origin": "N/A",
+    "description": ""
   }
 }
