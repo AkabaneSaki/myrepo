@@ -187,5 +187,12 @@
     "updateTime": "2026-03-02",
     "origin": "BlackSoul",
     "description": "来自《Black Souls》的爱丽丝，鼓励你当魔怔人的核心，内置神秘召唤系统和随机红灵入侵上强度"
+  },
+  "魂5": {
+    "regexCount": 1,
+    "author": "半羽仙人",
+    "updateTime": "2026-03-02",
+    "origin": "黑暗之魂",
+    "description": "pvp对人战特化核心，可爱胖宝宝魂5一对一指导你踹哈。提供多项pvp专属贵物技能以及神秘决斗和入侵机制定能助你成为正道小骑士"
   }
 }
