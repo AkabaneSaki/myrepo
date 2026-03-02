@@ -122,7 +122,7 @@
   {
     "id": "0c2255cb-9c9d-44fa-9d02-f8661e5110b7",
     "scriptName": "命定核心-阿比盖尔美化-表(二选一)",
-    "disabled": true,
+    "disabled": false,
     "runOnEdit": true,
     "findRegex": "/<Foreigner\\s+name=[\"'](.*?)[\"']\\s+mood=[\"'](.*?)[\"'][^>]*>\\s*[「]?\\s*([\\s\\S]*?)\\s*[」]?\\s*<\\/Foreigner>/g",
     "trimStrings": [],
