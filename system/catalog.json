@@ -180,5 +180,12 @@
     "updateTime": "2026-02-07",
     "origin": "N/A",
     "description": ""
+  },
+  "爱丽丝": {
+    "regexCount": 1,
+    "author": "半羽仙人",
+    "updateTime": "2026-03-02",
+    "origin": "BlackSoul",
+    "description": "来自《Black Souls》的爱丽丝，鼓励你当魔怔人的核心，内置神秘召唤系统和随机红灵入侵上强度"
   }
 }
