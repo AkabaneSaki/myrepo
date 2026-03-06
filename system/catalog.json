@@ -65,7 +65,7 @@
   "搞毛二哥": {
     "regexCount": 1,
     "author": "Aoo",
-    "updateTime": "2026-02-26",
+    "updateTime": "2026-03-06",
     "origin": "战锤40k",
     "description": "搞哥毛哥为你提供俺寻思之力（力敏制作，风格化技能，奖励角色扮演）"
   },
@@ -194,5 +194,12 @@
     "updateTime": "2026-03-02",
     "origin": "黑暗之魂",
     "description": "pvp对人战特化核心，可爱胖宝宝魂5一对一指导你踹哈。提供多项pvp专属贵物技能以及神秘决斗和入侵机制定能助你成为正道小骑士"
+  },
+  "八云紫": {
+    "regexCount": 2,
+    "author": "血色凤凰",
+    "updateTime": "2026-03-06",
+    "origin": "东方Project",
+    "description": ""
   }
 }
