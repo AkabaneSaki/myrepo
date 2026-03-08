@@ -208,5 +208,12 @@
     "updateTime": "2026-03-07",
     "origin": "JOJO的奇妙冒险",
     "description": "超低token，除了替身外，仅带背包、技能重构、签约功能"
+  },
+  "梅莉": {
+    "regexCount": 1,
+    "author": "维多利亚",
+    "updateTime": "2026-03-08",
+    "origin": "FGO",
+    "description": "超低token，除出自《Fate/Grand Order Arcade》的梅林(Prototype)核心.定位与梅林核心类似的法师用核心,顺便还能ccb的大姐姐.了替身外，仅带背包、技能重构、签约功能"
   }
 }
