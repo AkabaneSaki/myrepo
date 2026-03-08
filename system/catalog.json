@@ -198,8 +198,15 @@
   "八云紫": {
     "regexCount": 2,
     "author": "血色凤凰",
-    "updateTime": "2026-03-06",
+    "updateTime": "2026-03-07",
     "origin": "东方Project",
     "description": ""
+  },
+  "替身": {
+    "regexCount": 0,
+    "author": "Aoo",
+    "updateTime": "2026-03-07",
+    "origin": "JOJO的奇妙冒险",
+    "description": "超低token，除了替身外，仅带背包、技能重构、签约功能"
   }
 }
