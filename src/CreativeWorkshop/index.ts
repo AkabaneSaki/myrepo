@@ -182,21 +182,33 @@ function showAgreementPopup() {
 
 function openCreativeWorkshop() {
   const creativeWorkshopUrl = getCreativeWorkshopUrl();
-  const existing = $('#creative-workshop-overlay');
+  const hostWindow = window.parent !== window ? window.parent : window;
+  const hostDocument = hostWindow.document;
+  const host$ = (hostWindow as Window & { $: JQueryStatic }).$;
+
+  const existing = host$('#creative-workshop-overlay');
   if (existing.length) {
     existing.remove();
   }
 
-  const { destroy } = teleportStyle();
-  const $overlay = $('<div id="creative-workshop-overlay">').css({
-    position: 'fixed',
-    inset: '0',
+  const { destroy } = teleportStyle(hostDocument.head);
+  const $overlay = host$('<div id="creative-workshop-overlay">').css({
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    left: '0',
     zIndex: 2147483647,
     background: 'rgba(0,0,0,0.7)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: '24px',
+    alignItems: 'flex-start',
+    paddingTop: '20px',
+    paddingRight: '24px',
+    paddingBottom: '20px',
+    paddingLeft: '24px',
+    boxSizing: 'border-box',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
   });
 
   const $frame = createScriptIdIframe().css({
@@ -207,10 +219,36 @@ function openCreativeWorkshop() {
     boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
   });
 
-  $overlay.append($frame).appendTo('body');
+  const updateOverlayLayout = () => {
+    const useTopAlignedLayout = window.innerWidth < 1000;
+    const viewportHeight = hostWindow.visualViewport?.height ?? hostWindow.innerHeight;
+    const viewportTop = (hostWindow.visualViewport?.offsetTop ?? 0) + hostWindow.scrollY;
+
+    $overlay.css({
+      top: `${viewportTop}px`,
+      height: `${viewportHeight}px`,
+      alignItems: useTopAlignedLayout ? 'flex-start' : 'center',
+      paddingTop: useTopAlignedLayout ? '16px' : '24px',
+      paddingRight: '24px',
+      paddingBottom: useTopAlignedLayout ? '16px' : '24px',
+      paddingLeft: '24px',
+    });
+  };
+
+  updateOverlayLayout();
+  host$(hostWindow).on('resize.creative-workshop-overlay', updateOverlayLayout);
+  host$(hostWindow).on('scroll.creative-workshop-overlay', updateOverlayLayout);
+  hostWindow.visualViewport?.addEventListener('resize', updateOverlayLayout);
+  hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
+
+  $overlay.append($frame).appendTo(hostDocument.body);
 
   const close = () => {
     bridge?.destroy();
+    host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
+    host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
+    hostWindow.visualViewport?.removeEventListener('resize', updateOverlayLayout);
+    hostWindow.visualViewport?.removeEventListener('scroll', updateOverlayLayout);
     $overlay.remove();
     destroy();
   };

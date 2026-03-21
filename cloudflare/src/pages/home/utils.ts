@@ -54,7 +54,19 @@ function getAuthorAvatar(project) {
 }
 
 function getCoverUrl(project) {
-  return project.coverImage || 'https://via.placeholder.com/300x160?text=No+Preview';
+  if (project.coverImage) {
+    return project.coverImage;
+  }
+
+  const fallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160" fill="none">'
+    + '<rect width="300" height="160" rx="20" fill="#0F172A"/>'
+    + '<rect x="18" y="18" width="264" height="124" rx="16" fill="#1E293B" stroke="#334155"/>'
+    + '<circle cx="92" cy="70" r="18" fill="#334155"/>'
+    + '<path d="M54 118L97 84L126 106L158 74L214 118H54Z" fill="#475569"/>'
+    + '<text x="150" y="136" text-anchor="middle" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">No Preview</text>'
+    + '</svg>';
+
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallbackSvg);
 }
 
 function getLikeState(projectId) {
