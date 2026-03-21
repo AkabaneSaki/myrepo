@@ -81,16 +81,10 @@ myrepo/
 
 ### SillyTavern 用户脚本安装
 
-如果你已经构建并发布了对应脚本文件，可以在 SillyTavern 的脚本安装界面直接使用 CDN 地址接入：
+如果你已经构建并发布了对应脚本文件，可以在 SillyTavern 的酒馆助手直接使用 CDN 地址接入：
 
-- 创意工坊：`https://cdn.jsdelivr.net/gh/AkabaneSaki/myrepo@main/CreativeWorkshop/index.js`
-- 自适应正则：`https://cdn.jsdelivr.net/gh/AkabaneSaki/myrepo@main/AutoDialogueBeautifier/index.js`
-
-### 手动安装
-
-1. 将构建后的脚本文件放入 SillyTavern 的脚本目录
-2. 重启或刷新 SillyTavern
-3. 确认脚本已被加载
+- 创意工坊：`import 'https://testingcf.jsdelivr.net/gh/Akabanesaki/myrepo@main/dist/CreativeWorkshop/index.js'`
+- 自适应正则：`import 'https://testingcf.jsdelivr.net/gh/Akabanesaki/myrepo@main/dist/AutoDialogueBeautifier/index.js'`
 
 > 当前仓库内主要保存的是源码与后端工程。如果要直接用于生产环境，通常还需要你自己的构建与发布流程。
 
