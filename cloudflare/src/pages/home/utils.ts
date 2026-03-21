@@ -66,7 +66,18 @@ function getSubscribeState(projectId) {
 }
 
 function isProjectPending(project) {
-  return project?.status === 'pending' || Boolean(project?.hasPendingDraft) || project?.reviewTarget === 'draft';
+  return project?.status === 'pending';
+}
+
+function isRejectedDraft(project) {
+  return project?.reviewTarget === 'draft' && project?.status === 'rejected';
+}
+
+function getProjectReviewBadge(project) {
+  if (project?.reviewTarget === 'draft' && project?.status === 'pending') return '<span class="badge badge-admin">草稿审核中</span>';
+  if (project?.reviewTarget === 'draft' && project?.status === 'rejected') return '<span class="badge badge-admin badge-rejected">草稿已拒绝</span>';
+  if (project?.hasPendingDraft) return '<span class="badge badge-admin">待审核新版本</span>';
+  return '';
 }
 
 function isProjectEditable(project) {

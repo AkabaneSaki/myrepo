@@ -724,7 +724,43 @@ export const projectDb = {
       .bind(authorId)
       .all<Record<string, unknown>>();
 
-    return await enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser);
+    const enrichedProjects = await enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser);
+    const groupedProjects = new Map<string, (typeof enrichedProjects)[number][]>();
+
+    enrichedProjects.forEach(project => {
+      const rootProjectId = project.rootProjectId || project.id;
+      const group = groupedProjects.get(rootProjectId) || [];
+      group.push(project);
+      groupedProjects.set(rootProjectId, group);
+    });
+
+    const pickPreferredProject = (projects: (typeof enrichedProjects)[number][]) => {
+      const pendingDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'pending');
+      if (pendingDraft) return pendingDraft;
+
+      const rejectedDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'rejected');
+      if (rejectedDraft) return rejectedDraft;
+
+      const publishedProject = projects.find(project => project.isPublished);
+      if (publishedProject) return publishedProject;
+
+      return (
+        [...projects].sort((left, right) => {
+          const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
+          const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
+          return rightTime - leftTime;
+        })[0] || null
+      );
+    };
+
+    return Array.from(groupedProjects.values())
+      .map(pickPreferredProject)
+      .filter((project): project is NonNullable<typeof project> => Boolean(project))
+      .sort((left, right) => {
+        const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
+        const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
+        return rightTime - leftTime;
+      });
   },
 
   setCoverImage: async (c: AppContext, projectId: string, coverImage: string): Promise<void> => {
@@ -786,7 +822,7 @@ export const projectDb = {
 
   findDraftByPublishedId: async (c: AppContext, publishedProjectId: string) => {
     const result = await c.env.DB.prepare(
-      `SELECT p.*, u.global_name FROM projects p LEFT JOIN users u ON p.author_id = u.id WHERE p.published_project_id = ? ORDER BY p.updated_at DESC LIMIT 1`,
+      `SELECT p.*, u.global_name FROM projects p LEFT JOIN users u ON p.author_id = u.id WHERE p.published_project_id = ? AND p.review_target = 'draft' ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, p.updated_at DESC LIMIT 1`,
     )
       .bind(publishedProjectId)
       .first<Record<string, unknown>>();
@@ -810,6 +846,11 @@ export const projectDb = {
         coverImage: updates.coverImage ?? published.coverImage ?? undefined,
         status: 'pending',
       });
+      await c.env.DB.prepare(
+        `UPDATE projects SET reject_reason = NULL, reviewed_at = NULL, reviewer_id = NULL, updated_at = ? WHERE id = ?`,
+      )
+        .bind(now(), existingDraft.id)
+        .run();
       return existingDraft.id;
     }
 

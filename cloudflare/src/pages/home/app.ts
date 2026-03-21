@@ -245,12 +245,15 @@ export const homeScript = String.raw`
         if (button.disabled) return;
         const projectId = button.dataset.id;
         if (!projectId || !confirm('确定要删除该项目吗？')) return;
+        const restore = setButtonLoading(button, '删除中');
         try {
           await deleteProject(projectId);
+          await fetchProjects();
           showToast('项目已删除');
-          fetchProjects();
         } catch (error) {
           showToast('删除失败: ' + error.message, 'error');
+        } finally {
+          restore();
         }
       });
     });
@@ -261,12 +264,15 @@ export const homeScript = String.raw`
         const projectId = button.dataset.id;
         const visible = button.dataset.visible === '1';
         if (!projectId) return;
+        const restore = setButtonLoading(button, visible ? '隐藏中' : '公开中');
         try {
           await updateProjectVisibility(projectId, !visible);
-          showToast(!visible ? '项目已公开' : '项目已隐藏');
           await fetchProjects();
+          showToast(!visible ? '项目已公开' : '项目已隐藏');
         } catch (error) {
           showToast('操作失败: ' + error.message, 'error');
+        } finally {
+          restore();
         }
       });
     });

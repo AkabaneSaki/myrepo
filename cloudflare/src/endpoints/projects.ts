@@ -708,6 +708,7 @@ export class ProjectUpdate extends OpenAPIRoute {
 
       return {
         success: true,
+        projectId: draftId,
         draftProjectId: draftId,
         message: '修改后的新版本已进入审核区，主界面仍显示旧版本。',
       };

@@ -137,6 +137,10 @@ export class AdminReview extends OpenAPIRoute {
       });
 
       await projectDb.delete(c, projectId);
+    } else if (action === 'reject' && project.reviewTarget === 'draft' && project.publishedProjectId) {
+      await projectDb.update(c, project.publishedProjectId, {
+        draftProjectId: projectId,
+      });
     } else if (action === 'approve') {
       await projectDb.update(c, projectId, {
         isPublished: true,
