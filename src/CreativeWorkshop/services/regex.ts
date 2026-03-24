@@ -14,7 +14,7 @@ export async function installCreativeWorkshopRegex(projectId: string) {
         (entry, index) =>
           ({
             id: `creative_workshop:${projectId}:${entry.id || index}`,
-            script_name: entry.scriptName || `创意工坊正则 ${index + 1}`,
+            script_name: `creative_workshop:${projectId}:${entry.id || index}`,
             enabled: !entry.disabled,
             scope: 'character' as const,
             find_regex: entry.findRegex || '',

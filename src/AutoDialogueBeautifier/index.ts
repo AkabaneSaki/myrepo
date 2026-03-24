@@ -6,9 +6,9 @@
 
 // regex.json 网络链接列表（主URL + 备用CDN加速URL）
 const REGEX_JSON_URLS = [
-  'https://cdn.jsdelivr.net/gh/AkabaneSaki/myrepo@main/AutoDialogueBeautifier/regex.json',
-  'https://gcore.jsdelivr.net/gh/AkabaneSaki/myrepo@main/AutoDialogueBeautifier/regex.json',
-  'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@main/AutoDialogueBeautifier/regex.json',
+  'https://cdn.jsdelivr.net/gh/AkabaneSaki/myrepo@main//regex.json',
+  'https://gcore.jsdelivr.net/gh/AkabaneSaki/myrepo@main/regex.json',
+  'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@main/regex.json',
 ];
 
 $(async () => {

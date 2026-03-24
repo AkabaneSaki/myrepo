@@ -1,5 +1,6 @@
 export const homeTavernBridgeScript = String.raw`
 const TAVERN_BRIDGE_NAMESPACE = 'creative-workshop-bridge';
+const TAVERN_OAUTH_RESULT_EVENT = 'creative-workshop:oauth-result';
 
 function createBridgeRequest(type, payload) {
   return {
@@ -14,6 +15,12 @@ function postBridgeMessage(type, payload) {
   const message = createBridgeRequest(type, payload);
   window.parent.postMessage(message, '*');
   return message.requestId;
+}
+
+function dispatchOAuthResult(payload) {
+  window.dispatchEvent(new CustomEvent(TAVERN_OAUTH_RESULT_EVENT, {
+    detail: payload || {},
+  }));
 }
 
 function syncInstalledProjectsFromBridge(payload) {
@@ -68,6 +75,9 @@ function handleBridgeMessage(event) {
       syncDiffFromBridge(data.payload || {});
       renderApp();
       break;
+    case 'bridge:oauth:result':
+      dispatchOAuthResult(data.payload || {});
+      break;
     case 'bridge:error':
       if (projectId) {
         setProjectPendingAction(projectId, null);
@@ -111,5 +121,9 @@ function confirmProjectUpdate(projectId) {
   setProjectPendingAction(projectId, 'update');
   renderApp();
   postBridgeMessage('bridge:confirm-project-update', { projectId });
+}
+
+function requestOAuthLogin(authUrl, state) {
+  return postBridgeMessage('bridge:oauth:start', { authUrl, state });
 }
 `;

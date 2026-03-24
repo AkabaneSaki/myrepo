@@ -154,7 +154,9 @@ export class ProjectList extends OpenAPIRoute {
     // 添加作者头像 URL
     const projects = result.projects.map(p => ({
       ...p,
-      authorAvatar: p.authorAvatar ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.png` : null,
+      authorAvatar: p.authorAvatar
+        ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
+        : null,
     }));
 
     return {
@@ -219,7 +221,7 @@ export class ProjectFetch extends OpenAPIRoute {
         ...project,
         ...preview,
         authorAvatar: project.authorAvatar
-          ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.png`
+          ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
           : null,
       },
       worldbookEntriesPreview: preview.worldbookEntriesPreview,
@@ -259,7 +261,9 @@ export class MyProjects extends OpenAPIRoute {
       success: true,
       projects: projects.map(p => ({
         ...p,
-        authorAvatar: p.authorAvatar ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.png` : null,
+        authorAvatar: p.authorAvatar
+          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
+          : null,
       })),
     };
   }

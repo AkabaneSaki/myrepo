@@ -43,19 +43,36 @@ function getAuthorName(project) {
   return project.authorGlobalName || project.authorName || '未知作者';
 }
 
+function appendCacheVersion(url, version) {
+  if (!url) return url;
+
+  try {
+    const parsed = new URL(String(url), window.location.origin);
+    if (version) {
+      parsed.searchParams.set('v', String(version));
+    }
+    return parsed.toString();
+  } catch {
+    return String(url);
+  }
+}
+
 function getAuthorAvatar(project) {
   if (!project.authorAvatar) {
     return 'https://cdn.discordapp.com/embed/avatars/0.png';
   }
   if (String(project.authorAvatar).startsWith('http://') || String(project.authorAvatar).startsWith('https://')) {
-    return String(project.authorAvatar);
+    return appendCacheVersion(String(project.authorAvatar), project.authorAvatar);
   }
-  return 'https://cdn.discordapp.com/avatars/' + project.authorId + '/' + project.authorAvatar + '.png';
+  return appendCacheVersion(
+    'https://cdn.discordapp.com/avatars/' + project.authorId + '/' + project.authorAvatar + '.png',
+    project.authorAvatar,
+  );
 }
 
 function getCoverUrl(project) {
   if (project.coverImage) {
-    return project.coverImage;
+    return appendCacheVersion(project.coverImage, project.updatedAt || project.latestApprovedAt || project.coverImage);
   }
 
   const fallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160" fill="none">'

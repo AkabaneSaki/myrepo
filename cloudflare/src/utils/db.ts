@@ -311,7 +311,7 @@ export const userDb = {
         username: r.username,
         globalName: r.global_name || undefined,
         avatar: r.avatar,
-        avatarUrl: r.avatar ? `https://cdn.discordapp.com/avatars/${r.id}/${r.avatar}.png` : null,
+        avatarUrl: r.avatar ? `https://cdn.discordapp.com/avatars/${r.id}/${r.avatar}.webp?size=100` : null,
         isAdmin: r.is_admin === 1,
         createdAt: r.created_at,
       })) || []
@@ -932,9 +932,9 @@ export const projectDb = {
   incrementDownloads: async (c: AppContext, projectId: string): Promise<void> => {
     try {
       await c.env.DB.prepare(
-        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1, updated_at = ? WHERE id = ? OR published_project_id = ? OR draft_project_id = ?`,
+        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1, updated_at = ? WHERE id = ?`,
       )
-        .bind(now(), projectId, projectId, projectId)
+        .bind(now(), projectId)
         .run();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

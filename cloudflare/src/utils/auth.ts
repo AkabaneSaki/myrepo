@@ -1,6 +1,27 @@
 import type { AppContext } from '../types';
 import { userDb } from './db';
 
+function resolveDiscordRedirectUri(c: AppContext): string {
+  const requestUrl = new URL(c.req.url);
+  const configuredRedirectUri = c.env.DISCORD_REDIRECT_URI?.trim();
+
+  if (!configuredRedirectUri) {
+    const fallbackRedirectUri = new URL('/api/auth/callback', requestUrl.origin).toString();
+    console.info('自动生成回调地址:', fallbackRedirectUri);
+    return fallbackRedirectUri;
+  }
+
+  const redirectUrl = new URL(configuredRedirectUri, requestUrl.origin);
+  if (redirectUrl.pathname === '/' || !redirectUrl.pathname) {
+    redirectUrl.pathname = '/api/auth/callback';
+    redirectUrl.search = '';
+    redirectUrl.hash = '';
+    console.warn('检测到 DISCORD_REDIRECT_URI 未指向回调接口，已自动修正为:', redirectUrl.toString());
+  }
+
+  return redirectUrl.toString();
+}
+
 /**
  * Discord OAuth 配置
  */
@@ -11,15 +32,7 @@ export const discordAuth = {
    */
   getAuthorizationUrl: (c: AppContext, state?: string): string => {
     const clientId = c.env.DISCORD_CLIENT_ID;
-    // 优先使用环境变量中配置的回调地址，如果没有配置则根据请求自动生成
-    let redirectUri = c.env.DISCORD_REDIRECT_URI;
-
-    // 如果没有配置回调地址，则根据请求自动生成
-    if (!redirectUri) {
-      const url = new URL(c.req.url);
-      redirectUri = `${url.protocol}//${url.host}/api/auth/callback`;
-      console.info('自动生成回调地址:', redirectUri);
-    }
+    const redirectUri = resolveDiscordRedirectUri(c);
 
     if (!clientId) {
       console.error('DISCORD_CLIENT_ID is not set');
@@ -56,14 +69,7 @@ export const discordAuth = {
   } | null> => {
     const clientId = c.env.DISCORD_CLIENT_ID;
     const clientSecret = c.env.DISCORD_CLIENT_SECRET;
-    // 优先使用环境变量中配置的回调地址，如果没有配置则根据请求自动生成
-    let redirectUri = c.env.DISCORD_REDIRECT_URI;
-
-    // 如果没有配置回调地址，则根据请求自动生成
-    if (!redirectUri) {
-      const url = new URL(c.req.url);
-      redirectUri = `${url.protocol}//${url.host}/api/auth/callback`;
-    }
+    const redirectUri = resolveDiscordRedirectUri(c);
 
     const response = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
@@ -199,7 +205,7 @@ export const discordAuth = {
     // 检查必要的环境变量
     const clientId = c.env.DISCORD_CLIENT_ID;
     const clientSecret = c.env.DISCORD_CLIENT_SECRET;
-    const redirectUri = c.env.DISCORD_REDIRECT_URI;
+    const redirectUri = resolveDiscordRedirectUri(c);
 
     if (!clientId || !clientSecret || !redirectUri) {
       console.error('Missing Discord OAuth credentials:', {

@@ -5,8 +5,25 @@ import { discordAuth } from '../utils/auth';
 import { userDb } from '../utils/db';
 import { jwt } from '../utils/jwt';
 
-// 成功的 HTML 页面 - 仅通过安全 postMessage 传递 token
-const successHtml = (token: string, userData: object, allowedOrigin: string) => `
+const AUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
+const AUTH_CALLBACK_CSP =
+  "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;";
+
+function createAuthHtmlResponse(html: string) {
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': AUTH_CALLBACK_CSP,
+    },
+  });
+}
+
+// 成功的 HTML 页面 - 通过 window.opener 回传 token
+// 注意：在酒馆 iframe 场景中，window.opener 实际是酒馆宿主窗口，
+// 而不是发起 /api/auth/login 请求的工坊页面 origin。
+// 因此不能只依赖后端记录的 allowedOrigin 作为 postMessage 的 targetOrigin，
+// 否则浏览器会因为 origin 不匹配而直接丢弃消息。
+const successHtml = (token: string, userData: object, allowedOrigin: string, state?: string) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -30,6 +47,8 @@ const successHtml = (token: string, userData: object, allowedOrigin: string) => 
       const token = ${JSON.stringify(token)};
       const userData = ${JSON.stringify(userData)};
       const allowedOrigin = ${JSON.stringify(allowedOrigin)};
+      const state = ${JSON.stringify(state || '')};
+      const source = ${JSON.stringify(AUTH_CALLBACK_SOURCE)};
 
       function notifyOpener() {
         if (!window.opener) {
@@ -37,7 +56,16 @@ const successHtml = (token: string, userData: object, allowedOrigin: string) => 
         }
 
         try {
-          window.opener.postMessage({ type: 'oauth-success', token, user: userData }, allowedOrigin);
+          const payload = { type: 'oauth-success', source, state, token, user: userData };
+
+          if (allowedOrigin) {
+            window.opener.postMessage(payload, allowedOrigin);
+          }
+
+          // 嵌入 SillyTavern 时 opener 是酒馆宿主窗口，
+          // 其 origin 与 allowedOrigin（工坊站点 origin）并不一致。
+          // 此处补发一次 '*'，由宿主继续根据 event.origin / source / state 做严格校验。
+          window.opener.postMessage(payload, '*');
           return true;
         } catch (e) {
           console.error('postMessage 发送失败:', e);
@@ -45,11 +73,8 @@ const successHtml = (token: string, userData: object, allowedOrigin: string) => 
         }
       }
 
-      const delivered = notifyOpener();
       setTimeout(() => {
-        if (delivered) {
-          window.close();
-        }
+        window.close();
       }, 800);
     </script>
   </div>
@@ -57,7 +82,7 @@ const successHtml = (token: string, userData: object, allowedOrigin: string) => 
 </html>`;
 
 // 失败的 HTML 页面
-const errorHtml = (message: string, allowedOrigin?: string) => `
+const errorHtml = (message: string, allowedOrigin?: string, state?: string) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -76,10 +101,16 @@ const errorHtml = (message: string, allowedOrigin?: string) => `
     <button class="btn" onclick="window.close()">关闭</button>
     <script>
       const allowedOrigin = ${JSON.stringify(allowedOrigin || '')};
-      if (window.opener && allowedOrigin) {
-        window.opener.postMessage({ type: 'oauth-error', message: ${JSON.stringify(message)} }, allowedOrigin);
+      const state = ${JSON.stringify(state || '')};
+      const source = ${JSON.stringify(AUTH_CALLBACK_SOURCE)};
+      if (window.opener) {
+        const payload = { type: 'oauth-error', source, state, message: ${JSON.stringify(message)} };
+        if (allowedOrigin) {
+          window.opener.postMessage(payload, allowedOrigin);
+        }
+        window.opener.postMessage(payload, '*');
       }
-      setTimeout(() => window.close(), 3000);
+      setTimeout(() => window.close(), 4000);
     </script>
   </div>
 </body>
@@ -104,6 +135,46 @@ export class AuthLogin extends OpenAPIRoute {
 
     const url = discordAuth.getAuthorizationUrl(c, state);
     return { url, state };
+  }
+}
+
+/**
+ * 轮询 OAuth 结果
+ */
+export class AuthPoll extends OpenAPIRoute {
+  schema = {
+    tags: ['Auth'],
+    summary: 'Poll OAuth Result',
+    request: {
+      query: z.object({
+        key: z.string(),
+      }),
+    },
+  };
+
+  async handle(c: AppContext) {
+    const { key } = c.req.query();
+    const pollKey = 'oauth_result_' + key;
+    const payload = await c.env.SESSION_KV.get(pollKey);
+
+    if (!payload) {
+      return { ready: false };
+    }
+
+    await c.env.SESSION_KV.delete(pollKey);
+
+    try {
+      return {
+        ready: true,
+        ...JSON.parse(payload),
+      };
+    } catch {
+      return {
+        ready: true,
+        success: false,
+        message: 'OAuth 结果数据损坏',
+      };
+    }
   }
 }
 
@@ -159,9 +230,7 @@ export class AuthCallback extends OpenAPIRoute {
             headers: { 'Content-Type': 'application/json' },
           });
         }
-        return new Response(errorHtml(errorMsg, parsedState.origin), {
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
+        return createAuthHtmlResponse(errorHtml(errorMsg, parsedState.origin, state));
       }
 
       // 使用 verifyAndGetUser 返回的 tokenData（不再重复交换）
@@ -196,7 +265,7 @@ export class AuthCallback extends OpenAPIRoute {
 
       // 构建用户数据
       const avatarUrl = result.user.avatar
-        ? `https://cdn.discordapp.com/avatars/${result.user.id}/${result.user.avatar}.png`
+        ? `https://cdn.discordapp.com/avatars/${result.user.id}/${result.user.avatar}.webp?size=100`
         : `https://cdn.discordapp.com/embed/avatars/${parseInt(result.user.discriminator || '0') % 5}.png`;
 
       const userData = {
@@ -212,9 +281,9 @@ export class AuthCallback extends OpenAPIRoute {
       await c.env.SESSION_KV.put(
         'oauth_result_' + state,
         JSON.stringify({
+          success: true,
           token,
           user: userData,
-          createdAt: Date.now(),
         }),
         { expirationTtl: 300 },
       );
@@ -236,48 +305,29 @@ export class AuthCallback extends OpenAPIRoute {
       }
 
       // 返回成功页面（用于直接浏览器访问的情况）
-      return new Response(successHtml(token, userData, parsedState.origin), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      });
+      return createAuthHtmlResponse(successHtml(token, userData, parsedState.origin, state));
     } catch (error) {
       console.error('OAuth callback error:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
+
+      if (state) {
+        await c.env.SESSION_KV.put(
+          'oauth_result_' + state,
+          JSON.stringify({
+            success: false,
+            message: errorMessage,
+          }),
+          { expirationTtl: 300 },
+        );
+      }
+
       if (isJsonRequest) {
         return new Response(JSON.stringify({ success: false, message: errorMessage }), {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(errorHtml('登录失败：' + errorMessage), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      });
+      return createAuthHtmlResponse(errorHtml('登录失败：' + errorMessage, undefined, state));
     }
-  }
-}
-
-/**
- * OAuth 轮询接口已弃用
- */
-export class AuthPoll extends OpenAPIRoute {
-  schema = {
-    tags: ['Auth'],
-    summary: 'Poll for OAuth Login Result',
-    request: {
-      query: z.object({
-        key: z.string(),
-      }),
-    },
-  };
-
-  async handle(c: AppContext) {
-    const { key } = c.req.query();
-    const data = await c.env.SESSION_KV.get('oauth_result_' + key);
-    if (!data) {
-      return c.json({ ready: false }, 200);
-    }
-
-    await c.env.SESSION_KV.delete('oauth_result_' + key);
-    const parsed = JSON.parse(data) as { token: string; user: unknown };
-    return c.json({ ready: true, token: parsed.token, user: parsed.user }, 200);
   }
 }
 
@@ -308,7 +358,7 @@ export class AuthMe extends OpenAPIRoute {
     }
 
     const avatarUrl = payload.avatar
-      ? `https://cdn.discordapp.com/avatars/${payload.userId}/${payload.avatar}.png`
+      ? `https://cdn.discordapp.com/avatars/${payload.userId}/${payload.avatar}.webp?size=100`
       : `https://cdn.discordapp.com/embed/avatars/0.png`;
 
     return {

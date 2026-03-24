@@ -20,7 +20,17 @@ export const homeScript = String.raw`
   ${homeLayoutRenderScript}
   ${homeModalsScript}
 
-  function openLoginPopup() {
+  const isEmbedded = window.parent !== window;
+
+  function finishLogin(payload) {
+    localStorage.setItem(TOKEN_KEY, payload.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
+    setCurrentUser(payload.user);
+    renderApp();
+    showToast('登录成功');
+  }
+
+  function openLoginPopupForBrowser() {
     const width = 600;
     const height = 700;
     const left = (screen.width - width) / 2;
@@ -36,16 +46,15 @@ export const homeScript = String.raw`
       }
 
       let pollInterval = null;
-      const finishLogin = payload => {
-        localStorage.setItem(TOKEN_KEY, payload.token);
-        localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
-        setCurrentUser(payload.user);
-        renderApp();
-        showToast('登录成功');
+      const cleanupBrowserLogin = () => {
         window.removeEventListener('message', messageHandler);
         if (pollInterval) {
           clearInterval(pollInterval);
         }
+      };
+      const finalizeBrowserLogin = payload => {
+        finishLogin(payload);
+        cleanupBrowserLogin();
         if (!popup.closed) popup.close();
       };
 
@@ -54,14 +63,11 @@ export const homeScript = String.raw`
           return;
         }
 
-        if (event.data.type === 'oauth-success' && typeof event.data.token === 'string' && event.data.user) {
-          finishLogin(event.data);
+        if (event.data.type === 'oauth-success' && event.data.source === 'creative-workshop-auth-callback' && event.data.state === state && typeof event.data.token === 'string' && event.data.user) {
+          finalizeBrowserLogin(event.data);
         } else if (event.data.type === 'oauth-error') {
           showToast('登录失败: ' + event.data.message, 'error');
-          window.removeEventListener('message', messageHandler);
-          if (pollInterval) {
-            clearInterval(pollInterval);
-          }
+          cleanupBrowserLogin();
         }
       };
       window.addEventListener('message', messageHandler);
@@ -72,13 +78,90 @@ export const homeScript = String.raw`
             const result = await fetch('/api/auth/poll?key=' + encodeURIComponent(state));
             const payload = await result.json();
             if (payload.ready && payload.token && payload.user) {
-              finishLogin(payload);
+              finalizeBrowserLogin(payload);
             }
           } catch (error) {}
         }, 1000);
       }
     }).catch(error => showToast('获取登录链接失败: ' + error.message, 'error'));
   }
+
+  function openLoginPopupForEmbedded() {
+    apiFetch('/api/auth/login').then(data => {
+      if (!data?.url) {
+        showToast('登录链接无效', 'error');
+        return;
+      }
+
+      const state = data.state;
+
+      let pollInterval = null;
+      let pollTimeout = null;
+      let finished = false;
+
+      const cleanupPoll = () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        if (pollTimeout) {
+          clearTimeout(pollTimeout);
+          pollTimeout = null;
+        }
+      };
+
+      const finalizePoll = payload => {
+        if (finished) return;
+        finished = true;
+        cleanupPoll();
+
+        if (payload.success && typeof payload.token === 'string' && payload.user) {
+          finishLogin(payload);
+          return;
+        }
+
+        showToast('登录失败: ' + (payload.message || '未收到有效授权结果'), 'error');
+      };
+
+      if (state) {
+        pollInterval = setInterval(async () => {
+          try {
+            const payload = await apiFetch('/api/auth/poll?key=' + encodeURIComponent(state), {
+              method: 'GET',
+            });
+            if (payload.ready) {
+              finalizePoll(payload);
+            }
+          } catch (error) {}
+        }, 3000);
+
+        pollTimeout = setTimeout(() => {
+          finalizePoll({ success: false, message: '登录结果轮询超时' });
+        }, 60000);
+      }
+
+      requestOAuthLogin(data.url, data.state);
+    }).catch(error => showToast('获取登录链接失败: ' + error.message, 'error'));
+  }
+
+  function openLoginPopup() {
+    if (isEmbedded) {
+      openLoginPopupForEmbedded();
+      return;
+    }
+
+    openLoginPopupForBrowser();
+  }
+
+  window.addEventListener(TAVERN_OAUTH_RESULT_EVENT, event => {
+    const payload = event.detail || {};
+    if (payload.success && typeof payload.token === 'string' && payload.user) {
+      finishLogin(payload);
+      return;
+    }
+
+    showToast('登录失败: ' + (payload.message || '未收到有效授权结果'), 'error');
+  });
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
@@ -109,6 +192,9 @@ export const homeScript = String.raw`
     if (uploadBtn) uploadBtn.onclick = openUploadModal;
     if (myProjectsMenuBtn) myProjectsMenuBtn.onclick = () => {
       state.showOnlyMyProjects = !state.showOnlyMyProjects;
+      if (state.showOnlyMyProjects) {
+        state.showSubscribedAndInstalledProjects = false;
+      }
       state.userMenuOpen = false;
       renderApp();
     };
@@ -120,6 +206,9 @@ export const homeScript = String.raw`
       const checkbox = installedToggle.querySelector('input');
       checkbox.addEventListener('change', event => {
         state.showSubscribedAndInstalledProjects = event.target.checked;
+        if (state.showSubscribedAndInstalledProjects) {
+          state.showOnlyMyProjects = false;
+        }
         renderApp();
       });
     }

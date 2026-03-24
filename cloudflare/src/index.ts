@@ -78,6 +78,7 @@ function isAllowedOrigin(origin: string): boolean {
 // ============ CORS 中间件 =============
 app.use('*', async (c, next) => {
   const origin = c.req.header('Origin') || '';
+  const isOAuthCallbackRequest = c.req.path === '/api/auth/callback';
 
   if (isAllowedOrigin(origin)) {
     c.res.headers.set('Access-Control-Allow-Origin', origin);
@@ -89,10 +90,12 @@ app.use('*', async (c, next) => {
   c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   c.res.headers.set('X-Content-Type-Options', 'nosniff');
   c.res.headers.set('Referrer-Policy', 'same-origin');
-  c.res.headers.set(
-    'Content-Security-Policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
-  );
+  if (!isOAuthCallbackRequest) {
+    c.res.headers.set(
+      'Content-Security-Policy',
+      "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
+    );
+  }
 
   // 处理预检请求
   if (c.req.method === 'OPTIONS') {
@@ -103,6 +106,16 @@ app.use('*', async (c, next) => {
   }
 
   await next();
+
+  if (c.req.method === 'GET') {
+    if (c.req.path === '/api/projects') {
+      c.res.headers.set('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
+    } else if (/^\/api\/projects\/[^/]+$/.test(c.req.path)) {
+      c.res.headers.set('Cache-Control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=600');
+    } else if (c.req.path === '/assets/home.js') {
+      c.res.headers.set('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=1800');
+    }
+  }
 });
 
 // ============ 数据库初始化中间件 ============
@@ -140,7 +153,10 @@ const openapi = fromHono(app, {
 // ============ 主页路由 ============
 app.get('/assets/home.js', c => {
   return new Response(homeScriptPage(), {
-    headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
+    headers: {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
   });
 });
 
@@ -157,7 +173,7 @@ app.get('/', async c => {
       const payload = await jwt.extractFromHeader(c, token);
       if (payload) {
         const avatarUrl = payload.avatar
-          ? `https://cdn.discordapp.com/avatars/${payload.userId}/${payload.avatar}.png`
+          ? `https://cdn.discordapp.com/avatars/${payload.userId}/${payload.avatar}.webp?size=100`
           : `https://cdn.discordapp.com/embed/avatars/0.png`;
 
         user = {
@@ -295,7 +311,7 @@ app.get('/api/files/*', async c => {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set('Content-Length', object.size.toString());
-    headers.set('Cache-Control', 'public, max-age=3600');
+    headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800');
 
     return new Response(object.body, {
       headers,

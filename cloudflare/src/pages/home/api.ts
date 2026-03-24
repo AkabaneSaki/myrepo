@@ -52,9 +52,10 @@ async function fetchCurrentUser() {
   return null;
 }
 
-async function fetchProjects() {
+async function fetchProjects(forceRefresh = false) {
   try {
-    const data = await apiFetch('/api/projects?page=0&pageSize=50');
+    const cacheBust = forceRefresh ? ('&_=' + Date.now()) : '';
+    const data = await apiFetch('/api/projects?page=0&pageSize=50' + cacheBust);
     const projectList = data.projects || [];
     setProjects(projectList);
     syncProjectStats(projectList);

@@ -186,8 +186,18 @@ function openCreativeWorkshop() {
   const hostDocument = hostWindow.document;
   const host$ = (hostWindow as Window & { $: JQueryStatic }).$;
 
+  console.info('[CreativeWorkshop] openCreativeWorkshop:start', {
+    creativeWorkshopUrl,
+    hostOrigin: hostWindow.location.origin,
+    currentOrigin: window.location.origin,
+    parentEqualsWindow: window.parent === window,
+  });
+
   const existing = host$('#creative-workshop-overlay');
   if (existing.length) {
+    console.warn('[CreativeWorkshop] openCreativeWorkshop:remove-existing-overlay', {
+      count: existing.length,
+    });
     existing.remove();
   }
 
@@ -243,7 +253,18 @@ function openCreativeWorkshop() {
 
   $overlay.append($frame).appendTo(hostDocument.body);
 
+  console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
+    iframeCount: $overlay.find('iframe').length,
+    bodyChildCount: hostDocument.body.children.length,
+  });
+
   const close = () => {
+    console.warn('[CreativeWorkshop] openCreativeWorkshop:close', {
+      hasBridge: Boolean(bridge),
+      hasNavigated,
+      overlayExists: hostDocument.body.contains($overlay[0]),
+      activeElementTag: hostDocument.activeElement?.tagName,
+    });
     bridge?.destroy();
     host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
     host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
@@ -254,6 +275,10 @@ function openCreativeWorkshop() {
   };
 
   $overlay.on('click', event => {
+    console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-click', {
+      targetIsOverlay: event.target === $overlay[0],
+      targetTag: (event.target as HTMLElement | null)?.tagName,
+    });
     if (event.target === $overlay[0]) {
       close();
     }
@@ -265,28 +290,55 @@ function openCreativeWorkshop() {
   $frame.on('load', () => {
     const iframe = $frame[0];
 
+    console.info('[CreativeWorkshop] openCreativeWorkshop:iframe-load', {
+      hasBridge: Boolean(bridge),
+      hasNavigated,
+      iframeSrc: iframe.getAttribute('src'),
+      iframeHref: (() => {
+        try {
+          return iframe.contentWindow?.location.href ?? null;
+        } catch {
+          return '[cross-origin]';
+        }
+      })(),
+    });
+
     if (!bridge) {
       bridge = createCreativeWorkshopBridgeHost({
         iframe,
+        targetOrigin: getCreativeWorkshopOrigin(),
+      });
+      console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
         targetOrigin: getCreativeWorkshopOrigin(),
       });
     }
 
     if (!hasNavigated) {
       hasNavigated = true;
+      console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
+        creativeWorkshopUrl,
+      });
       iframe.contentWindow?.location.replace(creativeWorkshopUrl);
     }
   });
 }
 
 $(() => {
+  console.info('[CreativeWorkshop] script-mounted');
   replaceScriptButtons([{ name: '命定创意工坊', visible: true }]);
 
   eventOn(getButtonEvent('命定创意工坊'), () => {
+    console.info('[CreativeWorkshop] workshop-button-clicked', {
+      acceptedAgreement: hasAcceptedAgreement(),
+    });
     if (hasAcceptedAgreement()) {
       openCreativeWorkshop();
     } else {
       showAgreementPopup();
     }
+  });
+
+  $(window).on('pagehide', () => {
+    console.warn('[CreativeWorkshop] script-pagehide');
   });
 });

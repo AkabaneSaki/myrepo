@@ -106,6 +106,58 @@ export const r2Storage = {
     }
   },
 
+  copyProjectFilesToPublished: async (
+    c: AppContext,
+    sourceProjectId: string,
+    targetProjectId: string,
+  ): Promise<{
+    downloadUrl?: string;
+    fileSize?: number;
+    coverImage?: string;
+  }> => {
+    const bucket = c.env.R2_BUCKET;
+    const sourcePrefix = `projects/${sourceProjectId}/`;
+    const listed = await bucket.list({ prefix: sourcePrefix });
+    const copied: {
+      downloadUrl?: string;
+      fileSize?: number;
+      coverImage?: string;
+    } = {};
+
+    for (const item of listed.objects) {
+      const fileName = item.key.slice(sourcePrefix.length);
+      if (!fileName) {
+        continue;
+      }
+
+      const sourceObject = await bucket.get(item.key);
+      if (!sourceObject) {
+        continue;
+      }
+
+      let targetFileName = fileName;
+      if (fileName === `project-${sourceProjectId}.json`) {
+        targetFileName = `project-${targetProjectId}.json`;
+      } else if (fileName === `regex-${sourceProjectId}.json`) {
+        targetFileName = `regex-${targetProjectId}.json`;
+      }
+
+      const targetKey = `projects/${targetProjectId}/${targetFileName}`;
+      await bucket.put(targetKey, await sourceObject.arrayBuffer(), {
+        httpMetadata: sourceObject.httpMetadata,
+      });
+
+      if (targetFileName === `project-${targetProjectId}.json`) {
+        copied.downloadUrl = r2Storage.getProxyUrl(c, targetKey);
+        copied.fileSize = sourceObject.size;
+      } else if (targetFileName.startsWith('cover.')) {
+        copied.coverImage = targetKey;
+      }
+    }
+
+    return copied;
+  },
+
   /**
    * 获取项目的公开下载链接
    */

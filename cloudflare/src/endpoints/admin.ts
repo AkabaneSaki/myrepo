@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../types';
 import { projectDb, userDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
+import { r2Storage } from '../utils/r2';
 
 /**
  * 获取待审核项目列表 (仅管理员)
@@ -49,7 +50,7 @@ export class AdminPendingList extends OpenAPIRoute {
         p.authorAvatar &&
         !String(p.authorAvatar).startsWith('http://') &&
         !String(p.authorAvatar).startsWith('https://')
-          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.png`
+          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
           : p.authorAvatar,
     }));
 
@@ -121,14 +122,16 @@ export class AdminReview extends OpenAPIRoute {
     await projectDb.review(c, projectId, payload.userId, action, rejectReason);
 
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
+      const publishedAssets = await r2Storage.copyProjectFilesToPublished(c, projectId, project.publishedProjectId);
+
       await projectDb.update(c, project.publishedProjectId, {
         name: project.name,
         description: project.description || '',
         version: project.version,
         tags: project.tags,
-        coverImage: project.coverImage || undefined,
-        downloadUrl: project.downloadUrl || undefined,
-        fileSize: project.fileSize || undefined,
+        coverImage: publishedAssets.coverImage || project.coverImage || undefined,
+        downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,
+        fileSize: publishedAssets.fileSize || project.fileSize || undefined,
         status: 'approved',
         draftProjectId: null,
         visibility: project.visibility,
@@ -219,7 +222,7 @@ export class AdminProjectList extends OpenAPIRoute {
         p.authorAvatar &&
         !String(p.authorAvatar).startsWith('http://') &&
         !String(p.authorAvatar).startsWith('https://')
-          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.png`
+          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
           : p.authorAvatar,
     }));
 
