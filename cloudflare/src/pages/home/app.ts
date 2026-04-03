@@ -186,6 +186,7 @@ export const homeScript = String.raw`
     const searchInput = document.getElementById('projectSearchInput');
     const userMenuTrigger = document.getElementById('userMenuTrigger');
     const userMenu = document.getElementById('userMenu');
+    const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
 
     if (loginBtn) loginBtn.onclick = openLoginPopup;
     if (logoutBtn) logoutBtn.onclick = logout;
@@ -260,6 +261,8 @@ export const homeScript = String.raw`
         }
       }, { once: true });
     }
+
+    if (projectLoadMoreBtn) projectLoadMoreBtn.onclick = () => loadMoreProjects();
 
     document.querySelectorAll('.detail-btn').forEach(button => {
       button.addEventListener('click', event => {
@@ -383,8 +386,9 @@ export const homeScript = String.raw`
     } else {
       initializeTavernBridge();
     }
+    resetProjectPagination();
     await fetchCurrentUser();
-    await fetchProjects();
+    await fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
   }
 
   init();
