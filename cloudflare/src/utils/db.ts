@@ -932,9 +932,9 @@ export const projectDb = {
   incrementDownloads: async (c: AppContext, projectId: string): Promise<void> => {
     try {
       await c.env.DB.prepare(
-        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1, updated_at = ? WHERE id = ?`,
+        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
       )
-        .bind(now(), projectId)
+        .bind(projectId)
         .run();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -959,15 +959,15 @@ async function enrichProjects(
   const placeholders = projectIds.map(() => '?').join(', ');
   let statsRows:
     | {
-        results?: Array<{
-          project_id: string;
-          downloads_count: number;
-          likes_count: number;
-          subscribes_count: number;
-          user_liked: number;
-          user_subscribed: number;
-        }>;
-      }
+      results?: Array<{
+        project_id: string;
+        downloads_count: number;
+        likes_count: number;
+        subscribes_count: number;
+        user_liked: number;
+        user_subscribed: number;
+      }>;
+    }
     | undefined;
   try {
     statsRows = await c.env.DB.prepare(

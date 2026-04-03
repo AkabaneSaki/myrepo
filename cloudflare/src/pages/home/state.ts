@@ -15,6 +15,15 @@ function createDefaultTavernState() {
   };
 }
 
+function createDefaultProjectPagination() {
+  return {
+    page: 0,
+    pageSize: 50,
+    total: 0,
+    loadingMore: false,
+  };
+}
+
 const state = {
   currentUser: null,
   projects: [],
@@ -27,6 +36,7 @@ const state = {
   sortMenuOpen: false,
   likesMap: new Map(),
   subsMap: new Map(),
+  projectPagination: createDefaultProjectPagination(),
   tavern: createDefaultTavernState(),
   updateModal: {
     open: false,
@@ -43,8 +53,26 @@ function setProjects(projects) {
   state.projects = Array.isArray(projects) ? projects : [];
 }
 
+function setProjectsPage(payload) {
+  const projects = Array.isArray(payload?.projects) ? payload.projects : [];
+  const append = Boolean(payload?.append);
+  state.projects = append ? [...state.projects, ...projects] : projects;
+  state.projectPagination.page = Number(payload?.page || 0);
+  state.projectPagination.pageSize = Number(payload?.pageSize || state.projectPagination.pageSize || 50);
+  state.projectPagination.total = Number(payload?.total || 0);
+  state.projectPagination.loadingMore = false;
+}
+
 function setMyProjects(projects) {
   state.myProjects = Array.isArray(projects) ? projects : [];
+}
+
+function resetProjectPagination() {
+  state.projectPagination = createDefaultProjectPagination();
+}
+
+function setProjectPaginationLoadingMore(loading) {
+  state.projectPagination.loadingMore = Boolean(loading);
 }
 
 function setProjectPendingAction(projectId, action) {
@@ -94,22 +122,56 @@ function setTavernConnectionStatus(status) {
   state.tavern.connected = status === 'connected';
 }
 
-function setInstalledProjects(projects) {
-  const list = Array.isArray(projects) ? projects : [];
+function normalizeInstalledProject(project) {
+  if (!project || typeof project !== 'object') return null;
+  const projectId = project.projectId || project.id;
+  if (!projectId) return null;
+  return {
+    ...project,
+    installed: true,
+    projectId,
+    remoteVersion: project.remoteVersion || null,
+    localVersion: project.localVersion || null,
+    entryCount: Number(project.entryCount || 0),
+    regexCount: Number(project.regexCount || 0),
+    name: project.name || '',
+    canUpdate: Boolean(project.canUpdate),
+    hasUpdate: Boolean(project.hasUpdate),
+  };
+}
+
+function rebuildInstalledProjectState(installedProjectMap) {
+  const list = Array.from(installedProjectMap.values());
   state.tavern.installedProjects = list;
-  state.tavern.localProjectMap = new Map(
-    list.map(project => [project.projectId || project.id, {
-      installed: true,
-      projectId: project.projectId || project.id,
-      remoteVersion: project.remoteVersion || null,
-      localVersion: project.localVersion || null,
-      entryCount: Number(project.entryCount || 0),
-      regexCount: Number(project.regexCount || 0),
-      name: project.name || '',
-      canUpdate: Boolean(project.canUpdate),
-      hasUpdate: Boolean(project.hasUpdate),
-    }]),
-  );
+  state.tavern.localProjectMap = new Map(list.map(project => [project.projectId, project]));
+}
+
+function setInstalledProjects(projects, options) {
+  const list = Array.isArray(projects) ? projects : [];
+  const mode = options && options.mode === 'merge' ? 'merge' : 'replace';
+  const removeProjectId = options && options.removeProjectId ? options.removeProjectId : null;
+  const installedProjectMap = mode === 'merge'
+    ? new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]))
+    : new Map();
+
+  list.forEach(project => {
+    const normalized = normalizeInstalledProject(project);
+    if (!normalized) return;
+    installedProjectMap.set(normalized.projectId, normalized);
+  });
+
+  if (removeProjectId) {
+    installedProjectMap.delete(removeProjectId);
+  }
+
+  rebuildInstalledProjectState(new Map(Array.from(installedProjectMap.entries()).filter(entry => Boolean(entry[1]))));
+}
+
+function clearInstalledProject(projectId) {
+  if (!projectId) return;
+  const installedProjectMap = new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]));
+  installedProjectMap.delete(projectId);
+  rebuildInstalledProjectState(installedProjectMap);
 }
 
 function setProjectUpdateDiff(projectId, diff) {
@@ -229,5 +291,21 @@ function getFilteredProjects() {
   }
 
   return sortProjects(filteredSource);
+}
+
+function shouldShowProjectLoadMore() {
+  if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
+    return false;
+  }
+
+  const loadedCount = Array.isArray(state.projects) ? state.projects.length : 0;
+  const total = Number(state.projectPagination.total || 0);
+  return loadedCount > 0 && total > loadedCount;
+}
+
+function getRemainingProjectCount() {
+  const total = Number(state.projectPagination.total || 0);
+  const loadedCount = Array.isArray(state.projects) ? state.projects.length : 0;
+  return Math.max(0, total - loadedCount);
 }
 `;

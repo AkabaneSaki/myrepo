@@ -23,9 +23,35 @@ function dispatchOAuthResult(payload) {
   }));
 }
 
-function syncInstalledProjectsFromBridge(payload) {
-  setInstalledProjects(payload?.projects || []);
+function syncInstalledProjectsFromBridge(payload, options) {
+  const installedProjects = Array.isArray(payload?.projects) ? payload.projects : [];
+  const syncMode = payload?.complete === false ? 'merge' : ((options && options.mode) || 'replace');
+  setInstalledProjects(installedProjects, {
+    mode: syncMode,
+    removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
+  });
   renderApp();
+}
+
+function handleInstallResult(payload) {
+  syncInstalledProjectsFromBridge(payload, { mode: 'merge' });
+  showToast('项目安装完成');
+}
+
+function handleUninstallResult(payload) {
+  const projectId = payload?.projectId || null;
+  if (Array.isArray(payload?.projects) && payload.projects.length > 0) {
+    syncInstalledProjectsFromBridge(payload, { mode: 'merge', removeProjectId: projectId });
+  } else {
+    clearInstalledProject(projectId);
+    renderApp();
+  }
+  showToast('项目已卸载');
+}
+
+function handleUpdateResult(payload) {
+  syncInstalledProjectsFromBridge(payload, { mode: 'merge' });
+  showToast('项目更新完成');
 }
 
 function syncContextFromBridge(payload) {
@@ -62,13 +88,14 @@ function handleBridgeMessage(event) {
       if (projectId) {
         setProjectPendingAction(projectId, null);
       }
-      syncInstalledProjectsFromBridge(data.payload || {});
       if (data.type === 'bridge:install-result') {
-        showToast('项目安装完成');
+        handleInstallResult(data.payload || {});
       } else if (data.type === 'bridge:uninstall-result') {
-        showToast('项目已卸载');
+        handleUninstallResult(data.payload || {});
       } else if (data.type === 'bridge:update-result') {
-        showToast('项目更新完成');
+        handleUpdateResult(data.payload || {});
+      } else {
+        syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'replace' });
       }
       break;
     case 'bridge:project-diff':
