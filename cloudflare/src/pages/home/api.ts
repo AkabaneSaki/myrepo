@@ -53,13 +53,15 @@ async function fetchCurrentUser() {
 }
 
 async function fetchProjects(forceRefresh = false, options = {}) {
+  const append = Boolean(options.append);
+  const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
+  const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
+
   try {
-    const append = Boolean(options.append);
-    const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
-    const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
     const cacheBust = forceRefresh ? ('&_=' + Date.now()) : '';
     const data = await apiFetch('/api/projects?page=' + nextPage + '&pageSize=' + pageSize + cacheBust);
     const projectList = data.projects || [];
+
     setProjectsPage({
       projects: projectList,
       page: data.page,
@@ -67,24 +69,31 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       total: data.total,
       append,
     });
+
     syncProjectStats(state.projects);
+
     if (state.currentUser) {
-      const myData = await apiFetch('/api/my/projects');
-      setMyProjects(myData.projects || []);
+      try {
+        const myData = await apiFetch('/api/my/projects');
+        setMyProjects(myData.projects || []);
+      } catch (myProjectsError) {
+        showToast('加载我的项目失败: ' + myProjectsError.message, 'warning');
+      }
     } else {
       setMyProjects([]);
     }
+
     renderApp();
     return data;
   } catch (error) {
-    if (!options.append) {
+    if (append) {
+      setProjectPaginationLoadingMore(false);
+    } else {
       resetProjectPagination();
       setProjects([]);
       syncProjectStats([]);
-    } else {
-      setProjectPaginationLoadingMore(false);
     }
-    setMyProjects([]);
+
     showToast('加载项目失败: ' + error.message, 'error');
     renderApp();
     return null;
