@@ -79,33 +79,40 @@ function isAllowedOrigin(origin: string): boolean {
 app.use('*', async (c, next) => {
   const origin = c.req.header('Origin') || '';
   const isOAuthCallbackRequest = c.req.path === '/api/auth/callback';
+  const allowedOrigin = isAllowedOrigin(origin) ? origin : '';
 
-  if (isAllowedOrigin(origin)) {
-    c.res.headers.set('Access-Control-Allow-Origin', origin);
-  }
+  const applyCorsHeaders = (headers: Headers) => {
+    if (allowedOrigin) {
+      headers.set('Access-Control-Allow-Origin', allowedOrigin);
+      headers.set('Vary', 'Origin');
+    }
 
-  // 允许的 HTTP 方法
-  c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  // 允许的请求头
-  c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  c.res.headers.set('X-Content-Type-Options', 'nosniff');
-  c.res.headers.set('Referrer-Policy', 'same-origin');
-  if (!isOAuthCallbackRequest) {
-    c.res.headers.set(
-      'Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
-    );
-  }
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('Referrer-Policy', 'same-origin');
+
+    if (!isOAuthCallbackRequest) {
+      headers.set(
+        'Content-Security-Policy',
+        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
+      );
+    }
+  };
+
+  applyCorsHeaders(c.res.headers);
 
   // 处理预检请求
   if (c.req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: c.res.headers,
+      headers: new Headers(c.res.headers),
     });
   }
 
   await next();
+
+  applyCorsHeaders(c.res.headers);
 
   if (c.req.method === 'GET') {
     if (c.req.path === '/api/projects') {

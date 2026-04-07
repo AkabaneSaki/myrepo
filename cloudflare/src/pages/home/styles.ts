@@ -47,6 +47,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .sort-menu-trigger:hover { background:rgba(99,102,241,0.18); }
 .sort-menu .user-menu-dropdown { min-width:210px; }
 .projects-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:24px; margin-top:24px; }
+.project-load-more { margin-top:28px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.project-load-more-btn { min-width:220px; justify-content:center; }
+.project-load-more-meta { font-size:0.82rem; color:rgba(226,232,240,0.68); }
 .project-card { background:linear-gradient(145deg, #1E293B, #0F172A); border:1px solid rgba(255,255,255,0.08); border-radius:20px; overflow:hidden; transition:all 0.25s; display:flex; flex-direction:column; }
   .project-card:hover { transform:translateY(-6px); border-color:rgba(99,102,241,0.5); box-shadow:0 20px 25px -5px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.3); }
   .card-cover { height:160px; background-size:cover; background-position:center; background-color:#0F172A; position:relative; }
