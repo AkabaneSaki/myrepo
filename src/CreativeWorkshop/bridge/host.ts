@@ -216,6 +216,11 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
     if (!isCreativeWorkshopBridgeMessage(event.data)) return;
 
+    const actionType = event.data.type;
+    const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
+      ? String(event.data.payload?.projectId)
+      : undefined;
+
     try {
       switch (event.data.type) {
         case 'bridge:handshake':
@@ -353,7 +358,11 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     } catch (error) {
       await post(
         'bridge:error',
-        { message: error instanceof Error ? error.message : String(error) },
+        {
+          message: error instanceof Error ? error.message : String(error),
+          projectId: actionProjectId,
+          action: actionType,
+        },
         event.data.requestId,
       );
     }
