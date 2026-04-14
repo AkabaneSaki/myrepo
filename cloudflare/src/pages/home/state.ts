@@ -34,6 +34,7 @@ const state = {
   searchKeyword: '',
   userMenuOpen: false,
   sortMenuOpen: false,
+  sortRequestPending: false,
   likesMap: new Map(),
   subsMap: new Map(),
   projectPagination: createDefaultProjectPagination(),

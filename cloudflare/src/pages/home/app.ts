@@ -217,6 +217,9 @@ export const homeScript = String.raw`
     if (sortMenuTrigger && sortMenu) {
       sortMenuTrigger.onclick = event => {
         event.stopPropagation();
+        if (state.sortRequestPending) {
+          return;
+        }
         state.sortMenuOpen = !state.sortMenuOpen;
         state.userMenuOpen = false;
         renderApp();
@@ -225,16 +228,32 @@ export const homeScript = String.raw`
       sortMenu.querySelectorAll('[data-sort-value]').forEach(button => {
         button.addEventListener('click', event => {
           event.stopPropagation();
+          if (state.sortRequestPending) {
+            return;
+          }
           const nextSortMode = button.dataset.sortValue || DEFAULT_SORT_MODE;
           if (state.sortMode === nextSortMode) {
             state.sortMenuOpen = false;
             renderApp();
             return;
           }
+          state.sortRequestPending = true;
+          const sortLabelMap = {
+            published: '发布时间',
+            updated: '更新日期',
+            likes: '点赞数',
+            subscribes: '订阅数',
+            downloads: '下载量',
+          };
+          showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
           state.sortMode = nextSortMode;
           state.sortMenuOpen = false;
           resetProjectPagination();
-          fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
+          renderApp();
+          fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize }).finally(() => {
+            state.sortRequestPending = false;
+            renderApp();
+          });
         });
       });
     }
