@@ -56,10 +56,17 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   const append = Boolean(options.append);
   const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
   const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
+  const params = new URLSearchParams({
+    page: String(nextPage),
+    pageSize: String(pageSize),
+    sort: String(state.sortMode || DEFAULT_SORT_MODE),
+  });
 
   try {
-    const cacheBust = forceRefresh ? ('&_=' + Date.now()) : '';
-    const data = await apiFetch('/api/projects?page=' + nextPage + '&pageSize=' + pageSize + cacheBust);
+    if (forceRefresh) {
+      params.set('_', String(Date.now()));
+    }
+    const data = await apiFetch('/api/projects?' + params.toString());
     const projectList = data.projects || [];
 
     setProjectsPage({

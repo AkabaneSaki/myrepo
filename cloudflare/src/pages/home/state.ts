@@ -226,34 +226,6 @@ function mergeProjectsForInstalledView(source) {
   return Array.from(projectMap.values());
 }
 
-function sortProjects(projects) {
-  const list = Array.isArray(projects) ? [...projects] : [];
-  const compareNumberDesc = (left, right) => right - left;
-  const compareDateDesc = (left, right) => {
-    const leftTime = left ? new Date(left).getTime() : 0;
-    const rightTime = right ? new Date(right).getTime() : 0;
-    return compareNumberDesc(Number.isNaN(leftTime) ? 0 : leftTime, Number.isNaN(rightTime) ? 0 : rightTime);
-  };
-
-  list.sort((a, b) => {
-    if (state.sortMode === 'likes') {
-      return compareNumberDesc(Number(a.likesCount || 0), Number(b.likesCount || 0)) || compareDateDesc(a.createdAt, b.createdAt);
-    }
-    if (state.sortMode === 'subscribes') {
-      return compareNumberDesc(Number(a.subscribesCount || 0), Number(b.subscribesCount || 0)) || compareDateDesc(a.createdAt, b.createdAt);
-    }
-    if (state.sortMode === 'downloads') {
-      return compareNumberDesc(Number(a.downloadsCount || 0), Number(b.downloadsCount || 0)) || compareDateDesc(a.createdAt, b.createdAt);
-    }
-    if (state.sortMode === 'updated') {
-      return compareDateDesc(a.updatedAt, b.updatedAt) || compareDateDesc(a.createdAt, b.createdAt);
-    }
-    return compareDateDesc(a.createdAt, b.createdAt) || compareDateDesc(a.updatedAt, b.updatedAt);
-  });
-
-  return list;
-}
-
 function getFilteredProjects() {
   const source = state.showOnlyMyProjects && state.currentUser
     ? (state.myProjects.length ? state.myProjects : state.projects.filter(project => project.authorId === state.currentUser.id))
@@ -290,7 +262,7 @@ function getFilteredProjects() {
     return filteredSource;
   }
 
-  return sortProjects(filteredSource);
+  return filteredSource;
 }
 
 function shouldShowProjectLoadMore() {

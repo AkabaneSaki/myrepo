@@ -225,9 +225,16 @@ export const homeScript = String.raw`
       sortMenu.querySelectorAll('[data-sort-value]').forEach(button => {
         button.addEventListener('click', event => {
           event.stopPropagation();
-          state.sortMode = button.dataset.sortValue || DEFAULT_SORT_MODE;
+          const nextSortMode = button.dataset.sortValue || DEFAULT_SORT_MODE;
+          if (state.sortMode === nextSortMode) {
+            state.sortMenuOpen = false;
+            renderApp();
+            return;
+          }
+          state.sortMode = nextSortMode;
           state.sortMenuOpen = false;
-          renderApp();
+          resetProjectPagination();
+          fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
         });
       });
     }
