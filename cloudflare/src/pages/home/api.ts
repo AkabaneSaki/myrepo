@@ -1,4 +1,37 @@
 export const homeApiScript = String.raw`
+function resolveApiErrorMessage(status, rawText, data, fallbackMessage) {
+  const text = String(rawText || '').trim();
+  if (/\b1027\b/.test(text)) return '服务额度用尽，请稍后再试';
+  if (/\b1102\b/.test(text) || /Worker exceeded resource limits/i.test(text)) return '服务资源超限，请稍后再试';
+  if (status === 429 || /rate limit|too many requests|quota|limit exceeded/i.test(text)) return '请求过于频繁，请稍后再试';
+  if (data && (data.error || data.message)) return data.error || data.message;
+  const lowerText = text.toLowerCase();
+  if (lowerText.startsWith('<!doctype html') || lowerText.startsWith('<html') || lowerText.includes('<body') || lowerText.includes('</html>')) {
+    return '服务暂时不可用，请稍后再试';
+  }
+  if (text) return text.slice(0, 300);
+  return fallbackMessage || ('请求失败(' + status + ')');
+}
+
+function normalizeThrownError(error, fallbackMessage) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
+    return new Error('网络连接失败，请检查网络后重试');
+  }
+  return new Error(message || fallbackMessage);
+}
+
+async function parseResponseBody(response) {
+  const rawText = await response.text();
+  let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = null;
+  }
+  return { rawText, data };
+}
+
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = {
@@ -9,7 +42,12 @@ async function apiFetch(endpoint, options = {}) {
     headers.Authorization = 'Bearer ' + token;
   }
 
-  const response = await fetch(API_BASE + endpoint, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(API_BASE + endpoint, { ...options, headers });
+  } catch (error) {
+    throw normalizeThrownError(error, '请求失败');
+  }
   if (response.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -18,17 +56,10 @@ async function apiFetch(endpoint, options = {}) {
     throw new Error('登录已过期');
   }
 
-  const rawText = await response.text();
-  let data = null;
-  try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = null;
-  }
+  const { rawText, data } = await parseResponseBody(response);
 
   if (!response.ok) {
-    const fallbackMessage = rawText && rawText.trim() ? rawText.slice(0, 300) : ('请求失败(' + response.status + ')');
-    throw new Error((data && (data.error || data.message)) || fallbackMessage);
+    throw new Error(resolveApiErrorMessage(response.status, rawText, data, '请求失败(' + response.status + ')'));
   }
 
   return data || {};
@@ -153,7 +184,7 @@ async function fetchProjectEntries(projectOrId) {
     const regexEntries = Array.isArray(detail.regexEntriesPreview) ? detail.regexEntriesPreview : [];
     return { project, entries, regexEntries };
   } catch (error) {
-    return { project: typeof projectOrId === 'string' ? null : projectOrId, entries: [], regexEntries: [] };
+    throw normalizeThrownError(error, '加载项目详情失败');
   }
 }
 
@@ -183,64 +214,64 @@ async function deleteProject(projectId) {
 }
 
 async function uploadProjectFile(projectId, file) {
-  const response = await fetch('/api/projects/' + projectId + '/upload', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
-      'Content-Type': file.type,
-    },
-    body: file,
-  });
-  const rawText = await response.text();
-  let data = null;
   try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = null;
+    const response = await fetch('/api/projects/' + projectId + '/upload', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+        'Content-Type': file.type,
+      },
+      body: file,
+    });
+    const { rawText, data } = await parseResponseBody(response);
+    if (!response.ok) {
+      throw new Error(resolveApiErrorMessage(response.status, rawText, data, '上传失败'));
+    }
+    return data || {};
+  } catch (error) {
+    throw normalizeThrownError(error, '上传失败');
   }
-  if (!response.ok) throw new Error((data && (data.error || data.message)) || rawText || '上传失败');
-  return data || {};
 }
 
 async function uploadRegexFile(projectId, file) {
-  const response = await fetch('/api/projects/' + projectId + '/upload-regex', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
-      'Content-Type': file.type,
-    },
-    body: file,
-  });
-  const rawText = await response.text();
-  let data = null;
   try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = null;
+    const response = await fetch('/api/projects/' + projectId + '/upload-regex', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+        'Content-Type': file.type,
+      },
+      body: file,
+    });
+    const { rawText, data } = await parseResponseBody(response);
+    if (!response.ok) {
+      throw new Error(resolveApiErrorMessage(response.status, rawText, data, '上传失败'));
+    }
+    return data || {};
+  } catch (error) {
+    throw normalizeThrownError(error, '上传失败');
   }
-  if (!response.ok) throw new Error((data && (data.error || data.message)) || rawText || '上传失败');
-  return data || {};
 }
 
 async function uploadCoverFile(projectId, file) {
   const formData = new FormData();
   formData.append('cover', file);
-  const response = await fetch('/api/projects/' + projectId + '/upload-cover', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
-    },
-    body: formData,
-  });
-  const rawText = await response.text();
-  let data = null;
   try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = null;
+    const response = await fetch('/api/projects/' + projectId + '/upload-cover', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+      },
+      body: formData,
+    });
+    const { rawText, data } = await parseResponseBody(response);
+    if (!response.ok) {
+      throw new Error(resolveApiErrorMessage(response.status, rawText, data, '上传失败'));
+    }
+    return data || {};
+  } catch (error) {
+    throw normalizeThrownError(error, '上传失败');
   }
-  if (!response.ok) throw new Error((data && (data.error || data.message)) || rawText || '上传失败');
-  return data || {};
 }
 
 async function fetchPendingProjects() {
