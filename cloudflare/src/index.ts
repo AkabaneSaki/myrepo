@@ -53,40 +53,12 @@ app.onError((error, c) => {
   );
 });
 
-function isAllowedOrigin(origin: string): boolean {
-  if (!origin) return false;
-
-  const allowedOrigins = new Set([
-    'http://127.0.0.1:8000',
-    'http://localhost:8000',
-    'http://127.0.0.1:5173',
-    'http://localhost:5173',
-  ]);
-
-  try {
-    const url = new URL(origin);
-    if (allowedOrigins.has(url.origin)) {
-      return true;
-    }
-
-    return url.protocol === 'https:' && url.hostname.endsWith('.cloudflarepages.dev');
-  } catch {
-    return false;
-  }
-}
-
 // ============ CORS 中间件 =============
 app.use('*', async (c, next) => {
-  const origin = c.req.header('Origin') || '';
   const isOAuthCallbackRequest = c.req.path === '/api/auth/callback';
-  const allowedOrigin = isAllowedOrigin(origin) ? origin : '';
 
   const applyCorsHeaders = (headers: Headers) => {
-    if (allowedOrigin) {
-      headers.set('Access-Control-Allow-Origin', allowedOrigin);
-      headers.set('Vary', 'Origin');
-    }
-
+    headers.set('Access-Control-Allow-Origin', '*');
     headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     headers.set('X-Content-Type-Options', 'nosniff');

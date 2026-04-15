@@ -561,6 +561,7 @@ export const projectDb = {
       authorId?: string;
       tag?: string;
       search?: string;
+      sort?: 'published' | 'updated' | 'likes' | 'subscribes' | 'downloads';
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
     },
@@ -596,6 +597,27 @@ export const projectDb = {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const listWhereClause = whereClause
+      .replaceAll('author_id', 'p.author_id')
+      .replaceAll('status', 'p.status')
+      .replaceAll('tags', 'p.tags')
+      .replaceAll('name', 'p.name')
+      .replaceAll('description', 'p.description');
+    const orderBy = (() => {
+      switch (options.sort || 'published') {
+        case 'updated':
+          return 'p.updated_at DESC, p.created_at DESC';
+        case 'downloads':
+          return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+        case 'likes':
+          return 'COALESCE(pl.likes_count, 0) DESC, p.created_at DESC';
+        case 'subscribes':
+          return 'COALESCE(ps.subscribes_count, 0) DESC, p.created_at DESC';
+        case 'published':
+        default:
+          return 'p.created_at DESC, p.updated_at DESC';
+      }
+    })();
 
     // 获取总数
     const countResult = await db
@@ -612,11 +634,19 @@ export const projectDb = {
     const results = await db
       .prepare(
         `
-			SELECT p.*, u.global_name
+			SELECT p.*, u.global_name,
+			       COALESCE(pl.likes_count, 0) as likes_count,
+			       COALESCE(ps.subscribes_count, 0) as subscribes_count
 			FROM projects p
 			LEFT JOIN users u ON p.author_id = u.id
-			${whereClause.replaceAll('author_id', 'p.author_id').replaceAll('status', 'p.status').replaceAll('tags', 'p.tags').replaceAll('name', 'p.name').replaceAll('description', 'p.description')}
-			ORDER BY p.created_at DESC
+			LEFT JOIN (
+			  SELECT project_id, COUNT(*) as likes_count FROM project_likes GROUP BY project_id
+			) pl ON pl.project_id = p.id
+			LEFT JOIN (
+			  SELECT project_id, COUNT(*) as subscribes_count FROM project_subscribes GROUP BY project_id
+			) ps ON ps.project_id = p.id
+			${listWhereClause}
+			ORDER BY ${orderBy}
 			LIMIT ? OFFSET ?
 		`,
       )
@@ -1104,8 +1134,8 @@ function parseProjectRow(row: Record<string, unknown>) {
     coverImage: row.cover_image as string | null,
     worldbookEntriesPreview: [],
     regexEntriesPreview: [],
-    likesCount: 0,
-    subscribesCount: 0,
+    likesCount: Number(row.likes_count ?? 0),
+    subscribesCount: Number(row.subscribes_count ?? 0),
     userLiked: false,
     userSubscribed: false,
     createdAt: row.created_at as string,

@@ -96,6 +96,7 @@ export const ProjectListQuery = z.object({
   authorId: z.string().optional().describe('作者 ID 筛选'),
   tag: z.string().optional().describe('标签筛选'),
   search: z.string().optional().describe('搜索关键词'),
+  sort: z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']).default('published').describe('排序方式'),
 });
 
 // 项目创建请求

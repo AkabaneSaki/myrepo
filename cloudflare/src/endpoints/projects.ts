@@ -6,6 +6,24 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { r2Storage } from '../utils/r2';
 
+const projectListSortSchema = z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']);
+
+function getProjectListOrderBy(sort: z.infer<typeof projectListSortSchema>) {
+  switch (sort) {
+    case 'updated':
+      return 'p.updated_at DESC, p.created_at DESC';
+    case 'downloads':
+      return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+    case 'likes':
+      return 'COALESCE(pl.likes_count, 0) DESC, p.created_at DESC';
+    case 'subscribes':
+      return 'COALESCE(ps.subscribes_count, 0) DESC, p.created_at DESC';
+    case 'published':
+    default:
+      return 'p.created_at DESC, p.updated_at DESC';
+  }
+}
+
 async function readProjectPreview(c: AppContext, project: { downloadUrl?: string | null; id: string }) {
   const fileKey = `projects/${project.id}/project-${project.id}.json`;
   const regexKey = `projects/${project.id}/regex-${project.id}.json`;
@@ -29,6 +47,7 @@ export class ProjectList extends OpenAPIRoute {
         pageSize: Num({ description: 'Page size', default: 20 }),
         tag: Str({ required: false }).describe('Filter by tag'),
         search: Str({ required: false }).describe('Search keyword'),
+        sort: projectListSortSchema.default('published').describe('Sort mode'),
       }),
     },
     responses: {
@@ -73,7 +92,7 @@ export class ProjectList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const data = await this.getValidatedData<typeof this.schema>();
-    const { page, pageSize, tag, search } = data.query;
+    const { page, pageSize, tag, search, sort } = data.query;
     const payload = await getCurrentUserFromRequest(c);
 
     let result;
@@ -84,22 +103,46 @@ export class ProjectList extends OpenAPIRoute {
         approvedOnly: true, // 只返回已审核通过的项目
         tag,
         search,
+        sort,
         currentUser: payload,
       });
     } catch (error) {
       console.warn('ProjectList fallback activated:', error);
       const offset = page * pageSize;
+      const orderBy = getProjectListOrderBy(sort);
+      const fallbackConditions = ['p.status = ?', 'p.is_published = 1', 'p.visibility = 1'];
+      const fallbackValues: unknown[] = ['approved'];
+
+      if (tag) {
+        fallbackConditions.push('p.tags LIKE ?');
+        fallbackValues.push(`%"${tag}"%`);
+      }
+
+      if (search) {
+        fallbackConditions.push('(p.name LIKE ? OR p.description LIKE ?)');
+        fallbackValues.push(`%${search}%`, `%${search}%`);
+      }
+
+      const fallbackWhereClause = `WHERE ${fallbackConditions.join(' AND ')}`;
       const rows = await c.env.DB.prepare(
         `
-          SELECT p.*, u.global_name
+          SELECT p.*, u.global_name,
+                 COALESCE(pl.likes_count, 0) as likes_count,
+                 COALESCE(ps.subscribes_count, 0) as subscribes_count
           FROM projects p
           LEFT JOIN users u ON p.author_id = u.id
-          WHERE p.status = 'approved'
-          ORDER BY p.created_at DESC
+          LEFT JOIN (
+            SELECT project_id, COUNT(*) as likes_count FROM project_likes GROUP BY project_id
+          ) pl ON pl.project_id = p.id
+          LEFT JOIN (
+            SELECT project_id, COUNT(*) as subscribes_count FROM project_subscribes GROUP BY project_id
+          ) ps ON ps.project_id = p.id
+          ${fallbackWhereClause}
+          ORDER BY ${orderBy}
           LIMIT ? OFFSET ?
         `,
       )
-        .bind(pageSize, offset)
+        .bind(...fallbackValues, pageSize, offset)
         .all<Record<string, unknown>>();
 
       const projects = (rows.results || []).map(row => ({
@@ -127,8 +170,8 @@ export class ProjectList extends OpenAPIRoute {
           }
         })(),
         coverImage: row.cover_image ? String(row.cover_image) : null,
-        likesCount: 0,
-        subscribesCount: 0,
+        likesCount: Number(row.likes_count ?? 0),
+        subscribesCount: Number(row.subscribes_count ?? 0),
         userLiked: false,
         userSubscribed: false,
         createdAt: String(row.created_at || ''),
@@ -144,7 +187,13 @@ export class ProjectList extends OpenAPIRoute {
       }));
 
       result = {
-        total: projects.length,
+        total: Number(
+          (
+            await c.env.DB.prepare(
+              `SELECT COUNT(*) as total FROM projects p ${fallbackWhereClause}`,
+            ).bind(...fallbackValues).first<{ total: number }>()
+          )?.total || 0,
+        ),
         page,
         pageSize,
         projects,

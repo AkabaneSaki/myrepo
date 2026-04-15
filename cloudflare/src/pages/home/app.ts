@@ -21,7 +21,6 @@ export const homeScript = String.raw`
   ${homeModalsScript}
 
   const isEmbedded = window.parent !== window;
-
   function finishLogin(payload) {
     localStorage.setItem(TOKEN_KEY, payload.token);
     localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
@@ -46,10 +45,16 @@ export const homeScript = String.raw`
       }
 
       let pollInterval = null;
+      let pollTimeout = null;
       const cleanupBrowserLogin = () => {
         window.removeEventListener('message', messageHandler);
         if (pollInterval) {
           clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        if (pollTimeout) {
+          clearTimeout(pollTimeout);
+          pollTimeout = null;
         }
       };
       const finalizeBrowserLogin = payload => {
@@ -76,12 +81,31 @@ export const homeScript = String.raw`
         pollInterval = setInterval(async () => {
           try {
             const result = await fetch('/api/auth/poll?key=' + encodeURIComponent(state));
+            if (!result.ok) {
+              throw new Error('登录状态检查失败(' + result.status + ')');
+            }
             const payload = await result.json();
             if (payload.ready && payload.token && payload.user) {
               finalizeBrowserLogin(payload);
+              return;
             }
-          } catch (error) {}
+            if (payload.ready && payload.success === false) {
+              showToast('登录失败: ' + (payload.message || '未收到有效授权结果'), 'error');
+              cleanupBrowserLogin();
+              if (!popup.closed) popup.close();
+            }
+          } catch (error) {
+            showToast('登录状态检查失败，请重试登录', 'error');
+            cleanupBrowserLogin();
+            if (!popup.closed) popup.close();
+          }
         }, 1000);
+
+        pollTimeout = setTimeout(() => {
+          showToast('登录结果轮询超时', 'error');
+          cleanupBrowserLogin();
+          if (!popup.closed) popup.close();
+        }, 60000);
       }
     }).catch(error => showToast('获取登录链接失败: ' + error.message, 'error'));
   }
@@ -132,7 +156,9 @@ export const homeScript = String.raw`
             if (payload.ready) {
               finalizePoll(payload);
             }
-          } catch (error) {}
+          } catch (error) {
+            finalizePoll({ success: false, message: '登录状态检查失败，请重试登录' });
+          }
         }, 3000);
 
         pollTimeout = setTimeout(() => {
@@ -217,6 +243,9 @@ export const homeScript = String.raw`
     if (sortMenuTrigger && sortMenu) {
       sortMenuTrigger.onclick = event => {
         event.stopPropagation();
+        if (state.sortRequestPending) {
+          return;
+        }
         state.sortMenuOpen = !state.sortMenuOpen;
         state.userMenuOpen = false;
         renderApp();
@@ -225,9 +254,32 @@ export const homeScript = String.raw`
       sortMenu.querySelectorAll('[data-sort-value]').forEach(button => {
         button.addEventListener('click', event => {
           event.stopPropagation();
-          state.sortMode = button.dataset.sortValue || DEFAULT_SORT_MODE;
+          if (state.sortRequestPending) {
+            return;
+          }
+          const nextSortMode = button.dataset.sortValue || DEFAULT_SORT_MODE;
+          if (state.sortMode === nextSortMode) {
+            state.sortMenuOpen = false;
+            renderApp();
+            return;
+          }
+          state.sortRequestPending = true;
+          const sortLabelMap = {
+            published: '发布时间',
+            updated: '更新日期',
+            likes: '点赞数',
+            subscribes: '订阅数',
+            downloads: '下载量',
+          };
+          showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
+          state.sortMode = nextSortMode;
           state.sortMenuOpen = false;
+          resetProjectPagination();
           renderApp();
+          fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize }).finally(() => {
+            state.sortRequestPending = false;
+            renderApp();
+          });
         });
       });
     }
