@@ -91,9 +91,9 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   const params = new URLSearchParams({
     page: String(nextPage),
     pageSize: String(pageSize),
-    sort: String(options.sortMode || state.sortMode || DEFAULT_SORT_MODE),
+    sort: String(state.sortMode || DEFAULT_SORT_MODE),
   });
-  const baseTag = options.baseTag === undefined ? getActivePublicBaseTag() : options.baseTag;
+  const baseTag = getActivePublicBaseTag();
   if (baseTag && baseTag !== 'all') {
     params.set('tag', baseTag);
   }

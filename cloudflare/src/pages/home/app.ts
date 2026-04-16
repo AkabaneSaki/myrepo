@@ -280,8 +280,6 @@ export const homeScript = String.raw`
           fetchProjects(true, {
             page: 0,
             pageSize: state.projectPagination.pageSize,
-            sortMode: nextSortMode,
-            baseTag: getActivePublicBaseTag(),
           }).finally(() => {
             state.sortRequestPending = false;
             renderApp();
@@ -326,8 +324,6 @@ export const homeScript = String.raw`
         fetchProjects(true, {
           page: 0,
           pageSize: state.projectPagination.pageSize,
-          sortMode: state.sortMode,
-          baseTag: nextTag,
         }).finally(() => {
           state.filterRequestPending = false;
           renderApp();
