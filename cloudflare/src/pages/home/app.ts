@@ -210,6 +210,7 @@ export const homeScript = String.raw`
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const searchInput = document.getElementById('projectSearchInput');
+    const baseTagFilter = document.getElementById('baseTagFilter');
     const userMenuTrigger = document.getElementById('userMenuTrigger');
     const userMenu = document.getElementById('userMenu');
     const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
@@ -276,7 +277,12 @@ export const homeScript = String.raw`
           state.sortMenuOpen = false;
           resetProjectPagination();
           renderApp();
-          fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize }).finally(() => {
+          fetchProjects(true, {
+            page: 0,
+            pageSize: state.projectPagination.pageSize,
+            sortMode: nextSortMode,
+            baseTag: getActivePublicBaseTag(),
+          }).finally(() => {
             state.sortRequestPending = false;
             renderApp();
           });
@@ -296,6 +302,37 @@ export const homeScript = String.raw`
           commitSearch(event);
         }
       };
+    }
+
+    if (baseTagFilter) {
+      baseTagFilter.addEventListener('click', event => {
+        if (state.filterRequestPending) {
+          return;
+        }
+        const nextTagButton = event.target instanceof Element ? event.target.closest('[data-base-tag]') : null;
+        if (!nextTagButton) return;
+        const nextTag = nextTagButton.dataset.baseTag || 'all';
+        if (state.activeBaseTag === nextTag) return;
+        state.activeBaseTag = nextTag;
+
+        if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
+          renderApp();
+          return;
+        }
+
+        resetProjectPagination();
+        state.filterRequestPending = true;
+        renderApp();
+        fetchProjects(true, {
+          page: 0,
+          pageSize: state.projectPagination.pageSize,
+          sortMode: state.sortMode,
+          baseTag: nextTag,
+        }).finally(() => {
+          state.filterRequestPending = false;
+          renderApp();
+        });
+      });
     }
 
     if (userMenuTrigger && userMenu) {
