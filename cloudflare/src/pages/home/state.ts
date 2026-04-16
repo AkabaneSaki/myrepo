@@ -31,10 +31,13 @@ const state = {
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
   sortMode: DEFAULT_SORT_MODE,
+  activeBaseTag: 'all',
   searchKeyword: '',
   userMenuOpen: false,
   sortMenuOpen: false,
   sortRequestPending: false,
+  filterRequestPending: false,
+  projectRequestToken: 0,
   likesMap: new Map(),
   subsMap: new Map(),
   projectPagination: createDefaultProjectPagination(),
@@ -70,6 +73,22 @@ function setMyProjects(projects) {
 
 function resetProjectPagination() {
   state.projectPagination = createDefaultProjectPagination();
+}
+
+function getActivePublicBaseTag() {
+  if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
+    return 'all';
+  }
+  return state.activeBaseTag || 'all';
+}
+
+function createProjectRequestToken() {
+  state.projectRequestToken += 1;
+  return state.projectRequestToken;
+}
+
+function isLatestProjectRequestToken(token) {
+  return token === state.projectRequestToken;
 }
 
 function setProjectPaginationLoadingMore(loading) {
@@ -242,10 +261,13 @@ function getFilteredProjects() {
       })
     : source;
 
+  const baseTag = getActivePublicBaseTag();
+  const baseTagFilteredSource = scopedSource.filter(project => matchProjectBaseTag(project, baseTag));
+
   const keyword = String(state.searchKeyword || '').trim().toLowerCase();
   const filteredSource = !keyword
-    ? scopedSource
-    : scopedSource.filter(project => {
+    ? baseTagFilteredSource
+    : baseTagFilteredSource.filter(project => {
         const haystacks = [
           project.name,
           project.description,

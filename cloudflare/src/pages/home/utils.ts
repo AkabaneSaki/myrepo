@@ -1,4 +1,12 @@
 export const homeUtilsScript = String.raw`
+const BASE_TAG_META = [
+  { value: '系统', label: '系统', typeClass: 'system' },
+  { value: '扩展', label: '扩展', typeClass: 'extension' },
+  { value: '角色', label: '角色', typeClass: 'character' },
+  { value: '事件', label: '事件', typeClass: 'event' },
+];
+const BASE_TAGS = BASE_TAG_META.map(item => item.value);
+
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -28,15 +36,21 @@ function formatDate(value) {
 }
 
 function getBaseTag(project) {
-  return (project.tags || []).find(tag => ['系统', '角色', '事件', '扩展'].includes(tag)) || '系统';
+  return (project.tags || []).find(tag => BASE_TAGS.includes(tag)) || BASE_TAGS[0];
+}
+
+function getTypeClassByBaseTag(baseTag) {
+  const matched = BASE_TAG_META.find(item => item.value === baseTag);
+  return matched ? matched.typeClass : 'system';
 }
 
 function getTypeClass(project) {
-  const baseTag = getBaseTag(project);
-  if (baseTag === '角色') return 'character';
-  if (baseTag === '事件') return 'event';
-  if (baseTag === '扩展') return 'extension';
-  return 'system';
+  return getTypeClassByBaseTag(getBaseTag(project));
+}
+
+function matchProjectBaseTag(project, activeBaseTag) {
+  if (!activeBaseTag || activeBaseTag === 'all') return true;
+  return getBaseTag(project) === activeBaseTag;
 }
 
 function getAuthorName(project) {

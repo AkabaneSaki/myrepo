@@ -87,17 +87,25 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   const append = Boolean(options.append);
   const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
   const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
+  const requestToken = createProjectRequestToken();
   const params = new URLSearchParams({
     page: String(nextPage),
     pageSize: String(pageSize),
     sort: String(state.sortMode || DEFAULT_SORT_MODE),
   });
+  const baseTag = getActivePublicBaseTag();
+  if (baseTag && baseTag !== 'all') {
+    params.set('tag', baseTag);
+  }
 
   try {
     if (forceRefresh) {
       params.set('_', String(Date.now()));
     }
     const data = await apiFetch('/api/projects?' + params.toString());
+    if (!isLatestProjectRequestToken(requestToken)) {
+      return null;
+    }
     const projectList = data.projects || [];
 
     setProjectsPage({
@@ -113,17 +121,29 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     if (state.currentUser) {
       try {
         const myData = await apiFetch('/api/my/projects');
+        if (!isLatestProjectRequestToken(requestToken)) {
+          return null;
+        }
         setMyProjects(myData.projects || []);
       } catch (myProjectsError) {
+        if (!isLatestProjectRequestToken(requestToken)) {
+          return null;
+        }
         showToast('加载我的项目失败: ' + myProjectsError.message, 'warning');
       }
     } else {
       setMyProjects([]);
     }
 
+    if (!isLatestProjectRequestToken(requestToken)) {
+      return null;
+    }
     renderApp();
     return data;
   } catch (error) {
+    if (!isLatestProjectRequestToken(requestToken)) {
+      return null;
+    }
     if (append) {
       setProjectPaginationLoadingMore(false);
     } else {
