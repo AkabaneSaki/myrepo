@@ -350,7 +350,7 @@ $(async () => {
       console.info('自适应正则: 开始扫描最后一层消息');
 
       const messages = getChatMessages(-1); // 获取最后一条消息
-      console.info('自适应正则: 获取到的消息:', messages);
+      console.info(`自适应正则: 获取到 ${messages?.length || 0} 条候选消息`);
 
       if (!messages || messages.length === 0) {
         console.info('自适应正则: 没有找到消息，返回');
@@ -359,7 +359,7 @@ $(async () => {
 
       const lastMessage = messages[0];
       const messageContent = lastMessage.message;
-      console.info('自适应正则: 消息内容:', messageContent);
+      console.info(`自适应正则: 正在扫描消息，长度 ${String(messageContent || '').length}`);
 
       // 获取已存储的名称，用于跳过检测
       const storedNames = getStoredRegexNames();
