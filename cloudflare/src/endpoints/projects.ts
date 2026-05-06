@@ -7,6 +7,8 @@ import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils
 import { r2Storage } from '../utils/r2';
 
 const projectListSortSchema = z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']);
+const MAX_JSON_UPLOAD_SIZE = 10 * 1024 * 1024;
+const MAX_COVER_UPLOAD_SIZE = 5 * 1024 * 1024;
 
 function getProjectListOrderBy(sort: z.infer<typeof projectListSortSchema>) {
   switch (sort) {
@@ -464,11 +466,10 @@ export class ProjectUpload extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    const maxUploadSize = 10 * 1024 * 1024;
     const contentLengthHeader = c.req.header('content-length');
     const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
 
-    if (Number.isFinite(contentLength) && contentLength > maxUploadSize) {
+    if (Number.isFinite(contentLength) && contentLength > MAX_JSON_UPLOAD_SIZE) {
       return c.json({ error: 'File too large. Maximum size is 10MB' }, 413);
     }
 
@@ -476,7 +477,7 @@ export class ProjectUpload extends OpenAPIRoute {
     const arrayBuffer = await c.req.arrayBuffer();
     const contentType = c.req.header('content-type') || 'application/json';
 
-    if (arrayBuffer.byteLength > maxUploadSize) {
+    if (arrayBuffer.byteLength > MAX_JSON_UPLOAD_SIZE) {
       return c.json({ error: 'File too large. Maximum size is 10MB' }, 413);
     }
 
@@ -585,6 +586,10 @@ export class ProjectCoverUpload extends OpenAPIRoute {
     }
 
     const contentType = cover.type || 'application/octet-stream';
+    if (cover.size > MAX_COVER_UPLOAD_SIZE) {
+      return c.json({ error: 'Cover file too large. Maximum size is 5MB' }, 413);
+    }
+
     const extension =
       contentType === 'image/png'
         ? 'png'
@@ -598,34 +603,32 @@ export class ProjectCoverUpload extends OpenAPIRoute {
       return c.json({ error: 'Only jpg/png/webp images are allowed' }, 400);
     }
 
-    const key = `projects/${projectId}/cover.${extension}`;
+    let targetProjectId = projectId;
+    let submittedAsDraft = false;
+
+    if (project.isPublished && project.status === 'approved') {
+      const draftId = await projectDb.createDraftFromPublished(c, projectId, {});
+      if (!draftId) {
+        return c.json({ error: 'Draft creation failed' }, 500);
+      }
+      targetProjectId = draftId;
+      submittedAsDraft = true;
+    }
+
+    const key = `projects/${targetProjectId}/cover.${extension}`;
     const uploadResult = await r2Storage.upload(c, key, await cover.arrayBuffer(), contentType);
 
     if (!uploadResult) {
       return c.json({ error: 'Upload failed' }, 500);
     }
 
-    if (project.isPublished && project.status === 'approved') {
-      const draftId = await projectDb.createDraftFromPublished(c, projectId, { coverImage: key });
-      if (!draftId) {
-        return c.json({ error: 'Draft creation failed' }, 500);
-      }
-
-      await projectDb.setCoverImage(c, draftId, key);
-
-      return {
-        success: true,
-        coverImage: uploadResult.url,
-        projectId: draftId,
-        message: '封面修改已进入审核区，主页仍显示旧版本。',
-      };
-    }
-
-    await projectDb.setCoverImage(c, projectId, key);
+    await projectDb.setCoverImage(c, targetProjectId, key);
 
     return {
       success: true,
       coverImage: uploadResult.url,
+      projectId: targetProjectId,
+      message: submittedAsDraft ? '封面修改已进入审核区，主页仍显示旧版本。' : undefined,
     };
   }
 }
@@ -873,9 +876,20 @@ export class ProjectRegexUpload extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
+    const contentLengthHeader = c.req.header('content-length');
+    const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
+
+    if (Number.isFinite(contentLength) && contentLength > MAX_JSON_UPLOAD_SIZE) {
+      return c.json({ error: 'File too large. Maximum size is 10MB' }, 413);
+    }
+
     // 获取文件内容
     const arrayBuffer = await c.req.arrayBuffer();
     const contentType = c.req.header('content-type') || 'application/json';
+
+    if (arrayBuffer.byteLength > MAX_JSON_UPLOAD_SIZE) {
+      return c.json({ error: 'File too large. Maximum size is 10MB' }, 413);
+    }
 
     // 验证文件类型
     if (!contentType.includes('application/json')) {

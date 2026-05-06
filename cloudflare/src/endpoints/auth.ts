@@ -18,6 +18,11 @@ function createAuthHtmlResponse(html: string) {
   });
 }
 
+function isSameOriginAuthRequest(c: AppContext): boolean {
+  const origin = c.req.header('origin');
+  return !origin || origin === new URL(c.req.url).origin;
+}
+
 // 成功的 HTML 页面 - 通过 window.opener 回传 token
 // 注意：在酒馆 iframe 场景中，window.opener 实际是酒馆宿主窗口，
 // 而不是发起 /api/auth/login 请求的工坊页面 origin。
@@ -56,22 +61,25 @@ const successHtml = (token: string, userData: object, allowedOrigin: string, sta
         }
 
         try {
-          const payload = { type: 'oauth-success', source, state, token, user: userData };
+          const readyPayload = { type: 'oauth-ready', source, state };
 
           if (allowedOrigin) {
+            const payload = { type: 'oauth-success', source, state, token, user: userData };
             window.opener.postMessage(payload, allowedOrigin);
           }
 
           // 嵌入 SillyTavern 时 opener 是酒馆宿主窗口，
           // 其 origin 与 allowedOrigin（工坊站点 origin）并不一致。
-          // 此处补发一次 '*'，由宿主继续根据 event.origin / source / state 做严格校验。
-          window.opener.postMessage(payload, '*');
+          // 这里不向 '*' 广播 token，只发送无敏感信息的完成通知；iframe 会通过 poll 接口取回结果。
+          window.opener.postMessage(readyPayload, '*');
           return true;
         } catch (e) {
           console.error('postMessage 发送失败:', e);
           return false;
         }
       }
+
+      notifyOpener();
 
       setTimeout(() => {
         window.close();
@@ -121,8 +129,12 @@ const errorHtml = (message: string, allowedOrigin?: string, state?: string) => `
  */
 export class AuthLogin extends OpenAPIRoute {
   async handle(c: AppContext) {
+    if (!isSameOriginAuthRequest(c)) {
+      return c.json({ error: 'Auth must be started from the workshop page' }, 403);
+    }
+
     const state = crypto.randomUUID();
-    const origin = c.req.header('origin') || new URL(c.req.url).origin;
+    const origin = new URL(c.req.url).origin;
 
     await c.env.SESSION_KV.put(
       'oauth_state_' + state,
@@ -153,6 +165,10 @@ export class AuthPoll extends OpenAPIRoute {
   };
 
   async handle(c: AppContext) {
+    if (!isSameOriginAuthRequest(c)) {
+      return c.json({ error: 'Auth polling must be performed from the workshop page' }, 403);
+    }
+
     const { key } = c.req.query();
     const pollKey = 'oauth_result_' + key;
     const payload = await c.env.SESSION_KV.get(pollKey);
@@ -232,9 +248,6 @@ export class AuthCallback extends OpenAPIRoute {
         }
         return createAuthHtmlResponse(errorHtml(errorMsg, parsedState.origin, state));
       }
-
-      // 使用 verifyAndGetUser 返回的 tokenData（不再重复交换）
-      const tokenData = result.tokenData;
 
       // 获取用户信息，检查是否是管理员
       const userInfo = await userDb.get(c, result.user.id);

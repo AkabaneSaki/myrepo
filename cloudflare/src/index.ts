@@ -43,6 +43,9 @@ import {
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
 
+const DEFAULT_CORS_ALLOW_HEADERS = 'Content-Type, Authorization';
+const CORS_ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
+
 app.onError((error, c) => {
   console.error('Unhandled worker error:', error);
   return c.json(
@@ -58,16 +61,23 @@ app.use('*', async (c, next) => {
   const isOAuthCallbackRequest = c.req.path === '/api/auth/callback';
 
   const applyCorsHeaders = (headers: Headers) => {
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    const requestOrigin = c.req.header('origin');
+    const requestHeaders = c.req.header('access-control-request-headers');
+
+    headers.set('Access-Control-Allow-Origin', requestOrigin || '*');
+    headers.set('Access-Control-Allow-Methods', CORS_ALLOW_METHODS);
+    headers.set('Access-Control-Allow-Headers', requestHeaders || DEFAULT_CORS_ALLOW_HEADERS);
+    headers.set('Access-Control-Max-Age', '86400');
+    headers.append('Vary', 'Origin');
+    headers.append('Vary', 'Access-Control-Request-Headers');
+    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
     headers.set('X-Content-Type-Options', 'nosniff');
     headers.set('Referrer-Policy', 'same-origin');
 
     if (!isOAuthCallbackRequest) {
       headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
+        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
       );
     }
   };
