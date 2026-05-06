@@ -40,14 +40,33 @@ type OAuthCallbackErrorMessage = {
   message?: string;
 };
 
-type OAuthCallbackMessage = OAuthCallbackSuccessMessage | OAuthCallbackErrorMessage;
+type OAuthCallbackReadyMessage = {
+  type: 'oauth-ready';
+  source: typeof OAUTH_CALLBACK_SOURCE;
+  state?: string;
+};
+
+type OAuthCallbackMessage = OAuthCallbackSuccessMessage | OAuthCallbackErrorMessage | OAuthCallbackReadyMessage;
 
 function isOAuthCallbackMessage(value: unknown): value is OAuthCallbackMessage {
   return (
     _.isObject(value) &&
-    (_.get(value, 'type') === 'oauth-success' || _.get(value, 'type') === 'oauth-error') &&
+    (_.get(value, 'type') === 'oauth-success' ||
+      _.get(value, 'type') === 'oauth-error' ||
+      _.get(value, 'type') === 'oauth-ready') &&
     _.get(value, 'source') === OAUTH_CALLBACK_SOURCE
   );
+}
+
+function summarizePayload(payload: unknown) {
+  if (!_.isObject(payload)) return undefined;
+  return {
+    projectId: _.isString(_.get(payload, 'projectId')) ? _.get(payload, 'projectId') : undefined,
+    state: _.isString(_.get(payload, 'state')) ? '[present]' : undefined,
+    success: typeof _.get(payload, 'success') === 'boolean' ? _.get(payload, 'success') : undefined,
+    hasToken: _.isString(_.get(payload, 'token')),
+    hasUser: _.isObject(_.get(payload, 'user')),
+  };
 }
 
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
@@ -95,7 +114,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
     console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
-      payload,
+      payload: summarizePayload(payload),
     });
     await post('bridge:oauth:result', payload, requestId);
     clearOAuthTimers();
@@ -162,7 +181,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       pendingOauthState,
       eventOrigin: event.origin,
       sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-      data: event.data,
+      messageType: _.isString(_.get(event.data, 'type')) ? _.get(event.data, 'type') : undefined,
     });
     if (!pendingOauthRequestId) return;
     if (event.origin !== oauthOrigin) return;
@@ -171,6 +190,14 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
 
     if (pendingOauthState && event.data.state !== pendingOauthState) {
       await failPendingOAuth('授权状态校验失败');
+      return;
+    }
+
+    if (event.data.type === 'oauth-ready') {
+      clearOAuthTimers();
+      cleanupOAuthPopupReference();
+      pendingOauthRequestId = undefined;
+      pendingOauthState = undefined;
       return;
     }
 
@@ -200,7 +227,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
-      payload,
+      payload: summarizePayload(payload),
       targetOrigin,
     });
     iframe.contentWindow?.postMessage(createBridgeMessage(type as never, payload, requestId), targetOrigin);
@@ -210,7 +237,9 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
-      data: event.data,
+      messageType: _.isString(_.get(event.data, 'type')) ? _.get(event.data, 'type') : undefined,
+      requestId: _.isString(_.get(event.data, 'requestId')) ? _.get(event.data, 'requestId') : undefined,
+      payload: summarizePayload(_.get(event.data, 'payload')),
     });
     if (event.source !== iframe.contentWindow) return;
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
@@ -313,7 +342,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           }
 
           console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
-            authUrl,
+            hasAuthUrl: Boolean(authUrl),
             state,
             requestId: event.data.requestId,
           });

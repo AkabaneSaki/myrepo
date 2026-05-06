@@ -80,7 +80,7 @@ export const homeScript = String.raw`
       if (state) {
         pollInterval = setInterval(async () => {
           try {
-            const result = await fetch('/api/auth/poll?key=' + encodeURIComponent(state));
+            const result = await fetch(API_BASE + '/api/auth/poll?key=' + encodeURIComponent(state));
             if (!result.ok) {
               throw new Error('登录状态检查失败(' + result.status + ')');
             }

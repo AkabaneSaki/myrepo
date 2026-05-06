@@ -235,7 +235,7 @@ async function deleteProject(projectId) {
 
 async function uploadProjectFile(projectId, file) {
   try {
-    const response = await fetch('/api/projects/' + projectId + '/upload', {
+    const response = await fetch(API_BASE + '/api/projects/' + projectId + '/upload', {
       method: 'POST',
       headers: {
         Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
@@ -255,7 +255,7 @@ async function uploadProjectFile(projectId, file) {
 
 async function uploadRegexFile(projectId, file) {
   try {
-    const response = await fetch('/api/projects/' + projectId + '/upload-regex', {
+    const response = await fetch(API_BASE + '/api/projects/' + projectId + '/upload-regex', {
       method: 'POST',
       headers: {
         Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
@@ -277,7 +277,7 @@ async function uploadCoverFile(projectId, file) {
   const formData = new FormData();
   formData.append('cover', file);
   try {
-    const response = await fetch('/api/projects/' + projectId + '/upload-cover', {
+    const response = await fetch(API_BASE + '/api/projects/' + projectId + '/upload-cover', {
       method: 'POST',
       headers: {
         Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
