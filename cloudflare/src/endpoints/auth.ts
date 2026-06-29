@@ -7,7 +7,7 @@ import { jwt } from '../utils/jwt';
 
 const AUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
 const AUTH_CALLBACK_CSP =
-  "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;";
+  "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;";
 
 function createAuthHtmlResponse(html: string) {
   return new Response(html, {

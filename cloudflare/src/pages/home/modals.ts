@@ -19,6 +19,7 @@ export const homeModalsScript = [
   '  });',
   "  overlay.querySelector('.close-btn').addEventListener('click', () => overlay.remove());",
   '  document.body.appendChild(overlay);',
+  '  bindCoverImageFallbacks(overlay);',
   '  return overlay;',
   '}',
   '',

@@ -459,6 +459,7 @@ export const homeScript = String.raw`
     const filteredProjects = getFilteredProjects();
     app.innerHTML = renderLayout(filteredProjects);
     bindStaticActions(filteredProjects);
+    bindCoverImageFallbacks();
   }
 
   async function init() {
