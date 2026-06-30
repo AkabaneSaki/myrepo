@@ -1,5 +1,5 @@
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
-import { getReadableRegexName } from './regex-name';
+import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -98,10 +98,10 @@ export async function getCreativeWorkshopProjectDiff(projectId: string) {
   const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
     .filter(
       regex =>
-        String(regex.id || '').startsWith(`creative_workshop:${projectId}:`),
+        getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`),
     )
     .map(regex => ({
-      id: regex.id,
+      id: getCreativeWorkshopRegexId(regex),
       scriptName: String(regex.script_name || regex.id || ''),
       findRegex: regex.find_regex,
       replaceString: regex.replace_string,
