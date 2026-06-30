@@ -66,6 +66,11 @@ function normalizeRemoteEntry(entry: Record<string, any>, projectId: string, ind
   };
 }
 
+function getReadableRegexName(projectName: string, entry: Record<string, any>, index: number) {
+  const name = entry.scriptName || entry.script_name || entry.id || `正则${index + 1}`;
+  return String(name).startsWith('[工坊]') ? String(name) : `[工坊] ${projectName} - ${name}`;
+}
+
 function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: T[], keyGetter: (item: T) => string) {
   const localMap = new Map(localItems.map(item => [keyGetter(item), item]));
   const remoteMap = new Map(remoteItems.map(item => [keyGetter(item), item]));
@@ -97,18 +102,17 @@ export async function getCreativeWorkshopProjectDiff(projectId: string) {
   const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
     .filter(
       regex =>
-        String(regex.id || '').startsWith(`creative_workshop:${projectId}:`) ||
-        String(regex.script_name || '').startsWith(`creative_workshop:${projectId}:`),
+        String(regex.id || '').startsWith(`creative_workshop:${projectId}:`),
     )
     .map(regex => ({
       id: regex.id,
-      scriptName: String(regex.id || regex.script_name || ''),
+      scriptName: String(regex.script_name || regex.id || ''),
       findRegex: regex.find_regex,
       replaceString: regex.replace_string,
     }));
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
-    id: entry.id || String(index),
-    scriptName: `creative_workshop:${projectId}:${entry.id || index}`,
+    id: `creative_workshop:${projectId}:${entry.id || index}`,
+    scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
     findRegex: entry.findRegex || '',
     replaceString: entry.replaceString || '',
   }));
@@ -129,7 +133,7 @@ export async function getCreativeWorkshopProjectDiff(projectId: string) {
   }
 
   const entryDiff = diffByKey(localEntries, remoteEntries, item => item.entryKey);
-  const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.scriptName);
+  const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.id);
 
   const result = {
     projectId,
