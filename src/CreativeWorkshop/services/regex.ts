@@ -1,5 +1,10 @@
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 
+function getReadableRegexName(projectName: string, entry: Record<string, any>, index: number) {
+  const name = entry.scriptName || entry.script_name || entry.id || `正则${index + 1}`;
+  return String(name).startsWith('[工坊]') ? String(name) : `[工坊] ${projectName} - ${name}`;
+}
+
 export async function installCreativeWorkshopRegex(projectId: string) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId);
   const regexEntries = detail.regexEntriesPreview || [];
@@ -14,7 +19,7 @@ export async function installCreativeWorkshopRegex(projectId: string) {
         (entry, index) =>
           ({
             id: `creative_workshop:${projectId}:${entry.id || index}`,
-            script_name: `creative_workshop:${projectId}:${entry.id || index}`,
+            script_name: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
             enabled: !entry.disabled,
             scope: 'character' as const,
             find_regex: entry.findRegex || '',
