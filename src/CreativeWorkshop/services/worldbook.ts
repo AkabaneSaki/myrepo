@@ -17,6 +17,29 @@ function renameEntry(entryName: string, tags: string[], projectName: string): st
   return entryName.startsWith('[DLC]') ? entryName : `[DLC][${type}][${projectName}]${entryName}`;
 }
 
+function arrayField(entry: Record<string, any>, rawPath: string, previewPath: string) {
+  const rawValue = _.get(entry, rawPath);
+  if (Array.isArray(rawValue)) return rawValue;
+  const previewValue = _.get(entry, previewPath);
+  return Array.isArray(previewValue) ? previewValue : [];
+}
+
+function fieldWithDefault<T>(entry: Record<string, any>, rawPath: string, previewPath: string, defaultValue: T): T {
+  return (_.get(entry, rawPath) ?? _.get(entry, previewPath) ?? defaultValue) as T;
+}
+
+function getStrategyType(entry: Record<string, any>): WorldbookEntry['strategy']['type'] {
+  const type = _.get(entry, 'strategy.type');
+  if (type === 'constant' || type === 'selective' || type === 'vectorized') return type;
+  return (entry.constant ? 'constant' : entry.selective ? 'selective' : 'vectorized') as WorldbookEntry['strategy']['type'];
+}
+
+function getSecondaryLogic(entry: Record<string, any>): WorldbookEntry['strategy']['keys_secondary']['logic'] {
+  const logic = _.get(entry, 'strategy.keys_secondary.logic');
+  if (logic) return logic as WorldbookEntry['strategy']['keys_secondary']['logic'];
+  return (Number(entry.selectiveLogic ?? 0) === 0 ? 'and_any' : 'and_all') as WorldbookEntry['strategy']['keys_secondary']['logic'];
+}
+
 export async function installCreativeWorkshopProject(projectId: string) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId);
   const worldbookName = getCurrentWorldbookName();
@@ -37,25 +60,19 @@ export async function installCreativeWorkshopProject(projectId: string) {
         name,
         enabled: _.isBoolean(entry.enabled) ? entry.enabled : !entry.disable,
         strategy: {
-          type: (entry.constant
-            ? 'constant'
-            : entry.selective
-              ? 'selective'
-              : 'vectorized') as WorldbookEntry['strategy']['type'],
-          keys: Array.isArray(entry.key) ? entry.key : [],
+          type: getStrategyType(entry),
+          keys: arrayField(entry, 'strategy.keys', 'key'),
           keys_secondary: {
-            logic: (Number(entry.selectiveLogic) === 0
-              ? 'and_any'
-              : 'and_all') as WorldbookEntry['strategy']['keys_secondary']['logic'],
-            keys: Array.isArray(entry.keysecondary) ? entry.keysecondary : [],
+            logic: getSecondaryLogic(entry),
+            keys: arrayField(entry, 'strategy.keys_secondary.keys', 'keysecondary'),
           },
-          scan_depth: entry.scanDepth || 'same_as_global',
+          scan_depth: fieldWithDefault(entry, 'strategy.scan_depth', 'scanDepth', 'same_as_global'),
         },
         position: {
-          type: 'at_depth' as WorldbookEntry['position']['type'],
-          depth: entry.depth || 4,
-          order: entry.order || index,
-          role: (entry.role || 'system') as WorldbookEntry['position']['role'],
+          type: fieldWithDefault(entry, 'position.type', 'positionType', 'at_depth') as WorldbookEntry['position']['type'],
+          depth: fieldWithDefault(entry, 'position.depth', 'depth', 4),
+          order: fieldWithDefault(entry, 'position.order', 'order', index),
+          role: fieldWithDefault(entry, 'position.role', 'role', 'system') as WorldbookEntry['position']['role'],
         },
         recursion: {
           prevent_incoming: Boolean(entry.excludeRecursion),
@@ -63,11 +80,11 @@ export async function installCreativeWorkshopProject(projectId: string) {
           delay_until: entry.delayUntilRecursion ? 1 : null,
         },
         effect: {
-          sticky: entry.sticky || null,
-          cooldown: entry.cooldown || null,
-          delay: entry.delay || null,
+          sticky: fieldWithDefault(entry, 'effect.sticky', 'sticky', null),
+          cooldown: fieldWithDefault(entry, 'effect.cooldown', 'cooldown', null),
+          delay: fieldWithDefault(entry, 'effect.delay', 'delay', null),
         },
-        probability: entry.useProbability ? entry.probability || 100 : 100,
+        probability: entry.useProbability ? (entry.probability ?? 100) : 100,
         content: entry.content || '',
         comment: entry.comment || name,
         extra: {
