@@ -1,3 +1,5 @@
+import { getCreativeWorkshopRegexId } from './regex-name';
+
 export type CreativeWorkshopInstalledProject = {
   projectId: string;
   name: string;
@@ -25,12 +27,8 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
   const groupedRegexes = _.groupBy(
-    regexes.filter(
-      regex =>
-        String(regex.id || '').startsWith('creative_workshop:') ||
-        String(regex.script_name || '').startsWith('creative_workshop:'),
-    ),
-    regex => String(regex.id || '').split(':')[1] || '',
+    regexes.filter(regex => getCreativeWorkshopRegexId(regex).startsWith('creative_workshop:')),
+    regex => getCreativeWorkshopRegexId(regex).split(':')[1] || '',
   );
 
   return _(groupedEntries)

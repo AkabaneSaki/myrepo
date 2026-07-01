@@ -71,6 +71,101 @@ function appendCacheVersion(url, version) {
   }
 }
 
+function encodeWsrvSource(url) {
+  if (!url) return '';
+
+  try {
+    const parsed = new URL(String(url), window.location.origin);
+    return encodeURIComponent(parsed.toString());
+  } catch {
+    return encodeURIComponent(String(url));
+  }
+}
+
+function getWsrvUrl(url) {
+  if (!url) return url;
+  return 'https://wsrv.nl/?url=' + encodeWsrvSource(url) + '&w=640&output=webp';
+}
+
+function getFallbackSvgUrl() {
+  const fallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160" fill="none">'
+    + '<rect width="300" height="160" rx="20" fill="#0F172A"/>'
+    + '<rect x="18" y="18" width="264" height="124" rx="16" fill="#1E293B" stroke="#334155"/>'
+    + '<circle cx="92" cy="70" r="18" fill="#334155"/>'
+    + '<path d="M54 118L97 84L126 106L158 74L214 118H54Z" fill="#475569"/>'
+    + '<text x="150" y="136" text-anchor="middle" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">No Preview</text>'
+    + '</svg>';
+
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallbackSvg);
+}
+
+function getDirectCoverUrl(project) {
+  if (!project.coverImage) {
+    return '';
+  }
+
+  return appendCacheVersion(project.coverImage, project.updatedAt || project.latestApprovedAt || project.coverImage);
+}
+
+function getCoverImageSources(project) {
+  const placeholder = getFallbackSvgUrl();
+  const fallback = getDirectCoverUrl(project);
+
+  if (!fallback) {
+    return {
+      primary: placeholder,
+      fallback: '',
+      placeholder,
+    };
+  }
+
+  return {
+    primary: getWsrvUrl(fallback),
+    fallback,
+    placeholder,
+  };
+}
+
+function setCoverBackground(element, url) {
+  if (!element || !url) return;
+  element.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
+}
+
+function bindCoverImageFallbacks(root) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  scope.querySelectorAll('[data-cover-src]').forEach(element => {
+    if (!(element instanceof HTMLElement) || element.dataset.coverBound === '1') {
+      return;
+    }
+
+    element.dataset.coverBound = '1';
+
+    const primary = element.dataset.coverSrc || '';
+    const fallback = element.dataset.coverFallbackSrc || '';
+    const placeholder = element.dataset.coverPlaceholderSrc || '';
+
+    if (!primary || primary === placeholder) {
+      setCoverBackground(element, placeholder);
+      return;
+    }
+
+    const probe = new Image();
+    probe.onload = () => setCoverBackground(element, primary);
+    probe.onerror = () => {
+      if (!fallback) {
+        setCoverBackground(element, placeholder);
+        return;
+      }
+
+      const directProbe = new Image();
+      directProbe.onload = () => setCoverBackground(element, fallback);
+      directProbe.onerror = () => setCoverBackground(element, placeholder);
+      directProbe.src = fallback;
+    };
+    probe.src = primary;
+  });
+}
+
 function getAuthorAvatar(project) {
   if (!project.authorAvatar) {
     return 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -89,15 +184,7 @@ function getCoverUrl(project) {
     return appendCacheVersion(project.coverImage, project.updatedAt || project.latestApprovedAt || project.coverImage);
   }
 
-  const fallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160" fill="none">'
-    + '<rect width="300" height="160" rx="20" fill="#0F172A"/>'
-    + '<rect x="18" y="18" width="264" height="124" rx="16" fill="#1E293B" stroke="#334155"/>'
-    + '<circle cx="92" cy="70" r="18" fill="#334155"/>'
-    + '<path d="M54 118L97 84L126 106L158 74L214 118H54Z" fill="#475569"/>'
-    + '<text x="150" y="136" text-anchor="middle" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">No Preview</text>'
-    + '</svg>';
-
-  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallbackSvg);
+  return getFallbackSvgUrl();
 }
 
 function getLikeState(projectId) {
@@ -143,5 +230,10 @@ function getEntryStrategy(entry) {
 function normalizeEntryKeywords(entry) {
   if (!entry || entry.key === null || entry.key === undefined || entry.key === '') return [];
   return Array.isArray(entry.key) ? entry.key : String(entry.key).split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function normalizeEntrySecondaryKeywords(entry) {
+  if (!entry || entry.keysecondary === null || entry.keysecondary === undefined || entry.keysecondary === '') return [];
+  return Array.isArray(entry.keysecondary) ? entry.keysecondary : String(entry.keysecondary).split(',').map(item => item.trim()).filter(Boolean);
 }
 `;

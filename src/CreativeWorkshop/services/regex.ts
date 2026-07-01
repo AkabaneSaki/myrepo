@@ -1,4 +1,5 @@
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
+import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
 export async function installCreativeWorkshopRegex(projectId: string) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId);
@@ -9,12 +10,12 @@ export async function installCreativeWorkshopRegex(projectId: string) {
 
   return updateTavernRegexesWith(
     regexes => {
-      const filtered = regexes.filter(regex => !String(regex.id || '').startsWith(`creative_workshop:${projectId}:`));
+      const filtered = regexes.filter(regex => !getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`));
       const appended = regexEntries.map(
         (entry, index) =>
           ({
             id: `creative_workshop:${projectId}:${entry.id || index}`,
-            script_name: `creative_workshop:${projectId}:${entry.id || index}`,
+            script_name: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
             enabled: !entry.disabled,
             scope: 'character' as const,
             find_regex: entry.findRegex || '',
@@ -45,7 +46,7 @@ export async function installCreativeWorkshopRegex(projectId: string) {
 
 export async function uninstallCreativeWorkshopRegex(projectId: string) {
   return updateTavernRegexesWith(
-    regexes => regexes.filter(regex => !String(regex.id || '').startsWith(`creative_workshop:${projectId}:`)),
+    regexes => regexes.filter(regex => !getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`)),
     { scope: 'character' },
   );
 }

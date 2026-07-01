@@ -1,4 +1,5 @@
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
+import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -97,18 +98,17 @@ export async function getCreativeWorkshopProjectDiff(projectId: string) {
   const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
     .filter(
       regex =>
-        String(regex.id || '').startsWith(`creative_workshop:${projectId}:`) ||
-        String(regex.script_name || '').startsWith(`creative_workshop:${projectId}:`),
+        getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`),
     )
     .map(regex => ({
-      id: regex.id,
-      scriptName: String(regex.id || regex.script_name || ''),
+      id: getCreativeWorkshopRegexId(regex),
+      scriptName: String(regex.script_name || regex.id || ''),
       findRegex: regex.find_regex,
       replaceString: regex.replace_string,
     }));
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
-    id: entry.id || String(index),
-    scriptName: `creative_workshop:${projectId}:${entry.id || index}`,
+    id: `creative_workshop:${projectId}:${entry.id || index}`,
+    scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
     findRegex: entry.findRegex || '',
     replaceString: entry.replaceString || '',
   }));
@@ -129,7 +129,7 @@ export async function getCreativeWorkshopProjectDiff(projectId: string) {
   }
 
   const entryDiff = diffByKey(localEntries, remoteEntries, item => item.entryKey);
-  const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.scriptName);
+  const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.id);
 
   const result = {
     projectId,

@@ -171,6 +171,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .strategy-selective { color:#10B981; }
 .detail-keywords-block { display:flex; flex-direction:column; gap:10px; padding:12px; border:1px solid rgba(99,102,241,0.28); border-radius:14px; background:rgba(30,41,59,0.5); }
 .detail-keywords-title { font-size:0.78rem; font-weight:700; letter-spacing:0.08em; color:#C7D2FE; text-transform:uppercase; }
+.detail-keyword-list { margin-top:6px; }
 .keyword-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; border:1px solid rgba(99,102,241,0.6); background:rgba(99,102,241,0.08); color:#C7D2FE; font-size:0.78rem; line-height:1.2; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.04); }
 .detail-entry-content { padding:14px; }
   .empty-state { padding:18px; border-radius:14px; border:1px dashed rgba(255,255,255,0.14); color:rgba(226,232,240,0.72); text-align:center; }
