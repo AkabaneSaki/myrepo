@@ -222,26 +222,63 @@ function openCreativeWorkshop() {
   });
 
   const $frame = createScriptIdIframe().css({
-    width: 'min(1400px, 96vw)',
-    height: 'min(90vh, 920px)',
+    width: '90vw',
+    height: '90vh',
     borderRadius: '20px',
     background: '#0F172A',
     boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
   });
 
+  const $closeButton = host$('<button type="button">退出</button>').css({
+    position: 'fixed',
+    top: '12px',
+    right: '12px',
+    zIndex: 1,
+    minHeight: '40px',
+    padding: '0 14px',
+    border: '1px solid rgba(248,113,113,0.45)',
+    borderRadius: '999px',
+    background: 'rgba(185,28,28,0.92)',
+    color: '#FEF2F2',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 8px 24px rgba(127,29,29,0.35)',
+    backdropFilter: 'blur(8px)',
+  });
+
+  $closeButton.on('click', event => {
+    event.stopPropagation();
+    close();
+  });
+
   const updateOverlayLayout = () => {
-    const useTopAlignedLayout = window.innerWidth < 1000;
+    const useFullscreenLayout = hostWindow.innerWidth < 1000;
     const viewportHeight = hostWindow.visualViewport?.height ?? hostWindow.innerHeight;
     const viewportTop = (hostWindow.visualViewport?.offsetTop ?? 0) + hostWindow.scrollY;
 
     $overlay.css({
       top: `${viewportTop}px`,
       height: `${viewportHeight}px`,
-      alignItems: useTopAlignedLayout ? 'flex-start' : 'center',
-      paddingTop: useTopAlignedLayout ? '16px' : '24px',
-      paddingRight: '24px',
-      paddingBottom: useTopAlignedLayout ? '16px' : '24px',
-      paddingLeft: '24px',
+      alignItems: useFullscreenLayout ? 'stretch' : 'center',
+      paddingTop: useFullscreenLayout ? '0' : '24px',
+      paddingRight: useFullscreenLayout ? '0' : '24px',
+      paddingBottom: useFullscreenLayout ? '0' : '24px',
+      paddingLeft: useFullscreenLayout ? '0' : '24px',
+    });
+
+    $frame.css({
+      // ponytail: mobile fills viewport; desktop keeps simple 90% sizing with no extra ratio math.
+      width: useFullscreenLayout ? '100vw' : '90vw',
+      height: useFullscreenLayout ? `${viewportHeight}px` : '90vh',
+      borderRadius: useFullscreenLayout ? '0' : '20px',
+      boxShadow: useFullscreenLayout ? 'none' : '0 24px 80px rgba(0,0,0,0.45)',
+    });
+
+    $closeButton.css({
+      left: useFullscreenLayout ? '50%' : '',
+      right: useFullscreenLayout ? 'auto' : '12px',
+      transform: useFullscreenLayout ? 'translateX(-50%)' : 'none',
     });
   };
 
@@ -251,7 +288,7 @@ function openCreativeWorkshop() {
   hostWindow.visualViewport?.addEventListener('resize', updateOverlayLayout);
   hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
 
-  $overlay.append($frame).appendTo(hostDocument.body);
+  $overlay.append($frame, $closeButton).appendTo(hostDocument.body);
 
   console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
     iframeCount: $overlay.find('iframe').length,
