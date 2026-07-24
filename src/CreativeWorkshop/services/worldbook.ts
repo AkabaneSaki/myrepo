@@ -40,6 +40,40 @@ function getSecondaryLogic(entry: Record<string, any>): WorldbookEntry['strategy
   return (Number(entry.selectiveLogic ?? 0) === 0 ? 'and_any' : 'and_all') as WorldbookEntry['strategy']['keys_secondary']['logic'];
 }
 
+function getPositionType(entry: Record<string, any>): WorldbookEntry['position']['type'] {
+  const type = _.get(entry, 'position.type') ?? entry.positionType;
+  if (type) return type as WorldbookEntry['position']['type'];
+
+  switch (entry.position) {
+    case 0:
+      return 'before_char' as WorldbookEntry['position']['type'];
+    case 1:
+      return 'after_char' as WorldbookEntry['position']['type'];
+    case 4:
+      return 'at_depth' as WorldbookEntry['position']['type'];
+    default:
+      return 'at_depth' as WorldbookEntry['position']['type'];
+  }
+}
+
+function getPositionRole(entry: Record<string, any>): WorldbookEntry['position']['role'] {
+  const role = _.get(entry, 'position.role') ?? entry.role;
+  switch (role) {
+    case 0:
+      return 'system';
+    case 1:
+      return 'user';
+    case 2:
+      return 'assistant';
+    case 'system':
+    case 'user':
+    case 'assistant':
+      return role;
+    default:
+      return 'system';
+  }
+}
+
 function getProbability(entry: Record<string, any>) {
   if (entry.useProbability !== undefined) return entry.useProbability ? (entry.probability ?? 100) : 100;
   if (_.get(entry, 'probability') !== undefined) return _.get(entry, 'probability');
@@ -81,10 +115,10 @@ export async function installCreativeWorkshopProject(projectId: string) {
           scan_depth: fieldWithDefault(entry, 'strategy.scan_depth', 'scanDepth', 'same_as_global'),
         },
         position: {
-          type: fieldWithDefault(entry, 'position.type', 'positionType', 'at_depth') as WorldbookEntry['position']['type'],
+          type: getPositionType(entry),
           depth: fieldWithDefault(entry, 'position.depth', 'depth', 4),
           order: fieldWithDefault(entry, 'position.order', 'order', index),
-          role: fieldWithDefault(entry, 'position.role', 'role', 'system') as WorldbookEntry['position']['role'],
+          role: getPositionRole(entry),
         },
         recursion: {
           prevent_incoming: fieldWithDefault(entry, 'recursion.prevent_incoming', 'excludeRecursion', false),
@@ -101,7 +135,6 @@ export async function installCreativeWorkshopProject(projectId: string) {
         comment: entry.comment || name,
         extra: {
           ..._.get(worldbook[existingIndex], 'extra', {}),
-          ...(_.isObject(entry.extra) ? entry.extra : {}),
           cw_project_id: projectId,
           cw_project_name_display: detail.project.name || '未命名项目',
           cw_project_version: detail.project.version || null,
