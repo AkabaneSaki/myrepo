@@ -121,7 +121,7 @@ function getFallbackSvgUrl() {
 }
 
 function getDirectCoverUrl(project) {
-  if (!project.coverImage) {
+  if (!project?.coverImage) {
     return '';
   }
 
