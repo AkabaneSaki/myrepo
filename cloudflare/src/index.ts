@@ -70,7 +70,7 @@ app.use('*', async (c, next) => {
     if (!isOAuthCallbackRequest) {
       headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
+        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl data: blob:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;",
       );
     }
   };
