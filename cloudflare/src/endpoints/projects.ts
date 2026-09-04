@@ -87,6 +87,7 @@ export class ProjectList extends OpenAPIRoute {
                   userSubscribed: z.boolean(),
                   createdAt: z.string(),
                   updatedAt: z.string(),
+                  latestApprovedAt: z.string().nullable().optional(),
                 }),
               ),
             }),

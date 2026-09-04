@@ -21,7 +21,45 @@ export const homeScript = String.raw`
   ${homeModalsScript}
 
   const isEmbedded = window.parent !== window;
+  const REJECTED_REMINDER_STORAGE_PREFIX = 'creative_workshop_rejected_reminders_v1:';
   let lastCommittedSearchKeyword = String(state.searchKeyword || '').trim();
+
+  function showRejectedProjectReminder(projects) {
+    if (!state.currentUser || !Array.isArray(projects)) return false;
+    const rejectedProjects = projects.filter(project => project && project.id);
+    if (!rejectedProjects.length) return false;
+
+    const storageKey = REJECTED_REMINDER_STORAGE_PREFIX + state.currentUser.id;
+    let seen = {};
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) seen = stored;
+    } catch {}
+
+    const unseen = rejectedProjects.filter(project => {
+      const projectId = String(project.id);
+      const rejectionToken = String(project.reviewedAt || project.updatedAt || 'rejected');
+      return seen[projectId] !== rejectionToken;
+    });
+    if (!unseen.length) return false;
+
+    unseen.forEach(project => {
+      seen[String(project.id)] = String(project.reviewedAt || project.updatedAt || 'rejected');
+    });
+    const seenEntries = Object.entries(seen);
+    if (seenEntries.length > 100) seen = Object.fromEntries(seenEntries.slice(-100));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(seen));
+    } catch {}
+
+    if (unseen.length === 1) {
+      showToast('项目「' + (unseen[0].name || '未命名项目') + '」审核被退回，请到「我的项目」查看原因并修改', 'warning');
+    } else {
+      showToast('有 ' + unseen.length + ' 个项目审核被退回，请到「我的项目」查看并修改', 'warning');
+    }
+    return true;
+  }
+
   function finishLogin(payload) {
     clearAuthenticatedCoverObjectUrls();
     localStorage.setItem(TOKEN_KEY, payload.token);
@@ -29,7 +67,13 @@ export const homeScript = String.raw`
     invalidateAllProjectDetailCaches();
     setCurrentUser(payload.user);
     renderApp();
-    showToast('登录成功');
+    apiFetch('/api/auth/me', { method: 'GET' })
+      .then(data => {
+        if (!showRejectedProjectReminder(data.rejectedProjects)) showToast('登录成功');
+      })
+      .catch(() => {
+        if (state.currentUser) showToast('登录成功');
+      });
   }
 
   function openLoginPopupForBrowser() {
@@ -521,7 +565,8 @@ export const homeScript = String.raw`
       initializeTavernBridge();
     }
     resetProjectPagination();
-    await fetchCurrentUser();
+    const authState = await fetchCurrentUser();
+    showRejectedProjectReminder(authState?.rejectedProjects);
     await fetchProjects(false, { page: 0, pageSize: state.projectPagination.pageSize });
   }
 

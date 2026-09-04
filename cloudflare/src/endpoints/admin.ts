@@ -144,7 +144,7 @@ export class AdminReview extends OpenAPIRoute {
     }
 
     // 执行审核
-    await projectDb.review(c, projectId, payload.userId, action, rejectReason);
+    const reviewedAt = await projectDb.review(c, projectId, payload.userId, action, rejectReason);
 
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
       const publishedAssets = await r2Storage.copyProjectFilesToPublished(c, projectId, project.publishedProjectId);
@@ -161,7 +161,7 @@ export class AdminReview extends OpenAPIRoute {
         draftProjectId: null,
         visibility: project.visibility,
         isPublished: true,
-        latestApprovedAt: new Date().toISOString(),
+        latestApprovedAt: reviewedAt,
       });
 
       await projectDb.delete(c, projectId);
@@ -173,7 +173,7 @@ export class AdminReview extends OpenAPIRoute {
       await projectDb.update(c, projectId, {
         isPublished: true,
         visibility: project.visibility,
-        latestApprovedAt: new Date().toISOString(),
+        latestApprovedAt: reviewedAt,
       });
     }
 

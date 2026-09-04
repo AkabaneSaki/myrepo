@@ -507,7 +507,7 @@ export const projectDb = {
           return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
         case 'published':
         default:
-          return 'p.created_at DESC, p.updated_at DESC';
+          return 'p.latest_approved_at DESC, p.updated_at DESC';
       }
     })();
     // 获取当前页，并多取 1 条用于判断是否还有下一批；无需额外 COUNT(*)。
@@ -548,7 +548,7 @@ export const projectDb = {
     reviewerId: string,
     action: 'approve' | 'reject',
     rejectReason?: string,
-  ): Promise<void> => {
+  ): Promise<string> => {
     const db = c.env.DB;
     const reviewedAt = now();
 
@@ -575,6 +575,8 @@ export const projectDb = {
         .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId)
         .run();
     }
+
+    return reviewedAt;
   },
 
   /**

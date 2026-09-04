@@ -78,7 +78,7 @@ async function fetchCurrentUser() {
     if (data.user) {
       setCurrentUser(data.user);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      return data.user;
+      return data;
     }
   } catch (error) {}
 

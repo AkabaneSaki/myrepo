@@ -56,6 +56,10 @@ function formatDate(value) {
   return date.toLocaleDateString('zh-CN');
 }
 
+function getProjectPublishedAt(project) {
+  return project?.latestApprovedAt || project?.createdAt || '';
+}
+
 function getBaseTag(project) {
   return (project.tags || []).find(tag => BASE_TAGS.includes(tag)) || BASE_TAGS[0];
 }

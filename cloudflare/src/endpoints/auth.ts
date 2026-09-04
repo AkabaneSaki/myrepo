@@ -357,6 +357,19 @@ export class AuthMe extends OpenAPIRoute {
       return { user: null };
     }
 
+    const rejectedResult = await c.env.DB.prepare(
+      `SELECT id, name, reviewed_at, updated_at, reject_reason FROM projects WHERE author_id = ? AND status = 'rejected' ORDER BY reviewed_at DESC, updated_at DESC LIMIT 50`,
+    )
+      .bind(payload.userId)
+      .all<{ id: string; name: string; reviewed_at: string | null; updated_at: string | null; reject_reason: string | null }>();
+    const rejectedProjects = (rejectedResult.results || []).map(project => ({
+      id: project.id,
+      name: project.name,
+      reviewedAt: project.reviewed_at,
+      updatedAt: project.updated_at,
+      rejectReason: project.reject_reason,
+    }));
+
     const avatarUrl = payload.avatar
       ? `https://cdn.discordapp.com/avatars/${payload.userId}/${payload.avatar}.webp?size=100`
       : `https://cdn.discordapp.com/embed/avatars/0.png`;
@@ -371,6 +384,7 @@ export class AuthMe extends OpenAPIRoute {
         isAdmin: payload.isAdmin,
         isSuperAdmin: payload.isSuperAdmin || false,
       },
+      rejectedProjects,
     };
   }
 }
