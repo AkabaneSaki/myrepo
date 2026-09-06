@@ -13,6 +13,7 @@ function createDefaultTavernState() {
     installedProjects: [],
     installedProjectsLoaded: false,
     localProjectMap: new Map(),
+    installedRemoteProjectMap: new Map(),
     updateDiffMap: new Map(),
     pendingProjectActions: new Map(),
     worldbooks: { primary: null, additional: [], available: [] },
@@ -68,6 +69,9 @@ function setCurrentUser(user) {
 
 function setProjects(projects) {
   state.projects = Array.isArray(projects) ? projects : [];
+  if (state.tavern.installedProjectsLoaded) {
+    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
+  }
 }
 
 function setProjectsPage(payload) {
@@ -78,6 +82,9 @@ function setProjectsPage(payload) {
   state.projectPagination.pageSize = Number(payload?.pageSize || state.projectPagination.pageSize || 50);
   state.projectPagination.hasMore = Boolean(payload?.hasMore);
   state.projectPagination.loadingMore = false;
+  if (state.tavern.installedProjectsLoaded) {
+    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
+  }
 }
 
 function setMyProjects(projects) {
@@ -184,16 +191,84 @@ function normalizeInstalledProject(project) {
     entryCount: Number(project.entryCount || 0),
     regexCount: Number(project.regexCount || 0),
     name: project.name || '',
+    legacyProjectName: typeof project.legacyProjectName === 'string' && project.legacyProjectName.trim()
+      ? project.legacyProjectName.trim()
+      : null,
     canUpdate: Boolean(project.canUpdate),
     hasUpdate: Boolean(project.hasUpdate),
     worldbookName: project.worldbookName || null,
   };
 }
 
+function canResolveLegacyProjectIdentities() {
+  return !state.projectPagination.hasMore &&
+    !state.projectPagination.loadingMore &&
+    !state.searchKeyword &&
+    getActivePublicBaseTag() === 'all' &&
+    !state.showOnlyMyProjects &&
+    !state.showSubscribedAndInstalledProjects;
+}
+
+function resolveInstalledProjectIdentity(project) {
+  if (!project?.legacyProjectName) return project;
+  if (state.projects.some(remoteProject => remoteProject.id === project.projectId)) return project;
+  if (!canResolveLegacyProjectIdentities()) return project;
+  const matches = state.projects.filter(remoteProject => String(remoteProject.name || '') === project.legacyProjectName);
+  if (matches.length !== 1) return project;
+  return {
+    ...project,
+    projectId: matches[0].id,
+    name: matches[0].name || project.name,
+  };
+}
+
+function getLegacyInstalledProjectMatches(project) {
+  const projectName = String(project?.name || '');
+  if (!projectName) return [];
+  return state.tavern.installedProjects.filter(localProject =>
+    localProject?.legacyProjectName === projectName && localProject.projectId !== project?.id,
+  );
+}
+
 function rebuildInstalledProjectState(installedProjectMap) {
-  const list = Array.from(installedProjectMap.values());
+  const resolvedProjectMap = new Map();
+  Array.from(installedProjectMap.values()).forEach(rawProject => {
+    const project = resolveInstalledProjectIdentity(normalizeInstalledProject(rawProject));
+    if (!project?.projectId) return;
+    const existing = resolvedProjectMap.get(project.projectId);
+    if (!existing) {
+      resolvedProjectMap.set(project.projectId, project);
+      return;
+    }
+    resolvedProjectMap.set(project.projectId, {
+      ...existing,
+      ...project,
+      legacyProjectName: existing.legacyProjectName || project.legacyProjectName || null,
+      localVersion: project.localVersion || existing.localVersion || null,
+      worldbookName: project.worldbookName || existing.worldbookName || null,
+      entryCount: Math.max(Number(existing.entryCount || 0), Number(project.entryCount || 0)),
+      regexCount: Math.max(Number(existing.regexCount || 0), Number(project.regexCount || 0)),
+    });
+  });
+  const list = Array.from(resolvedProjectMap.values());
   state.tavern.installedProjects = list;
   state.tavern.localProjectMap = new Map(list.map(project => [project.projectId, project]));
+  const installedIds = new Set(list.map(project => project.projectId).filter(Boolean));
+  state.tavern.installedRemoteProjectMap = new Map(
+    Array.from(state.tavern.installedRemoteProjectMap || new Map()).filter(([projectId]) => installedIds.has(projectId)),
+  );
+}
+
+function mergeInstalledRemoteProjects(projects) {
+  const installedIds = new Set(state.tavern.installedProjects.map(project => project.projectId || project.id).filter(Boolean));
+  const remoteProjectMap = new Map(state.tavern.installedRemoteProjectMap || new Map());
+  (Array.isArray(projects) ? projects : []).forEach(project => {
+    if (!project?.id || !installedIds.has(project.id)) return;
+    remoteProjectMap.set(project.id, project);
+  });
+  state.tavern.installedRemoteProjectMap = new Map(
+    Array.from(remoteProjectMap.entries()).filter(([projectId]) => installedIds.has(projectId)),
+  );
 }
 
 function setInstalledProjects(projects, options) {
@@ -245,6 +320,11 @@ function isSubscribedProject(projectId) {
 
 function mergeProjectsForInstalledView(source) {
   const projectMap = new Map((source || []).map(project => [project.id, project]));
+  state.tavern.installedRemoteProjectMap.forEach((remoteProject, projectId) => {
+    if (!projectMap.has(projectId)) {
+      projectMap.set(projectId, remoteProject);
+    }
+  });
   state.tavern.installedProjects.forEach(localProject => {
     const projectId = localProject.projectId || localProject.id;
     if (!projectMap.has(projectId)) {

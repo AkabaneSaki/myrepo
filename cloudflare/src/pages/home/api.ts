@@ -174,6 +174,10 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       append,
     });
 
+    if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
+      await fetchInstalledProjectDetails();
+    }
+
     syncProjectStats(state.projects);
 
     if (state.currentUser && state.showOnlyMyProjects) {
@@ -214,6 +218,34 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     renderApp();
     return null;
   }
+}
+
+async function fetchInstalledProjectDetails() {
+  const installedProjectIds = Array.from(new Set(
+    state.tavern.installedProjects
+      .map(project => project.projectId || project.id)
+      .filter(Boolean),
+  ));
+  if (!installedProjectIds.length) {
+    mergeInstalledRemoteProjects([]);
+    return [];
+  }
+
+  const loadedProjectIds = new Set(state.projects.map(project => project.id));
+  const missingProjectIds = installedProjectIds.filter(projectId => !loadedProjectIds.has(projectId));
+  if (!missingProjectIds.length) return [];
+
+  const results = await Promise.allSettled(
+    missingProjectIds.map(async projectId => {
+      const detail = await fetchProjectEntries(projectId);
+      return detail?.project?.id ? detail.project : null;
+    }),
+  );
+  const remoteProjects = results
+    .filter(result => result.status === 'fulfilled' && result.value)
+    .map(result => result.value);
+  mergeInstalledRemoteProjects(remoteProjects);
+  return remoteProjects;
 }
 
 async function loadMoreProjects() {

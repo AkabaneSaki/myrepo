@@ -46,6 +46,7 @@ assert.doesNotMatch(fragments.homeCardsRenderScript, /审核中的项目暂不�
 const cardViewModelUi = Function(
   'getLikeState',
   'getLocalProjectMeta',
+  'getLegacyInstalledProjectMatches',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -53,6 +54,7 @@ const cardViewModelUi = Function(
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
+  () => [],
   () => null,
   { tavern: { connected: false, installedProjectsLoaded: false } },
   value => String(value),
@@ -68,6 +70,7 @@ assert.equal(
 const cardRenderUi = Function(
   'getLikeState',
   'getLocalProjectMeta',
+  'getLegacyInstalledProjectMatches',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -87,6 +90,7 @@ const cardRenderUi = Function(
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
+  () => [],
   () => null,
   { tavern: { connected: false, installedProjectsLoaded: false }, currentUser: null },
   value => String(value),
@@ -107,6 +111,130 @@ const legacyCardHtml = cardRenderUi.renderProjectCard({ id: 'legacy', name: 'Leg
 assert.match(legacyCardHtml, /card-meta card-meta--version"><span>1\.2\.3<\/span> <span>2026\/9\/6<\/span>/);
 const labeledCardHtml = cardRenderUi.renderProjectCard({ id: 'labeled', name: 'Labeled', version: '1.2.3', versionLabel: '夏季版', tags: [], downloadsCount: 0 });
 assert.match(labeledCardHtml, /card-meta card-meta--version"><span>夏季版<\/span> <span>2026\/9\/6<\/span>/);
+
+const createLegacyIdentityUi = () => Function(
+  `${fragments.homeStateScript}; return { state, setProjectsPage, setInstalledProjects, getLocalProjectMeta, getLegacyInstalledProjectMatches };`,
+)();
+const legacyIdentityUi = createLegacyIdentityUi();
+const canonicalProjectId = '11111111-1111-4111-8111-111111111111';
+legacyIdentityUi.setInstalledProjects([{
+  projectId: '旧工坊项目',
+  name: '旧工坊项目',
+  legacyProjectName: '旧工坊项目',
+  localVersion: null,
+  entryCount: 2,
+  regexCount: 1,
+}]);
+legacyIdentityUi.setProjectsPage({
+  projects: [{ id: canonicalProjectId, name: '旧工坊项目' }],
+  append: false,
+  page: 0,
+  pageSize: 50,
+  hasMore: false,
+});
+assert.equal(legacyIdentityUi.getLocalProjectMeta(canonicalProjectId)?.legacyProjectName, '旧工坊项目');
+assert.equal(legacyIdentityUi.getLocalProjectMeta('旧工坊项目'), null);
+
+const ambiguousLegacyUi = createLegacyIdentityUi();
+ambiguousLegacyUi.setInstalledProjects([{
+  projectId: '同名旧项目',
+  name: '同名旧项目',
+  legacyProjectName: '同名旧项目',
+  localVersion: null,
+  entryCount: 1,
+  regexCount: 0,
+}]);
+ambiguousLegacyUi.setProjectsPage({
+  projects: [
+    { id: '22222222-2222-4222-8222-222222222222', name: '同名旧项目' },
+    { id: '33333333-3333-4333-8333-333333333333', name: '同名旧项目' },
+  ],
+  append: false,
+  page: 0,
+  pageSize: 50,
+  hasMore: false,
+});
+assert.equal(ambiguousLegacyUi.getLocalProjectMeta('同名旧项目')?.legacyProjectName, '同名旧项目');
+assert.equal(
+  ambiguousLegacyUi.getLegacyInstalledProjectMatches({ id: '22222222-2222-4222-8222-222222222222', name: '同名旧项目' }).length,
+  1,
+);
+
+const installedRemoteUi = Function(
+  `${fragments.homeStateScript}; return { state, setProjectsPage, setInstalledProjects, mergeInstalledRemoteProjects, mergeProjectsForInstalledView };`,
+)();
+const installedRemoteProjectId = '328361a6-7479-400d-8e5b-a1a8dc73cea5';
+installedRemoteUi.setProjectsPage({
+  projects: [{ id: canonicalProjectId, name: '其他项目' }],
+  append: false,
+  page: 0,
+  pageSize: 50,
+  hasMore: true,
+});
+installedRemoteUi.setInstalledProjects([{
+  projectId: installedRemoteProjectId,
+  name: '灰风',
+  localVersion: '1.0.0',
+  entryCount: 1,
+  regexCount: 0,
+}]);
+installedRemoteUi.mergeInstalledRemoteProjects([{
+  id: installedRemoteProjectId,
+  name: '灰风',
+  version: '1.0.0',
+  authorName: '莱卡',
+  coverImage: 'remote-cover.png',
+  tags: ['角色'],
+}]);
+installedRemoteUi.state.tavern.connected = true;
+installedRemoteUi.state.showSubscribedAndInstalledProjects = true;
+const installedRemoteProjects = installedRemoteUi.mergeProjectsForInstalledView(installedRemoteUi.state.projects);
+const hydratedInstalledRemoteProject = installedRemoteProjects.find(project => project.id === installedRemoteProjectId);
+assert.ok(hydratedInstalledRemoteProject);
+assert.equal(hydratedInstalledRemoteProject.authorName, '莱卡');
+assert.equal(hydratedInstalledRemoteProject.coverImage, 'remote-cover.png');
+assert.notEqual(hydratedInstalledRemoteProject.source, 'local-only');
+
+const migratedCardUi = Function(
+  'getLikeState',
+  'getLocalProjectMeta',
+  'getLegacyInstalledProjectMatches',
+  'getProjectPendingAction',
+  'state',
+  'escapeHtml',
+  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+)(
+  () => ({ liked: false, count: 0 }),
+  () => ({ projectId: canonicalProjectId, legacyProjectName: '旧工坊项目', localVersion: null }),
+  () => [],
+  () => null,
+  { tavern: { connected: true, installedProjectsLoaded: true } },
+  value => String(value),
+);
+assert.equal(
+  migratedCardUi.buildProjectCardViewModel({ id: canonicalProjectId, name: '旧工坊项目', version: '2.0.0' }).canUpdate,
+  true,
+);
+
+const legacyConflictView = Function(
+  'getLikeState',
+  'getLocalProjectMeta',
+  'getLegacyInstalledProjectMatches',
+  'getProjectPendingAction',
+  'state',
+  'escapeHtml',
+  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+)(
+  () => ({ liked: false, count: 0 }),
+  () => null,
+  () => [{}],
+  () => null,
+  { tavern: { connected: true, installedProjectsLoaded: true } },
+  value => String(value),
+);
+const legacyConflictCard = legacyConflictView.buildProjectCardViewModel({ id: 'remote', name: '同名旧项目', version: '2.0.0' });
+assert.equal(legacyConflictCard.installDisabled, true);
+assert.equal(legacyConflictCard.installText, '旧版安装待识别');
 
 const projectFormUi = Function(
   `${fragments.homeUtilsScript}\n${fragments.homeModalsScript}; return { buildProjectFormHtml };`,

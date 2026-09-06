@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 const files = [
   '../../src/CreativeWorkshop/index.ts',
   '../../src/CreativeWorkshop/bridge/host.ts',
+  '../../src/CreativeWorkshop/services/diff.ts',
+  '../../src/CreativeWorkshop/services/install-registry.ts',
   '../../src/CreativeWorkshop/services/install-state.ts',
   '../../src/CreativeWorkshop/services/project-fetch.ts',
   '../../src/CreativeWorkshop/services/regex.ts',

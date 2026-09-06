@@ -82,17 +82,23 @@ function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: 
   return { added, removed, modified };
 }
 
-export async function getCreativeWorkshopProjectDiff(projectId: string, expectedVersion?: string) {
+export async function getCreativeWorkshopProjectDiff(
+  projectId: string,
+  expectedVersion?: string,
+  legacyProjectName?: string,
+) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
   const charWorldbooks = getCharWorldbookNames('current');
-  const worldbookName = (await resolveCreativeWorkshopInstallWorldbook(projectId)) || charWorldbooks.primary;
+  const worldbookName = (await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName)) || charWorldbooks.primary;
   const worldbookEntries = worldbookName && getWorldbookNames().includes(worldbookName)
     ? await getWorldbook(worldbookName)
     : [];
   const localEntries = worldbookEntries
     .filter(
       entry =>
-        _.get(entry, 'extra.cw_project_id') === projectId || _.get(entry, 'extra.fate_project_name') === projectId,
+        _.get(entry, 'extra.cw_project_id') === projectId ||
+        _.get(entry, 'extra.fate_project_name') === projectId ||
+        Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName),
     )
     .map(normalizeWorldbookEntry);
   const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) =>
@@ -101,8 +107,11 @@ export async function getCreativeWorkshopProjectDiff(projectId: string, expected
 
   const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
     .filter(
-      regex =>
-        getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`),
+      regex => {
+        const regexId = getCreativeWorkshopRegexId(regex);
+        return regexId.startsWith(`creative_workshop:${projectId}:`) ||
+          Boolean(legacyProjectName && regexId.startsWith(`creative_workshop:${legacyProjectName}:`));
+      },
     )
     .map(regex => ({
       id: getCreativeWorkshopRegexId(regex),

@@ -3,6 +3,7 @@ import { getCurrentCreativeWorkshopContext } from '../services/context';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects } from '../services/install-state';
+import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
 import {
   installCreativeWorkshopRegex,
   uninstallCreativeWorkshopRegex,
@@ -235,6 +236,9 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     if (!isCreativeWorkshopBridgeMessage(event.data)) return;
 
     const actionType = event.data.type;
+    const actionLegacyProjectName = _.isString(_.get(event.data, 'payload.legacyProjectName'))
+      ? String(event.data.payload?.legacyProjectName)
+      : undefined;
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
@@ -294,14 +298,28 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           if (!_.isString(_.get(event.data, 'payload.projectId'))) {
             throw new Error('缺少 projectId');
           }
-          await uninstallCreativeWorkshopProject(String(event.data.payload?.projectId));
-          await uninstallCreativeWorkshopRegex(String(event.data.payload?.projectId));
+          await uninstallCreativeWorkshopProject(String(event.data.payload?.projectId), actionLegacyProjectName);
+          await uninstallCreativeWorkshopRegex(String(event.data.payload?.projectId), actionLegacyProjectName);
+          const remainingProjects = await listInstalledCreativeWorkshopProjects();
+          const stillInstalled = remainingProjects.some(project =>
+            project.projectId === String(event.data.payload?.projectId) ||
+            Boolean(actionLegacyProjectName && (
+              project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName
+            )),
+          );
+          if (stillInstalled) {
+            throw new Error('卸载未完全完成：仍检测到旧工坊安装条目，请重试或手动检查世界书/正则');
+          }
+          deleteCreativeWorkshopInstallRecord(String(event.data.payload?.projectId));
+          if (actionLegacyProjectName && actionLegacyProjectName !== String(event.data.payload?.projectId)) {
+            deleteCreativeWorkshopInstallRecord(actionLegacyProjectName);
+          }
           await post(
             'bridge:uninstall-result',
             {
               success: true,
               projectId: String(event.data.payload?.projectId),
-              projects: await listInstalledCreativeWorkshopProjects(),
+              projects: remainingProjects,
             },
             event.data.requestId,
           );
@@ -313,6 +331,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const diffResult = await getCreativeWorkshopProjectDiff(
             String(event.data.payload?.projectId),
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
+            actionLegacyProjectName,
           );
           await post('bridge:project-diff', diffResult, event.data.requestId);
           break;
@@ -324,8 +343,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const expectedVersion = _.isString(event.data.payload?.projectVersion)
             ? String(event.data.payload?.projectVersion)
             : undefined;
-          await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion);
-          await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion);
+          await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
+          await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
           await post(
             'bridge:update-result',
             {

@@ -5,6 +5,7 @@ export async function installCreativeWorkshopRegex(
   projectId: string,
   selectedEntryKeys?: string[],
   expectedVersion?: string,
+  legacyProjectName?: string,
 ) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
   const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
@@ -22,7 +23,11 @@ export async function installCreativeWorkshopRegex(
 
   return updateTavernRegexesWith(
     regexes => {
-      const filtered = regexes.filter(regex => !getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`));
+      const filtered = regexes.filter(regex => {
+        const regexId = getCreativeWorkshopRegexId(regex);
+        return !regexId.startsWith(`creative_workshop:${projectId}:`) &&
+          !Boolean(legacyProjectName && regexId.startsWith(`creative_workshop:${legacyProjectName}:`));
+      });
       const appended = regexEntries.map(
         ({ entry, originalIndex, entryKey }) =>
           ({
@@ -56,14 +61,22 @@ export async function installCreativeWorkshopRegex(
   );
 }
 
-export async function uninstallCreativeWorkshopRegex(projectId: string) {
+export async function uninstallCreativeWorkshopRegex(projectId: string, legacyProjectName?: string) {
   return updateTavernRegexesWith(
-    regexes => regexes.filter(regex => !getCreativeWorkshopRegexId(regex).startsWith(`creative_workshop:${projectId}:`)),
+    regexes => regexes.filter(regex => {
+      const regexId = getCreativeWorkshopRegexId(regex);
+      return !regexId.startsWith(`creative_workshop:${projectId}:`) &&
+        !Boolean(legacyProjectName && regexId.startsWith(`creative_workshop:${legacyProjectName}:`));
+    }),
     { scope: 'character' },
   );
 }
 
-export async function updateCreativeWorkshopRegex(projectId: string, expectedVersion?: string) {
-  await uninstallCreativeWorkshopRegex(projectId);
-  return installCreativeWorkshopRegex(projectId, undefined, expectedVersion);
+export async function updateCreativeWorkshopRegex(
+  projectId: string,
+  expectedVersion?: string,
+  legacyProjectName?: string,
+) {
+  await uninstallCreativeWorkshopRegex(projectId, legacyProjectName);
+  return installCreativeWorkshopRegex(projectId, undefined, expectedVersion, legacyProjectName);
 }

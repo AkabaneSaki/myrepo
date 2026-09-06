@@ -306,6 +306,13 @@ export const homeScript = String.raw`
       const checkbox = installedToggle.querySelector('input');
       checkbox.addEventListener('change', async event => {
         state.showSubscribedAndInstalledProjects = event.target.checked;
+        if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
+          try {
+            await fetchInstalledProjectDetails();
+          } catch (error) {
+            console.warn('[CreativeWorkshop] 加载已安装项目远端详情失败', error);
+          }
+        }
         if (state.showSubscribedAndInstalledProjects) {
           state.showOnlyMyProjects = false;
         }

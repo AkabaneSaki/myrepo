@@ -185,6 +185,10 @@ function initializeTavernBridge() {
   postBridgeMessage('bridge:list-installed-projects');
 }
 
+function getLegacyProjectNameForBridge(projectId) {
+  return getLocalProjectMeta(projectId)?.legacyProjectName || null;
+}
+
 function requestInstallProject(projectId, selection = {}) {
   setProjectPendingAction(projectId, 'install');
   renderApp();
@@ -192,17 +196,26 @@ function requestInstallProject(projectId, selection = {}) {
 }
 
 function requestUninstallProject(projectId) {
+  const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   setProjectPendingAction(projectId, 'uninstall');
   renderApp();
-  postBridgeMessage('bridge:uninstall-project', { projectId });
+  postBridgeMessage('bridge:uninstall-project', {
+    projectId,
+    ...(legacyProjectName ? { legacyProjectName } : {}),
+  });
 }
 
 function requestProjectDiff(projectId, projectVersion = null) {
+  const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   const cachedDiff = getProjectUpdateDiff(projectId);
   if (window.__CW_TAVERN_MOCK__ && cachedDiff) {
     return Promise.resolve(cachedDiff);
   }
-  const requestId = postBridgeMessage('bridge:get-project-diff', { projectId, ...(projectVersion ? { projectVersion } : {}) });
+  const requestId = postBridgeMessage('bridge:get-project-diff', {
+    projectId,
+    ...(projectVersion ? { projectVersion } : {}),
+    ...(legacyProjectName ? { legacyProjectName } : {}),
+  });
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       if (!pendingProjectDiffRequests.has(requestId)) return;
@@ -214,9 +227,14 @@ function requestProjectDiff(projectId, projectVersion = null) {
 }
 
 function confirmProjectUpdate(projectId, projectVersion = null) {
+  const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   setProjectPendingAction(projectId, 'update');
   renderApp();
-  postBridgeMessage('bridge:confirm-project-update', { projectId, ...(projectVersion ? { projectVersion } : {}) });
+  postBridgeMessage('bridge:confirm-project-update', {
+    projectId,
+    ...(projectVersion ? { projectVersion } : {}),
+    ...(legacyProjectName ? { legacyProjectName } : {}),
+  });
 }
 
 function requestOAuthLogin(authUrl, state) {
