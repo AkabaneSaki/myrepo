@@ -143,28 +143,27 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     oauthTimeoutId = hostWindow.setTimeout(() => {
       void failPendingOAuth('授权超时');
     }, OAUTH_TIMEOUT_MS);
-    oauthClosePollId = hostWindow.setInterval(() => {
-      if (!oauthPopup) {
-        console.warn('[CreativeWorkshopBridgeHost] oauthClosePoll:no-popup-reference');
-        return;
-      }
+    // TauriTavern mobile intentionally opens external URLs in the system browser
+    // and returns null from window.open(). In that mode there is no popup Window
+    // object to monitor; the Workshop iframe recovers the result through backend polling.
+    if (oauthPopup) {
+      oauthClosePollId = hostWindow.setInterval(() => {
+        if (Date.now() - oauthPopupOpenedAt < OAUTH_POPUP_CLOSE_GUARD_MS) {
+          console.info('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
+            elapsedMs: Date.now() - oauthPopupOpenedAt,
+            guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
+          });
+          return;
+        }
 
-      if (Date.now() - oauthPopupOpenedAt < OAUTH_POPUP_CLOSE_GUARD_MS) {
-        console.info('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
-          elapsedMs: Date.now() - oauthPopupOpenedAt,
-          guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
-        });
-        return;
-      }
-
-      if (oauthPopup.closed) {
-        console.info('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
-          state: pendingOauthState,
-          guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
-        });
-        return;
-      }
-    }, 500);
+        if (oauthPopup?.closed) {
+          console.info('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
+            state: pendingOauthState,
+            guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
+          });
+        }
+      }, 500);
+    }
   }
 
   async function handleOAuthCallback(event: MessageEvent) {
@@ -390,13 +389,15 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const height = 700;
           const left = Math.max(0, Math.round((hostWindow.screen.width - width) / 2));
           const top = Math.max(0, Math.round((hostWindow.screen.height - height) / 2));
+          const tauriTavernMobileExternalOpen =
+            _.get(hostWindow, '__TAURITAVERN_MOBILE_WINDOW_OPEN_COMPAT__') === true;
           const popup = hostWindow.open(
             authUrl,
             OAUTH_POPUP_NAME,
             `width=${width},height=${height},left=${left},top=${top}`,
           );
 
-          if (!popup) {
+          if (!popup && !tauriTavernMobileExternalOpen) {
             console.error('[CreativeWorkshopBridgeHost] bridge:oauth:start popup blocked');
             await post(
               'bridge:oauth:result',
@@ -415,7 +416,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           pendingOauthRequestId = event.data.requestId;
           pendingOauthState = _.isString(state) ? state : undefined;
           console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start popup opened', {
-            popupClosed: popup.closed,
+            popupClosed: popup?.closed ?? null,
+            externalBrowserOnly: tauriTavernMobileExternalOpen && !popup,
             pendingOauthRequestId,
             pendingOauthState,
           });

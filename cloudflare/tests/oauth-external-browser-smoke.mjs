@@ -29,6 +29,10 @@ assert.match(pollSource, /SESSION_KV\.get\(pollKey, \{ cacheTtl: 30 \}\)/);
 assert.doesNotMatch(pollSource, /SESSION_KV\.delete\(pollKey\)/);
 
 assert.match(hostSource, /OAUTH_TIMEOUT_MS = 5 \* 60 \* 1000/);
+assert.match(hostSource, /__TAURITAVERN_MOBILE_WINDOW_OPEN_COMPAT__/);
+assert.match(hostSource, /if \(!popup && !tauriTavernMobileExternalOpen\)/);
+assert.match(hostSource, /externalBrowserOnly: tauriTavernMobileExternalOpen && !popup/);
+assert.match(hostSource, /if \(oauthPopup\) \{[\s\S]*oauthClosePollId = hostWindow\.setInterval/);
 assert.match(hostSource, /callbackReady: true/);
 assert.match(hostSource, /'bridge:oauth:result'/);
 
