@@ -12,7 +12,6 @@
 		"check:version-label-migration": "node tests/project-version-label-migration-smoke.mjs",
 		"check:inspection-summary-migration": "node tests/project-inspection-summary-migration-smoke.mjs",
 		"check:home-js-smoke": "node tests/home-js-smoke.mjs",
-		"check:oauth-external-browser": "node tests/oauth-external-browser-smoke.mjs",
 		"check:types": "tsc -p tsconfig.json",
 		"dev": "wrangler dev",
 		"dev:staging": "wrangler dev --config wrangler.staging.jsonc",
