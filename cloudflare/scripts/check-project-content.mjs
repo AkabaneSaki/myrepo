@@ -133,6 +133,20 @@ assert.equal(previewEntry.hasCharacterArtwork, true);
 assert.equal(previewEntry.characterArtworkBlockCount, 1);
 assert.equal(previewEntry.externalLinks.length, 3);
 
+
+const behaviorPreview = parseWorldbookEntriesPreview(JSON.stringify({ entries: [
+  { uid: 2, comment: 'Nested', position: { type: 'at_depth', depth: 6, order: 601, role: 'assistant' } },
+  { uid: 3, comment: 'Legacy', position: 0, depth: 4, order: -20, role: 1 },
+] }));
+assert.deepEqual(
+  { positionType: behaviorPreview[0].positionType, depth: behaviorPreview[0].depth, order: behaviorPreview[0].order, role: behaviorPreview[0].role },
+  { positionType: 'at_depth', depth: 6, order: 601, role: 'assistant' },
+);
+assert.deepEqual(
+  { positionType: behaviorPreview[1].positionType, depth: behaviorPreview[1].depth, order: behaviorPreview[1].order, role: behaviorPreview[1].role },
+  { positionType: 'before_character_definition', depth: 4, order: -20, role: 'user' },
+);
+
 const regexPreview = parseRegexEntriesPreview(JSON.stringify([{ id: 'ejs', replaceString: '<%= value %>' }]))[0];
 assert.equal(regexPreview.hasEjs, true);
 assert.equal(regexPreview.hasCharacterArtwork, false);

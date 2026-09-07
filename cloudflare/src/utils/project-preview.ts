@@ -10,6 +10,45 @@ function safeParseJson(text: string): unknown {
   }
 }
 
+function getNestedRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function normalizePositionType(item: Record<string, unknown>): string {
+  const positionRecord = getNestedRecord(item.position);
+  const raw = positionRecord?.type ?? item.positionType ?? (typeof item.position === 'number' ? item.position : 0);
+  const aliases: Record<string, string> = {
+    before_char: 'before_character_definition',
+    after_char: 'after_character_definition',
+  };
+  if (typeof raw === 'string') return aliases[raw] || raw;
+  const legacy = [
+    'before_character_definition',
+    'after_character_definition',
+    'before_author_note',
+    'after_author_note',
+    'at_depth',
+    'before_example_messages',
+    'after_example_messages',
+    'outlet',
+  ];
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < legacy.length
+    ? legacy[raw]
+    : `unknown:${String(raw)}`;
+}
+
+function normalizePositionRole(item: Record<string, unknown>): string {
+  const positionRecord = getNestedRecord(item.position);
+  const raw = positionRecord?.role ?? item.role;
+  if (raw === 1 || raw === 'user') return 'user';
+  if (raw === 2 || raw === 'assistant') return 'assistant';
+  return 'system';
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 export function parseWorldbookEntriesPreview(projectFileText: string): WorldbookEntryPreviewType[] {
   const raw = safeParseJson(projectFileText);
   return extractProjectEntries(raw, 'worldbook').map(({ entry: item, entryKey }, index) => {
@@ -40,10 +79,12 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
       enabled: typeof item.enabled === 'boolean' ? item.enabled : !item.disable,
       disable: Boolean(item.disable),
       scanDepth: typeof item.scanDepth === 'number' ? item.scanDepth : item.scanDepth === null ? null : null,
-      position: typeof item.position === 'number' ? item.position : 0,
-      role: typeof item.role === 'string' ? item.role : null,
-      depth: typeof item.depth === 'number' ? item.depth : 4,
-      order: typeof item.order === 'number' ? item.order : index,
+      position: typeof item.position === 'number' ? item.position : undefined,
+      positionType: normalizePositionType(item),
+      outletName: typeof item.outletName === 'string' ? item.outletName : undefined,
+      role: normalizePositionRole(item),
+      depth: finiteNumber(getNestedRecord(item.position)?.depth ?? item.depth, 4),
+      order: finiteNumber(getNestedRecord(item.position)?.order ?? item.order, index),
       probability: typeof item.probability === 'number' ? item.probability : 100,
       useProbability: Boolean(item.useProbability),
       sticky: typeof item.sticky === 'number' ? item.sticky : 0,

@@ -267,6 +267,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .detail-meta-row { font-size:0.82rem; color:rgba(226,232,240,0.75); }
 .detail-meta-item { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); }
 .detail-description,.detail-entry-content { border-radius:16px; background:rgba(15,23,42,0.72); border:1px solid rgba(255,255,255,0.06); color:rgba(226,232,240,0.88); white-space:pre-wrap; word-break:break-word; }
+.entry-behavior-meta { display:flex; flex-wrap:wrap; gap:7px; padding:10px 12px; border-radius:12px; background:rgba(14,116,144,.08); border:1px solid rgba(34,211,238,.16); }
+.entry-behavior-meta span { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,.05); color:rgba(224,242,254,.82); font-size:.72rem; line-height:1.2; }
+.admin-review-diff-entry-body > .entry-behavior-meta { margin:10px 10px 0; }
 .detail-description { padding:16px 18px; }
 .external-links-section { gap:12px; }
 .external-links-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(59,130,246,.08); border:1px solid rgba(96,165,250,.2); color:rgba(219,234,254,.78); font-size:.78rem; line-height:1.45; }
