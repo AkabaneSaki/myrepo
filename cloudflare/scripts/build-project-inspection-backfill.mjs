@@ -42,6 +42,7 @@ for (const project of projects) {
   rows.push(`UPDATE projects SET has_ejs = ${hasEjs ? 1 : 0}, has_character_artwork = ${hasCharacterArtwork ? 1 : 0} WHERE id = '${id}' AND is_published = 1;`);
 }
 
-const sql = ['BEGIN;', ...rows, 'COMMIT;', ''].join('\n');
+const sql = [...rows, ''].join('
+');
 await writeFile(output, sql, 'utf8');
 console.log(`inspection backfill SQL ready: ${projects.length} published projects; EJS=${ejsCount}; artwork=${artworkCount}; ${output}`);
