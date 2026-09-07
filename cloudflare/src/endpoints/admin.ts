@@ -4,6 +4,8 @@ import type { AppContext } from '../types';
 import { projectDb, userDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import { validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
+import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
+import { buildProjectReviewDiff } from '../utils/project-review-diff';
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -24,6 +26,26 @@ async function readReviewContent(
     return c.env.R2_BUCKET.get(getReviewContentKey(publishedProjectId, kind));
   }
   return null;
+}
+
+async function readReviewContentText(
+  c: AppContext,
+  projectId: string,
+  publishedProjectId: string | null | undefined,
+  kind: ProjectEntryKind,
+): Promise<string | null> {
+  const object = await readReviewContent(c, projectId, publishedProjectId, kind);
+  return object ? object.text() : null;
+}
+
+async function readDirectReviewContentText(
+  c: AppContext,
+  projectId: string | null | undefined,
+  kind: ProjectEntryKind,
+): Promise<string | null> {
+  if (!projectId) return null;
+  const object = await c.env.R2_BUCKET.get(getReviewContentKey(projectId, kind));
+  return object ? object.text() : null;
 }
 
 async function validateReviewPayloads(
@@ -110,6 +132,82 @@ export class AdminPendingList extends OpenAPIRoute {
 /**
  * 审核项目 (仅管理员)
  */
+export class AdminReviewDetail extends OpenAPIRoute {
+  schema = {
+    tags: ['Admin'],
+    summary: 'Get Review Detail and Entry Diff (Admin Only)',
+    request: {
+      params: z.object({
+        projectId: Str({ description: 'Project ID' }),
+      }),
+      headers: z.object({
+        authorization: z.string().describe('Session ID'),
+      }),
+    },
+    responses: {
+      '200': { description: 'Returns review detail and diff' },
+      '403': { description: 'Admin only' },
+      '404': { description: 'Project not found' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload || !payload.isAdmin) {
+      return c.json({ error: 'Admin only' }, 403);
+    }
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { projectId } = data.params;
+    const project = await projectDb.get(c, projectId, payload);
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const isUpdate = project.reviewTarget === 'draft' && Boolean(project.publishedProjectId);
+    const [
+      currentWorldbookText,
+      currentRegexText,
+      previousWorldbookText,
+      previousRegexText,
+    ] = await Promise.all([
+      readReviewContentText(c, project.id, project.publishedProjectId, 'worldbook'),
+      readReviewContentText(c, project.id, project.publishedProjectId, 'regex'),
+      isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'worldbook') : Promise.resolve(null),
+      isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'regex') : Promise.resolve(null),
+    ]);
+
+    const worldbookEntriesPreview = currentWorldbookText ? parseWorldbookEntriesPreview(currentWorldbookText) : [];
+    const regexEntriesPreview = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
+    const reviewDiff = buildProjectReviewDiff({
+      previousWorldbookText,
+      currentWorldbookText,
+      previousRegexText,
+      currentRegexText,
+      isUpdate,
+    });
+
+    return {
+      success: true,
+      project: {
+        ...project,
+        worldbookEntriesPreview,
+        regexEntriesPreview,
+        authorGlobalName: project.authorGlobalName || project.authorName,
+        authorAvatar:
+          project.authorAvatar &&
+          !String(project.authorAvatar).startsWith('http://') &&
+          !String(project.authorAvatar).startsWith('https://')
+            ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
+            : project.authorAvatar,
+      },
+      worldbookEntriesPreview,
+      regexEntriesPreview,
+      reviewDiff,
+    };
+  }
+}
+
 export class AdminReview extends OpenAPIRoute {
   schema = {
     tags: ['Admin'],
@@ -209,6 +307,8 @@ export class AdminReview extends OpenAPIRoute {
         coverImage: publishedAssets.coverImage || project.coverImage || undefined,
         downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,
         fileSize: publishedAssets.fileSize || project.fileSize || undefined,
+        hasEjs: project.hasEjs,
+        hasCharacterArtwork: project.hasCharacterArtwork,
         status: 'approved',
         draftProjectId: null,
         visibility: project.visibility,

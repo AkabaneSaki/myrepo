@@ -1,5 +1,6 @@
 import type { RegexEntryPreviewType, WorldbookEntryPreviewType } from '../types';
-import { extractProjectEntries } from './project-content';
+import { extractProjectEntries } from './project-content.ts';
+import { inspectProjectEntry } from './project-inspection.ts';
 
 function safeParseJson(text: string): unknown {
   try {
@@ -9,9 +10,49 @@ function safeParseJson(text: string): unknown {
   }
 }
 
+function getNestedRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function normalizePositionType(item: Record<string, unknown>): string {
+  const positionRecord = getNestedRecord(item.position);
+  const raw = positionRecord?.type ?? item.positionType ?? (typeof item.position === 'number' ? item.position : 0);
+  const aliases: Record<string, string> = {
+    before_char: 'before_character_definition',
+    after_char: 'after_character_definition',
+  };
+  if (typeof raw === 'string') return aliases[raw] || raw;
+  const legacy = [
+    'before_character_definition',
+    'after_character_definition',
+    'before_author_note',
+    'after_author_note',
+    'at_depth',
+    'before_example_messages',
+    'after_example_messages',
+    'outlet',
+  ];
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < legacy.length
+    ? legacy[raw]
+    : `unknown:${String(raw)}`;
+}
+
+function normalizePositionRole(item: Record<string, unknown>): string {
+  const positionRecord = getNestedRecord(item.position);
+  const raw = positionRecord?.role ?? item.role;
+  if (raw === 1 || raw === 'user') return 'user';
+  if (raw === 2 || raw === 'assistant') return 'assistant';
+  return 'system';
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 export function parseWorldbookEntriesPreview(projectFileText: string): WorldbookEntryPreviewType[] {
   const raw = safeParseJson(projectFileText);
   return extractProjectEntries(raw, 'worldbook').map(({ entry: item, entryKey }, index) => {
+    const inspection = inspectProjectEntry(item, 'worldbook');
     return {
       entryKey,
       uid: typeof item.uid === 'string' || typeof item.uid === 'number' ? String(item.uid) : String(index),
@@ -38,10 +79,12 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
       enabled: typeof item.enabled === 'boolean' ? item.enabled : !item.disable,
       disable: Boolean(item.disable),
       scanDepth: typeof item.scanDepth === 'number' ? item.scanDepth : item.scanDepth === null ? null : null,
-      position: typeof item.position === 'number' ? item.position : 0,
-      role: typeof item.role === 'string' ? item.role : null,
-      depth: typeof item.depth === 'number' ? item.depth : 4,
-      order: typeof item.order === 'number' ? item.order : index,
+      position: typeof item.position === 'number' ? item.position : undefined,
+      positionType: normalizePositionType(item),
+      outletName: typeof item.outletName === 'string' ? item.outletName : undefined,
+      role: normalizePositionRole(item),
+      depth: finiteNumber(getNestedRecord(item.position)?.depth ?? item.depth, 4),
+      order: finiteNumber(getNestedRecord(item.position)?.order ?? item.order, index),
       probability: typeof item.probability === 'number' ? item.probability : 100,
       useProbability: Boolean(item.useProbability),
       sticky: typeof item.sticky === 'number' ? item.sticky : 0,
@@ -51,6 +94,7 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
       preventRecursion: Boolean(item.preventRecursion),
       delayUntilRecursion: Boolean(item.delayUntilRecursion),
       extra: typeof item.extensions === 'object' && item.extensions ? item.extensions : {},
+      ...inspection,
     };
   });
 }
@@ -58,6 +102,7 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
 export function parseRegexEntriesPreview(regexFileText: string): RegexEntryPreviewType[] {
   const raw = safeParseJson(regexFileText);
   return extractProjectEntries(raw, 'regex').map(({ entry: item, entryKey }, index) => {
+    const inspection = inspectProjectEntry(item, 'regex');
     return {
       entryKey,
       id: typeof item.id === 'string' || typeof item.id === 'number' ? String(item.id) : String(index),
@@ -99,6 +144,18 @@ export function parseRegexEntriesPreview(regexFileText: string): RegexEntryPrevi
       maxDepth:
         typeof item.maxDepth === 'number' ? item.maxDepth : typeof item.max_depth === 'number' ? item.max_depth : null,
       placement: Array.isArray(item.placement) ? item.placement.filter(value => typeof value === 'number') : [],
+      ...inspection,
     };
   });
+}
+
+export function summarizeProjectInspection(
+  worldbookEntries: WorldbookEntryPreviewType[],
+  regexEntries: RegexEntryPreviewType[],
+) {
+  const entries = [...worldbookEntries, ...regexEntries];
+  return {
+    hasEjs: entries.some(entry => Boolean(entry.hasEjs)),
+    hasCharacterArtwork: entries.some(entry => Boolean(entry.hasCharacterArtwork)),
+  };
 }

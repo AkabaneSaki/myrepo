@@ -2,6 +2,7 @@ import { homeApiScript } from './api';
 import { homeModalsScript } from './modals';
 import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
+import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
@@ -17,6 +18,7 @@ export const homeScript = String.raw`
   ${homeApiScript}
   ${homeCardsRenderScript}
   ${homeDetailModalRenderScript}
+  ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
   ${homeModalsScript}
 

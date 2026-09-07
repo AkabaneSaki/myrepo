@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS projects (
     file_size INTEGER,
     downloads_count INTEGER DEFAULT 0,
     likes_count INTEGER NOT NULL DEFAULT 0,
+    has_ejs INTEGER NOT NULL DEFAULT 0,
+    has_character_artwork INTEGER NOT NULL DEFAULT 0,
     tags TEXT DEFAULT '[]',
     cover_image TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,

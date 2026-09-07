@@ -456,6 +456,13 @@ async function fetchPendingProjects() {
   return apiFetch('/api/admin/pending?page=0&pageSize=50');
 }
 
+async function fetchAdminReviewDetail(projectId) {
+  return apiFetch('/api/admin/review/' + projectId, {
+    method: 'GET',
+    cache: 'no-store',
+  });
+}
+
 async function reviewProject(projectId, payload) {
   const result = await apiFetch('/api/admin/review/' + projectId, {
     method: 'POST',

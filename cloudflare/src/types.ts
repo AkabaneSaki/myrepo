@@ -11,6 +11,22 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>;
 export const ProjectReviewTarget = z.enum(['project', 'draft']);
 export type ProjectReviewTarget = z.infer<typeof ProjectReviewTarget>;
 
+const ProjectEntryInspection = z.object({
+  hasEjs: z.boolean().default(false).describe('系统检测到条目包含 EJS'),
+  hasCharacterArtwork: z.boolean().default(false).describe('系统检测到完整角色立绘模板'),
+  characterArtworkBlockCount: z.number().int().min(0).default(0).describe('完整角色立绘模板块数量'),
+  inspectionWarnings: z.array(z.string()).default([]).describe('内容静态检查警告'),
+  externalLinks: z
+    .array(
+      z.object({
+        url: z.string(),
+        hostname: z.string(),
+      }),
+    )
+    .default([])
+    .describe('静态检测到的 HTTP/HTTPS 外链；未验证远端内容'),
+});
+
 export const WorldbookEntryPreview = z.object({
   entryKey: z.string().optional(),
   uid: z.string().optional(),
@@ -33,6 +49,7 @@ export const WorldbookEntryPreview = z.object({
   enabled: z.boolean().optional(),
   disable: z.boolean().optional(),
   scanDepth: z.number().nullable().optional(),
+  ...ProjectEntryInspection.shape,
 });
 
 export const RegexEntryPreview = z.object({
@@ -44,6 +61,7 @@ export const RegexEntryPreview = z.object({
   disabled: z.boolean().optional(),
   markdownOnly: z.boolean().optional(),
   promptOnly: z.boolean().optional(),
+  ...ProjectEntryInspection.shape,
 });
 
 // ============ 用户相关类型 ============
@@ -82,6 +100,8 @@ export const Project = z.object({
   downloadUrl: z.string().optional().describe('R2 中的下载链接'),
   fileSize: z.number().int().min(0).optional().describe('文件大小(字节)'),
   downloadsCount: z.number().int().min(0).default(0).describe('下载次数'),
+  hasEjs: z.boolean().default(false).describe('项目内容静态检测到 EJS'),
+  hasCharacterArtwork: z.boolean().default(false).describe('项目内容静态检测到完整角色立绘模板'),
   tags: z.array(z.string()).default([]).describe('项目标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),

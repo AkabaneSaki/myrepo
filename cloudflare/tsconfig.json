@@ -17,6 +17,7 @@
 		/* If NOT transpiling with TypeScript: */
 		"moduleResolution": "Bundler",
 		"module": "es2022",
+		"allowImportingTsExtensions": true,
 		"noEmit": true,
 		"lib": ["es2024"],
 		"types": [
