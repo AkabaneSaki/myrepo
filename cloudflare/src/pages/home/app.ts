@@ -6,6 +6,7 @@ import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
+import { homeUploadPreviewScript } from './upload-preview';
 import { homeUtilsScript } from './utils';
 
 export const homeScript = String.raw`
@@ -18,6 +19,7 @@ export const homeScript = String.raw`
   ${homeApiScript}
   ${homeCardsRenderScript}
   ${homeDetailModalRenderScript}
+  ${homeUploadPreviewScript}
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
   ${homeModalsScript}

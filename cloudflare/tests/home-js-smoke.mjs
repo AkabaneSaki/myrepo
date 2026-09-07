@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -24,6 +25,7 @@ const fragments = {
   homeApiScript: await evaluateStandalone('src/pages/home/api.ts', 'homeApiScript'),
   homeCardsRenderScript: await evaluateStandalone('src/pages/home/render/cards.ts', 'homeCardsRenderScript'),
   homeDetailModalRenderScript: await evaluateStandalone('src/pages/home/render/detail-modal.ts', 'homeDetailModalRenderScript'),
+  homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
@@ -33,6 +35,45 @@ for (const [name, script] of Object.entries(fragments)) {
   assert.equal(typeof script, 'string', `${name} must evaluate to JavaScript text`);
   new Function(script);
 }
+
+const uploadPreviewUi = Function(
+  'validateJsonUpload',
+  'assertUploadSize',
+  'File',
+  `${fragments.homeUploadPreviewScript}; return { prepareRegexUploads, normalizeUploadWorldbookEntry };`,
+)(
+  async file => JSON.parse(await file.text()),
+  file => {
+    if (Number(file?.size || 0) > 10 * 1024 * 1024) throw new Error('文件过大');
+  },
+  File,
+);
+const regexFive = new File([
+  JSON.stringify(Array.from({ length: 5 }, (_, index) => ({ scriptName: `A-${index + 1}`, findRegex: 'a', replaceString: '' }))),
+], 'regex-five.json', { type: 'application/json' });
+const regexTwo = new File([
+  JSON.stringify(Array.from({ length: 2 }, (_, index) => ({ scriptName: `B-${index + 1}`, findRegex: 'b', replaceString: '' }))),
+], 'regex-two.json', { type: 'application/json' });
+const mergedRegex = await uploadPreviewUi.prepareRegexUploads([regexFive, regexTwo]);
+assert.equal(mergedRegex.groups.length, 2);
+assert.equal(mergedRegex.groups[0].count, 5);
+assert.equal(mergedRegex.groups[1].count, 2);
+assert.equal(mergedRegex.entries.length, 7);
+assert.equal(JSON.parse(await mergedRegex.uploadFile.text()).length, 7);
+const d4PreviewEntry = uploadPreviewUi.normalizeUploadWorldbookEntry({
+  comment: 'D4 entry',
+  content: 'test',
+  position: 4,
+  depth: 6,
+  role: 2,
+  order: 99,
+  constant: true,
+}, 0);
+assert.equal(d4PreviewEntry.positionType, 'at_depth');
+assert.equal(d4PreviewEntry.depth, 6);
+assert.equal(d4PreviewEntry.role, 'assistant');
+assert.equal(d4PreviewEntry.order, 99);
+assert.equal(d4PreviewEntry.constant, true);
 
 const clientVersionSource = await readFile(resolve('../src/CreativeWorkshop/version.ts'), 'utf8');
 const clientVersionMatch = clientVersionSource.match(/CREATIVE_WORKSHOP_CLIENT_VERSION\s*=\s*'([0-9]+\.[0-9]+\.[0-9]+)'/);
@@ -45,6 +86,12 @@ assert.equal(advertisedVersionMatch[1], clientVersionMatch[1], 'Advertised Works
 assert.equal(advertisedImportMatch[1], clientVersionMatch[1], 'Advertised Workshop import tag must match client self-version');
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
+assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" multiple/);
+assert.match(fragments.homeModalsScript, /worldbookUploadPreview/);
+assert.match(fragments.homeModalsScript, /regexUploadPreview/);
+assert.match(fragments.homeModalsScript, /coverUploadPreview/);
+assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('世界书条目'/);
+assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('正则列表'/);
 assert.match(fragments.homeModalsScript, /审核外链/);
 assert.match(fragments.homeDetailModalRenderScript, /collectProjectExternalLinks/);
 assert.match(fragments.homeDetailModalRenderScript, /未访问、未验证远端内容/);

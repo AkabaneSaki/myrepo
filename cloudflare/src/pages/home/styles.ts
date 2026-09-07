@@ -154,6 +154,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .form-hint { margin-top:6px; font-size:.82rem; line-height:1.45; color:rgba(226,232,240,.62); }
 .file-drop { border:2px dashed rgba(255,255,255,0.2); border-radius:12px; padding:30px; text-align:center; cursor:pointer; transition:0.2s; }
 .file-drop:hover { border-color:#6366F1; background:rgba(99,102,241,0.1); }
+.upload-file-preview { margin-top:10px; display:flex; flex-direction:column; gap:10px; }
+.upload-file-preview[hidden] { display:none; }
+.upload-file-preview .detail-section { margin:0; }
+.upload-preview-summary { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 11px; border-radius:10px; border:1px solid rgba(99,102,241,.22); background:rgba(30,41,59,.52); color:rgba(226,232,240,.78); font-size:.82rem; }
+.upload-preview-summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.upload-preview-summary strong { flex:none; color:#E0E7FF; font-size:.8rem; }
+.upload-preview-files { display:flex; flex-wrap:wrap; gap:7px; }
+.upload-preview-file-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:6px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.58); color:rgba(226,232,240,.78); font-size:.76rem; }
+.upload-preview-file-chip b { color:#C7D2FE; font-weight:600; }
+.upload-preview-error { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; border:1px solid rgba(248,113,113,.32); background:rgba(127,29,29,.18); color:#FECACA; font-size:.84rem; }
+.upload-cover-image { display:block; width:100%; height:220px; object-fit:cover; object-position:center; border-radius:18px; border:1px solid rgba(255,255,255,.08); background:#0F172A; }
 .edit-current-content { margin:18px 0 20px; display:flex; flex-direction:column; gap:12px; }
 .edit-current-content .detail-section { margin:0; }
 .edit-current-cover { border:1px solid rgba(148,163,184,.18); border-radius:12px; overflow:hidden; background:rgba(15,23,42,.46); }
