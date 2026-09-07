@@ -480,7 +480,7 @@ export const homeModalsScript = [
   '    `<span class="admin-review-signal"><i class="fas fa-book-open"></i> 世界书 ${worldbookEntries.length}</span>`,',
   '    `<span class="admin-review-signal"><i class="fas fa-code"></i> 正则 ${regexList.length}</span>`,',
   '  ];',
-  '  if (hasInspectionData && hasEjs) signals.push(`<span class="admin-review-signal admin-review-signal--info">EJS</span>`);',
+  '  if (hasInspectionData && hasEjs) signals.push(`<span class="admin-review-signal admin-review-signal--ejs">EJS</span>`);',
   '  if (hasInspectionData && hasCharacterArtwork) signals.push(`<span class="admin-review-signal admin-review-signal--good">👍🏻 角色立绘</span>`);',
   '  if (hasInspectionData && externalLinkCount) signals.push(`<span class="admin-review-signal admin-review-signal--info"><i class="fas fa-link"></i> 外链 ${externalLinkCount}</span>`);',
   '  if (hasInspectionData && warningCount) signals.push(`<span class="admin-review-signal admin-review-signal--warning"><i class="fas fa-triangle-exclamation"></i> ${warningCount} 个检查警告</span>`);',

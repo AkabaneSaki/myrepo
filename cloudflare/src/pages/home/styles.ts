@@ -105,6 +105,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .install-badge--update { color:#FDE68A; border-color:rgba(245,158,11,0.35); background:rgba(245,158,11,0.12); }
   .project-tags,.detail-keyword-list { display:flex; flex-wrap:wrap; gap:8px; }
   .tag { background:rgba(255,255,255,0.08); padding:2px 10px; border-radius:30px; font-size:0.7rem; }
+.tag-system-ejs { color:#E9D5FF; background:rgba(147,51,234,.16); border:1px solid rgba(192,132,252,.42); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
+.tag-system-artwork { color:#BBF7D0; background:rgba(22,163,74,.14); border:1px solid rgba(74,222,128,.38); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
   .card-meta { font-size:0.75rem; opacity:0.7; }
   .card-meta--version { align-items:center; }
   .version-block { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -186,6 +188,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-signals { display:flex; flex-wrap:wrap; gap:8px; }
 .admin-review-signal { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:.76rem; color:#CBD5E1; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); }
 .admin-review-signal--info { color:#C7D2FE; border-color:rgba(99,102,241,.34); background:rgba(99,102,241,.1); }
+.admin-review-signal--ejs { color:#E9D5FF; border-color:rgba(192,132,252,.42); background:rgba(147,51,234,.15); }
 .admin-review-signal--good { color:#BBF7D0; border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.1); }
 .admin-review-signal--warning { color:#FDE68A; border-color:rgba(245,158,11,.34); background:rgba(245,158,11,.1); }
 .admin-review-description { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.58); overflow:hidden; }
@@ -272,8 +275,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-diff-entry-body > .entry-behavior-meta { margin:10px 10px 0; }
 .detail-description { padding:16px 18px; }
 .external-links-section { gap:12px; }
-.external-links-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(59,130,246,.08); border:1px solid rgba(96,165,250,.2); color:rgba(219,234,254,.78); font-size:.78rem; line-height:1.45; }
-.external-links-note i { margin-top:2px; flex:none; }
+.external-links-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(245,158,11,.11); border:1px solid rgba(251,191,36,.38); color:#FDE68A; font-size:.78rem; font-weight:600; line-height:1.45; }
+.external-links-note i { margin-top:2px; flex:none; color:#FBBF24; }
 .external-link-groups { display:flex; flex-direction:column; gap:8px; }
 .external-link-domain { overflow:hidden; border:1px solid rgba(148,163,184,.14); border-radius:12px; background:rgba(15,23,42,.6); }
 .external-link-domain > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; color:#E2E8F0; font-size:.82rem; font-weight:650; }
