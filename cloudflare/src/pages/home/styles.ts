@@ -17,8 +17,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .release-update-lead { color:rgba(226,232,240,0.9); }
 .release-update-steps { margin-left:22px; display:flex; flex-direction:column; gap:9px; }
 .release-update-steps code { color:#C7D2FE; }
-.release-update-code { display:block; padding:12px 14px; border-radius:12px; background:rgba(15,23,42,0.9); border:1px solid rgba(99,102,241,0.34); color:#C7D2FE; white-space:pre-wrap; word-break:break-all; user-select:all; }
-.release-update-copy-btn { width:100%; justify-content:center; }
+.release-update-codebox { position:relative; }
+.release-update-code { display:block; width:100%; min-height:92px; resize:none; padding:14px 82px 14px 14px; border-radius:12px; background:rgba(15,23,42,0.9); border:1px solid rgba(99,102,241,0.34); color:#C7D2FE; font:0.86rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; outline:none; }
+.release-update-code:focus { border-color:rgba(129,140,248,0.75); box-shadow:0 0 0 2px rgba(99,102,241,0.14); }
+.release-update-copy-btn { position:absolute; top:9px; right:9px; display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid rgba(129,140,248,0.45); border-radius:9px; background:rgba(30,41,59,0.96); color:#E0E7FF; font:inherit; font-size:0.78rem; cursor:pointer; }
+.release-update-copy-btn:hover { background:rgba(79,70,229,0.28); border-color:rgba(129,140,248,0.75); }
 .user-info { display:flex; align-items:flex-start; justify-content:flex-end; gap:16px; flex-wrap:wrap; margin-left:auto; max-width:100%; }
 .header-search { display:flex; align-items:center; gap:10px; width:100%; min-width:0; max-width:none; flex:1; padding:10px 14px; border-radius:999px; background:rgba(15,23,42,0.72); border:1px solid rgba(255,255,255,0.08); }
 .tag-filter { display:flex; align-items:center; justify-content:flex-start; gap:8px; flex-wrap:wrap; width:100%; }
