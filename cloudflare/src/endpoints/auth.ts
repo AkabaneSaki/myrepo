@@ -158,13 +158,14 @@ export class AuthPoll extends OpenAPIRoute {
   async handle(c: AppContext) {
     const { key } = c.req.query();
     const pollKey = 'oauth_result_' + key;
-    const payload = await c.env.SESSION_KV.get(pollKey);
+    const payload = await c.env.SESSION_KV.get(pollKey, { cacheTtl: 30 });
 
     if (!payload) {
       return { ready: false };
     }
 
-    await c.env.SESSION_KV.delete(pollKey);
+    // 保留结果直到现有 5 分钟 TTL 自动过期，允许 WebView/外部浏览器切换时安全重试。
+    // 不在首次 poll 后删除，否则响应在客户端到达前丢失时会永久丢失登录结果。
 
     try {
       return {

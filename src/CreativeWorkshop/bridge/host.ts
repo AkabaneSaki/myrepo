@@ -25,7 +25,7 @@ type HostOption = {
 
 const OAUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
 const OAUTH_POPUP_NAME = 'creative-workshop-oauth';
-const OAUTH_TIMEOUT_MS = 180000;
+const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_POPUP_CLOSE_GUARD_MS = 8000;
 
 type OAuthCallbackSuccessMessage = {
@@ -186,6 +186,14 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     }
 
     if (event.data.type === 'oauth-ready') {
+      await post(
+        'bridge:oauth:result',
+        {
+          callbackReady: true,
+          state: event.data.state,
+        },
+        pendingOauthRequestId,
+      );
       clearOAuthTimers();
       cleanupOAuthPopupReference();
       pendingOauthRequestId = undefined;
