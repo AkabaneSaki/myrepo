@@ -148,3 +148,14 @@ export function parseRegexEntriesPreview(regexFileText: string): RegexEntryPrevi
     };
   });
 }
+
+export function summarizeProjectInspection(
+  worldbookEntries: WorldbookEntryPreviewType[],
+  regexEntries: RegexEntryPreviewType[],
+) {
+  const entries = [...worldbookEntries, ...regexEntries];
+  return {
+    hasEjs: entries.some(entry => Boolean(entry.hasEjs)),
+    hasCharacterArtwork: entries.some(entry => Boolean(entry.hasCharacterArtwork)),
+  };
+}

@@ -219,6 +219,8 @@ export const projectDb = {
       coverImage?: string;
       downloadUrl?: string;
       fileSize?: number;
+      hasEjs?: boolean;
+      hasCharacterArtwork?: boolean;
       rootProjectId?: string;
       publishedProjectId?: string | null;
       draftProjectId?: string | null;
@@ -235,9 +237,9 @@ export const projectDb = {
         `
 			INSERT INTO projects (
 				id, name, description, version, version_label, author_id, author_name, author_avatar,
-				status, download_url, file_size, tags, cover_image, root_project_id, published_project_id,
+				status, download_url, file_size, has_ejs, has_character_artwork, tags, cover_image, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -252,6 +254,8 @@ export const projectDb = {
         'pending', // 默认状态为待审核
         project.downloadUrl || null,
         project.fileSize || null,
+        project.hasEjs ? 1 : 0,
+        project.hasCharacterArtwork ? 1 : 0,
         JSON.stringify(project.tags || []),
         project.coverImage || null,
         project.rootProjectId || project.id,
@@ -305,6 +309,8 @@ export const projectDb = {
       coverImage?: string;
       downloadUrl?: string;
       fileSize?: number;
+      hasEjs?: boolean;
+      hasCharacterArtwork?: boolean;
       status?: string;
       publishedProjectId?: string | null;
       draftProjectId?: string | null;
@@ -350,6 +356,14 @@ export const projectDb = {
     if (updates.fileSize !== undefined) {
       setClauses.push('file_size = ?');
       values.push(updates.fileSize);
+    }
+    if (updates.hasEjs !== undefined) {
+      setClauses.push('has_ejs = ?');
+      values.push(updates.hasEjs ? 1 : 0);
+    }
+    if (updates.hasCharacterArtwork !== undefined) {
+      setClauses.push('has_character_artwork = ?');
+      values.push(updates.hasCharacterArtwork ? 1 : 0);
     }
     // 新增：处理 status 字段
     if (updates.status !== undefined) {
@@ -794,6 +808,8 @@ export const projectDb = {
       coverImage: updates.coverImage ?? published.coverImage ?? undefined,
       downloadUrl: published.downloadUrl || undefined,
       fileSize: published.fileSize || undefined,
+      hasEjs: published.hasEjs,
+      hasCharacterArtwork: published.hasCharacterArtwork,
       rootProjectId: published.rootProjectId || published.id,
       publishedProjectId,
       reviewTarget: 'draft',
@@ -981,6 +997,8 @@ function parseProjectRow(row: Record<string, unknown>) {
     downloadUrl: row.download_url as string | null,
     fileSize: row.file_size as number | null,
     downloadsCount: Number(row.downloads_count ?? 0),
+    hasEjs: Number(row.has_ejs ?? 0) === 1,
+    hasCharacterArtwork: Number(row.has_character_artwork ?? 0) === 1,
     tags: parsedTags,
     coverImage: row.cover_image as string | null,
     worldbookEntriesPreview: [],

@@ -60,6 +60,9 @@ assert.match(fragments.homeReviewDiffRenderScript, /renderWorldbookEntryBehavior
 assert.match(fragments.homeModalsScript, /版本名称（可选）/);
 assert.doesNotMatch(fragments.homeModalsScript, /versionBump|Patch|Minor|Major/);
 assert.match(fragments.homeCardsRenderScript, /撤回更新/);
+assert.match(fragments.homeCardsRenderScript, /tag-system-ejs/);
+assert.match(fragments.homeCardsRenderScript, /tag-system-artwork/);
+assert.match(fragments.homeCardsRenderScript, /const tagsHtml = systemTagsHtml \+ creatorTagsHtml/);
 assert.match(fragments.homeCardsRenderScript, /delete-project-btn/);
 assert.match(fragments.homeCardsRenderScript, /editButtonHtml = isReviewDraftProject && isPendingProject/);
 assert.match(fragments.homeCardsRenderScript, /role=\"button\" tabindex=\"0\"/);

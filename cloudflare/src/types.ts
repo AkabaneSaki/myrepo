@@ -100,6 +100,8 @@ export const Project = z.object({
   downloadUrl: z.string().optional().describe('R2 中的下载链接'),
   fileSize: z.number().int().min(0).optional().describe('文件大小(字节)'),
   downloadsCount: z.number().int().min(0).default(0).describe('下载次数'),
+  hasEjs: z.boolean().default(false).describe('项目内容静态检测到 EJS'),
+  hasCharacterArtwork: z.boolean().default(false).describe('项目内容静态检测到完整角色立绘模板'),
   tags: z.array(z.string()).default([]).describe('项目标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),

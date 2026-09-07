@@ -307,6 +307,8 @@ export class AdminReview extends OpenAPIRoute {
         coverImage: publishedAssets.coverImage || project.coverImage || undefined,
         downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,
         fileSize: publishedAssets.fileSize || project.fileSize || undefined,
+        hasEjs: project.hasEjs,
+        hasCharacterArtwork: project.hasCharacterArtwork,
         status: 'approved',
         draftProjectId: null,
         visibility: project.visibility,

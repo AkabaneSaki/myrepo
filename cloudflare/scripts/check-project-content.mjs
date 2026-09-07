@@ -8,7 +8,7 @@ import {
   CHARACTER_ARTWORK_INCOMPLETE_WARNING,
   inspectProjectEntry,
 } from '../src/utils/project-inspection.ts';
-import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../src/utils/project-preview.ts';
+import { parseRegexEntriesPreview, parseWorldbookEntriesPreview, summarizeProjectInspection } from '../src/utils/project-preview.ts';
 
 const arrayBook = JSON.stringify({ entries: [
   { uid: 10, comment: 'A' },
@@ -151,5 +151,8 @@ const regexPreview = parseRegexEntriesPreview(JSON.stringify([{ id: 'ejs', repla
 assert.equal(regexPreview.hasEjs, true);
 assert.equal(regexPreview.hasCharacterArtwork, false);
 assert.deepEqual(regexPreview.externalLinks, []);
+
+assert.deepEqual(summarizeProjectInspection([previewEntry], [regexPreview]), { hasEjs: true, hasCharacterArtwork: true });
+assert.deepEqual(summarizeProjectInspection([], []), { hasEjs: false, hasCharacterArtwork: false });
 
 console.log('project content validation, entry removal, and content inspection OK');

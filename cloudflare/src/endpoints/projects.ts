@@ -8,7 +8,7 @@ import {
   validateProjectContentText,
   type ProjectEntryKind,
 } from '../utils/project-content';
-import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
+import { parseRegexEntriesPreview, parseWorldbookEntriesPreview, summarizeProjectInspection } from '../utils/project-preview';
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -27,6 +27,28 @@ async function readProjectPreview(
   const worldbookEntriesPreview = projectObject ? parseWorldbookEntriesPreview(await projectObject.text()) : [];
   const regexEntriesPreview = regexObject ? parseRegexEntriesPreview(await regexObject.text()) : [];
   return { worldbookEntriesPreview, regexEntriesPreview };
+}
+
+async function computeProjectInspectionSummary(
+  c: AppContext,
+  projectId: string,
+  overrides: Partial<Record<ProjectEntryKind, string>> = {},
+) {
+  const project = await projectDb.get(c, projectId);
+  if (!project) throw new Error(`Project not found while computing inspection summary: ${projectId}`);
+
+  const readText = async (kind: ProjectEntryKind) => {
+    const override = overrides[kind];
+    if (override !== undefined) return override;
+    const object = await readProjectContentForEdit(c, project, kind);
+    return object ? object.text() : null;
+  };
+
+  const [worldbookText, regexText] = await Promise.all([readText('worldbook'), readText('regex')]);
+  return summarizeProjectInspection(
+    worldbookText ? parseWorldbookEntriesPreview(worldbookText) : [],
+    regexText ? parseRegexEntriesPreview(regexText) : [],
+  );
 }
 
 function getProjectContentKey(projectId: string, kind: ProjectEntryKind): string {
@@ -86,6 +108,8 @@ export class ProjectList extends OpenAPIRoute {
                   downloadUrl: z.string().nullable(),
                   fileSize: z.number().nullable(),
                   downloadsCount: z.number(),
+                  hasEjs: z.boolean(),
+                  hasCharacterArtwork: z.boolean(),
                   tags: z.array(z.string()),
                   coverImage: z.string().nullable(),
                   likesCount: z.number(),
@@ -445,7 +469,8 @@ export class ProjectUpload extends OpenAPIRoute {
       return c.json({ error: 'Only JSON files are allowed' }, 400);
     }
 
-    const validation = validateProjectContentText(new TextDecoder().decode(arrayBuffer), 'worldbook');
+    const worldbookText = new TextDecoder().decode(arrayBuffer);
+    const validation = validateProjectContentText(worldbookText, 'worldbook');
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
     }
@@ -456,6 +481,7 @@ export class ProjectUpload extends OpenAPIRoute {
         return c.json({ error: 'Draft creation failed' }, 500);
       }
 
+      const inspectionSummary = await computeProjectInspectionSummary(c, draftId, { worldbook: worldbookText });
       const draftFileName = `project-${draftId}.json`;
       const draftResult = await r2Storage.uploadProjectFile(c, draftId, arrayBuffer, draftFileName, contentType);
       if (!draftResult) {
@@ -465,6 +491,8 @@ export class ProjectUpload extends OpenAPIRoute {
       await projectDb.update(c, draftId, {
         downloadUrl: draftResult.url,
         fileSize: draftResult.size,
+        hasEjs: inspectionSummary.hasEjs,
+        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
         status: 'pending',
       });
 
@@ -477,6 +505,7 @@ export class ProjectUpload extends OpenAPIRoute {
       };
     }
 
+    const inspectionSummary = await computeProjectInspectionSummary(c, projectId, { worldbook: worldbookText });
     const fileName = `project-${projectId}.json`;
 
     // 上传到 R2
@@ -488,10 +517,14 @@ export class ProjectUpload extends OpenAPIRoute {
     const updateData: {
       downloadUrl: string;
       fileSize: number;
+      hasEjs: boolean;
+      hasCharacterArtwork: boolean;
       status?: string;
     } = {
       downloadUrl: result.url,
       fileSize: result.size,
+      hasEjs: inspectionSummary.hasEjs,
+      hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
     };
 
     await projectDb.update(c, projectId, updateData);
@@ -966,7 +999,8 @@ export class ProjectRegexUpload extends OpenAPIRoute {
       return c.json({ error: 'Only JSON files are allowed' }, 400);
     }
 
-    const validation = validateProjectContentText(new TextDecoder().decode(arrayBuffer), 'regex');
+    const regexText = new TextDecoder().decode(arrayBuffer);
+    const validation = validateProjectContentText(regexText, 'regex');
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
     }
@@ -980,6 +1014,7 @@ export class ProjectRegexUpload extends OpenAPIRoute {
       targetProjectId = draftId;
     }
 
+    const inspectionSummary = await computeProjectInspectionSummary(c, targetProjectId, { regex: regexText });
     const fileName = `regex-${targetProjectId}.json`;
 
     // 上传到 R2
@@ -987,6 +1022,10 @@ export class ProjectRegexUpload extends OpenAPIRoute {
     if (!result) {
       return c.json({ error: 'Upload failed' }, 500);
     }
+    await projectDb.update(c, targetProjectId, {
+      hasEjs: inspectionSummary.hasEjs,
+      hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
+    });
     if (!(project.isPublished && project.status === 'approved')) {
       await projectDb.bumpDraftRevision(c, targetProjectId);
     }
@@ -1100,6 +1139,7 @@ export class ProjectEntryRemove extends OpenAPIRoute {
       targetProjectId = draftId;
     }
 
+    const inspectionSummary = await computeProjectInspectionSummary(c, targetProjectId, { [kind]: changed.text });
     const result = await r2Storage.uploadProjectFile(
       c,
       targetProjectId,
@@ -1110,7 +1150,17 @@ export class ProjectEntryRemove extends OpenAPIRoute {
     if (!result) return c.json({ error: 'Upload failed' }, 500);
 
     if (kind === 'worldbook') {
-      await projectDb.update(c, targetProjectId, { downloadUrl: result.url, fileSize: result.size });
+      await projectDb.update(c, targetProjectId, {
+        downloadUrl: result.url,
+        fileSize: result.size,
+        hasEjs: inspectionSummary.hasEjs,
+        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
+      });
+    } else {
+      await projectDb.update(c, targetProjectId, {
+        hasEjs: inspectionSummary.hasEjs,
+        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
+      });
     }
     if (!(project.isPublished && project.status === 'approved')) {
       await projectDb.bumpDraftRevision(c, targetProjectId);
