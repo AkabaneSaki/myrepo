@@ -40,7 +40,7 @@ const uploadPreviewUi = Function(
   'validateJsonUpload',
   'assertUploadSize',
   'File',
-  `${fragments.homeUploadPreviewScript}; return { prepareRegexUploads, normalizeUploadWorldbookEntry };`,
+  `${fragments.homeUploadPreviewScript}; return { prepareRegexUploads, normalizeUploadWorldbookEntry, appendUniqueUploadFiles };`,
 )(
   async file => JSON.parse(await file.text()),
   file => {
@@ -54,12 +54,53 @@ const regexFive = new File([
 const regexTwo = new File([
   JSON.stringify(Array.from({ length: 2 }, (_, index) => ({ scriptName: `B-${index + 1}`, findRegex: 'b', replaceString: '' }))),
 ], 'regex-two.json', { type: 'application/json' });
-const mergedRegex = await uploadPreviewUi.prepareRegexUploads([regexFive, regexTwo]);
+const appendedRegexFiles = uploadPreviewUi.appendUniqueUploadFiles([regexFive], [regexFive, regexTwo]);
+assert.equal(appendedRegexFiles.length, 2);
+assert.equal(appendedRegexFiles[0], regexFive);
+assert.equal(appendedRegexFiles[1], regexTwo);
+const mergedRegex = await uploadPreviewUi.prepareRegexUploads(appendedRegexFiles);
 assert.equal(mergedRegex.groups.length, 2);
 assert.equal(mergedRegex.groups[0].count, 5);
 assert.equal(mergedRegex.groups[1].count, 2);
 assert.equal(mergedRegex.entries.length, 7);
 assert.equal(JSON.parse(await mergedRegex.uploadFile.text()).length, 7);
+
+const fileDropUi = Function(
+  'appendUniqueUploadFiles',
+  `${fragments.homeModalsScript}; return { bindFileDrop };`,
+)(uploadPreviewUi.appendUniqueUploadFiles);
+const dropListeners = new Map();
+const fakeDrop = {
+  textContent: '选择正则',
+  onclick: null,
+  classList: { add() {}, remove() {} },
+  addEventListener(type, listener) { dropListeners.set(type, listener); },
+};
+const fakeInput = { multiple: true, files: [regexFive], value: 'first', click() {} };
+const seenSelections = [];
+let latestMergedEntryCount = 0;
+fileDropUi.bindFileDrop(fakeDrop, fakeInput, '选择正则', async files => {
+  seenSelections.push(files);
+  latestMergedEntryCount = files.length ? (await uploadPreviewUi.prepareRegexUploads(files)).entries.length : 0;
+});
+await fakeInput.onchange();
+assert.equal(seenSelections.at(-1).length, 1);
+assert.equal(latestMergedEntryCount, 5);
+assert.equal(fakeInput.value, '');
+fakeInput.files = [regexTwo];
+fakeInput.value = 'second';
+await fakeInput.onchange();
+assert.equal(seenSelections.at(-1).length, 2, 'second file-picker selection must append');
+assert.equal(latestMergedEntryCount, 7);
+assert.equal(fakeInput._fileDropController.getFiles().length, 2);
+await fakeInput._fileDropController.setFiles([regexTwo]);
+assert.equal(seenSelections.at(-1).length, 1, 'removing a selected regex file must update the active selection');
+assert.equal(latestMergedEntryCount, 2);
+const dropEvent = { preventDefault() {}, dataTransfer: { files: [regexFive], dropEffect: '' } };
+dropListeners.get('drop')(dropEvent);
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(seenSelections.at(-1).length, 2, 'dropping another regex JSON must append');
+assert.equal(latestMergedEntryCount, 7);
 const d4PreviewEntry = uploadPreviewUi.normalizeUploadWorldbookEntry({
   comment: 'D4 entry',
   content: 'test',
@@ -90,6 +131,11 @@ assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" mu
 assert.match(fragments.homeModalsScript, /worldbookUploadPreview/);
 assert.match(fragments.homeModalsScript, /regexUploadPreview/);
 assert.match(fragments.homeModalsScript, /coverUploadPreview/);
+assert.match(fragments.homeModalsScript, /_fileDropController/);
+assert.match(fragments.homeModalsScript, /dragenter/);
+assert.match(fragments.homeModalsScript, /data-regex-upload-remove/);
+assert.match(fragments.homeUploadPreviewScript, /data-regex-upload-remove/);
+assert.match(fragments.homeUploadPreviewScript, /data-upload-preview-clear/);
 assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('世界书条目'/);
 assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('正则列表'/);
 assert.match(fragments.homeModalsScript, /审核外链/);

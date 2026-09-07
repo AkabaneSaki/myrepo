@@ -154,12 +154,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .form-hint { margin-top:6px; font-size:.82rem; line-height:1.45; color:rgba(226,232,240,.62); }
 .file-drop { border:2px dashed rgba(255,255,255,0.2); border-radius:12px; padding:30px; text-align:center; cursor:pointer; transition:0.2s; }
 .file-drop:hover { border-color:#6366F1; background:rgba(99,102,241,0.1); }
+.file-drop.is-dragover { border-color:#818CF8; background:rgba(99,102,241,.18); box-shadow:0 0 0 3px rgba(99,102,241,.08) inset; }
 .upload-file-preview { margin-top:10px; display:flex; flex-direction:column; gap:10px; }
 .upload-file-preview[hidden] { display:none; }
 .upload-file-preview .detail-section { margin:0; }
 .upload-preview-summary { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 11px; border-radius:10px; border:1px solid rgba(99,102,241,.22); background:rgba(30,41,59,.52); color:rgba(226,232,240,.78); font-size:.82rem; }
 .upload-preview-summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .upload-preview-summary strong { flex:none; color:#E0E7FF; font-size:.8rem; }
+.upload-preview-summary-actions { display:inline-flex; align-items:center; gap:8px; flex:none; overflow:visible !important; }
+.upload-preview-clear-btn,.upload-preview-remove-btn { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; flex:none; padding:0; border-radius:999px; border:1px solid rgba(248,113,113,.28); background:rgba(127,29,29,.16); color:#FCA5A5; cursor:pointer; font:inherit; line-height:1; }
+.upload-preview-clear-btn:hover,.upload-preview-remove-btn:hover { background:rgba(185,28,28,.28); color:#FECACA; }
+.upload-preview-file-chip > span { min-width:0; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .upload-preview-files { display:flex; flex-wrap:wrap; gap:7px; }
 .upload-preview-file-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:6px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.58); color:rgba(226,232,240,.78); font-size:.76rem; }
 .upload-preview-file-chip b { color:#C7D2FE; font-weight:600; }
