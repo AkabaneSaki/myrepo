@@ -131,6 +131,10 @@ assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" mu
 assert.doesNotMatch(fragments.homeModalsScript, /!payload\.name \|\| !fileInput\.files\[0\]/);
 assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.tags\[0\], hasWorldbook, hasRegex\)/);
 assert.match(fragments.homeModalsScript, /preparedWorldbook = hasWorldbook \?/);
+assert.match(fragments.homeModalsScript, /async function beginProjectInstall/);
+assert.match(fragments.homeModalsScript, /if \(worldbookEntries\.length > 0\)/);
+assert.match(fragments.homeModalsScript, /if \(regexEntries\.length > 0\)/);
+assert.match(fragments.homeModalsScript, /requestInstallProject\(projectId/);
 assert.match(fragments.homeModalsScript, /worldbookUploadPreview/);
 assert.match(fragments.homeModalsScript, /regexUploadPreview/);
 assert.match(fragments.homeModalsScript, /coverUploadPreview/);

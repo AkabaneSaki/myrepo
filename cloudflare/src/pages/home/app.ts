@@ -614,7 +614,10 @@ export const homeScript = String.raw`
           requestUninstallProject(projectId);
           return;
         }
-        openInstallWorldbookModal(projectId, project.version);
+        const restore = setButtonLoading(button, '加载安装');
+        void beginProjectInstall(project)
+          .catch(error => showToast('安装失败: ' + error.message, 'error'))
+          .finally(restore);
       });
     });
 
