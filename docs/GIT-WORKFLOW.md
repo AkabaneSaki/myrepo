@@ -270,6 +270,19 @@ production changed: no
 
 Where practical, verify the live site contains behavior/code unique to the deployed SHA rather than trusting the deploy log alone.
 
+### One-click staging helper on the primary machine
+
+For routine Workshop staging deployments on the primary development machine, use the fail-closed helper instead of rebuilding the Wrangler command by hand:
+
+```text
+C:\Project\myrepo-git\.ai-bridge\CHECK_STAGING.cmd
+C:\Project\myrepo-git\.ai-bridge\DEPLOY_STAGING.cmd
+```
+
+The helper must verify the exact latest `origin/staging`, expected staging Cloudflare account/Worker/D1/R2, and dry-run before deploying. Deploy mode also applies pending D1 migrations before Worker deployment; check-only mode reports migration state without mutating D1.
+
+`.ai-bridge/` is local operational state and is not the portable source of truth. If the helper is missing on another machine, reproduce the same fail-closed checks rather than weakening the SOP.
+
 ## 10. Preview / experimental deployment exception
 
 A task branch may be deployed before `origin/staging` only when all of these are true:
@@ -305,6 +318,19 @@ Do not deploy production from:
 - a dirty worktree.
 
 Production should normally run an exact commit already present in owner main.
+
+### One-click production helper on the primary machine
+
+For routine Workshop production deployment after staging acceptance and owner-main promotion, use:
+
+```text
+C:\Project\myrepo-git\.ai-bridge\CHECK_PRODUCTION.cmd
+C:\Project\myrepo-git\.ai-bridge\DEPLOY_PRODUCTION.cmd
+```
+
+The production helper fails closed unless local deploy source is the refreshed exact `upstream/main` and the expected production Cloudflare account/Worker/D1/KV/R2 are verified. Deploy mode applies pending D1 migrations before the Worker dry-run/deploy; check-only mode does not mutate D1.
+
+Do not substitute a staging profile/account for production, and do not bypass the helper with ad-hoc Wrangler commands merely to save typing.
 
 ### Emergency production exception
 
@@ -409,7 +435,7 @@ Before production deploy:
 - tests green,
 - production Cloudflare account/profile verified,
 - Worker and bindings verified,
-- D1 migration order correct,
+- D1 migration order correct; the primary-machine production helper must inspect/apply pending migrations before Worker deployment,
 - production Discord/OAuth environment verified when relevant,
 - no production credential/binding is inferred from the user fork.
 
