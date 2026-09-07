@@ -61,7 +61,8 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
       const projectRegexes = groupedRegexes[projectId] || [];
       const firstEntry = projectEntries[0];
       const firstRegex = projectRegexes[0];
-      const localVersion = firstEntry ? _.get(firstEntry, 'extra.cw_project_version', null) : null;
+      const localVersion = registry[projectId]?.installedVersion ||
+        (firstEntry ? _.get(firstEntry, 'extra.cw_project_version', null) : null);
       const legacyProjectName =
         projectEntries
           .map(entry => _.get(entry, 'extra.fate_project_name'))

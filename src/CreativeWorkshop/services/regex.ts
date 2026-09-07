@@ -1,3 +1,4 @@
+import { setCreativeWorkshopInstallRecord } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
@@ -21,7 +22,7 @@ export async function installCreativeWorkshopRegex(
     return [];
   }
 
-  return updateTavernRegexesWith(
+  const result = await updateTavernRegexesWith(
     regexes => {
       const filtered = regexes.filter(regex => {
         const regexId = getCreativeWorkshopRegexId(regex);
@@ -59,6 +60,10 @@ export async function installCreativeWorkshopRegex(
     },
     { scope: 'character' },
   );
+  setCreativeWorkshopInstallRecord(projectId, {
+    installedVersion: detail.project.version || expectedVersion || null,
+  });
+  return result;
 }
 
 export async function uninstallCreativeWorkshopRegex(projectId: string, legacyProjectName?: string) {

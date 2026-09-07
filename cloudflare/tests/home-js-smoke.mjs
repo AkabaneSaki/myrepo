@@ -128,6 +128,9 @@ assert.equal(advertisedImportMatch[1], clientVersionMatch[1], 'Advertised Worksh
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" multiple/);
+assert.doesNotMatch(fragments.homeModalsScript, /!payload\.name \|\| !fileInput\.files\[0\]/);
+assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.tags\[0\], hasWorldbook, hasRegex\)/);
+assert.match(fragments.homeModalsScript, /preparedWorldbook = hasWorldbook \?/);
 assert.match(fragments.homeModalsScript, /worldbookUploadPreview/);
 assert.match(fragments.homeModalsScript, /regexUploadPreview/);
 assert.match(fragments.homeModalsScript, /coverUploadPreview/);
@@ -409,9 +412,28 @@ assert.notEqual(start, -1, 'Missing homeScript export');
 const rawAppExpression = withoutImports.slice(start + marker.length).trim();
 const appExpression = rawAppExpression.endsWith(';') ? rawAppExpression.slice(0, -1) : rawAppExpression;
 const fragmentNames = Object.keys(fragments);
-const homeScript = Function(...fragmentNames, `return (${appExpression});`)(...Object.values(fragments));
+const testProjectContentPolicy = {
+  系统: { required: ['worldbook'], anyOf: [] },
+  角色: { required: ['worldbook'], anyOf: [] },
+  事件: { required: ['worldbook'], anyOf: [] },
+  扩展: { required: [], anyOf: ['worldbook', 'regex'] },
+};
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', `return (${appExpression});`)(
+  ...Object.values(fragments),
+  JSON.stringify(testProjectContentPolicy),
+);
 assert.equal(typeof homeScript, 'string');
 new Function(homeScript);
+const contentPolicyUi = Function(
+  'PROJECT_CONTENT_POLICY',
+  `${fragments.homeModalsScript}; return { validateProjectContentSelection, getProjectContentRequirementText };`,
+)(testProjectContentPolicy);
+assert.equal(contentPolicyUi.validateProjectContentSelection('扩展', false, true).valid, true);
+assert.equal(contentPolicyUi.validateProjectContentSelection('扩展', true, false).valid, true);
+assert.equal(contentPolicyUi.validateProjectContentSelection('系统', false, true).valid, false);
+assert.equal(contentPolicyUi.validateProjectContentSelection('角色', false, true).valid, false);
+assert.equal(contentPolicyUi.validateProjectContentSelection('事件', false, true).valid, false);
+assert.match(contentPolicyUi.getProjectContentRequirementText('扩展'), /世界书或正则至少一种/);
 assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: project\?\.draftRevision \|\| reviewProjectData\?\.draftRevision/);
 assert.match(homeScript, /确定撤回这次更新吗/);

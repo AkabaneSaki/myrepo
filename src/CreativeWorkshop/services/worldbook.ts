@@ -21,10 +21,6 @@ function getCurrentWorldbookName(): string {
   return charWorldbooks.primary;
 }
 
-async function getInstalledWorldbookName(projectId: string, legacyProjectName?: string): Promise<string> {
-  return (await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName)) || getCurrentWorldbookName();
-}
-
 async function ensureTargetWorldbook(worldbookName: string): Promise<string> {
   const target = worldbookName.trim();
   if (!target) throw new Error('请选择安装目标世界书');
@@ -275,20 +271,23 @@ export async function installCreativeWorkshopProject(
   expectedVersion?: string,
 ) {
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
+  if (prepared.length === 0) return detail;
   const worldbookName = requestedWorldbookName
     ? await ensureTargetWorldbook(requestedWorldbookName)
     : getCurrentWorldbookName();
   await applyPreparedProject(projectId, detail, prepared, worldbookName);
-  setCreativeWorkshopInstallRecord(projectId, worldbookName);
+  setCreativeWorkshopInstallRecord(projectId, {
+    worldbookName,
+    installedVersion: detail.project.version || expectedVersion || null,
+  });
   return detail;
 }
 
 export async function uninstallCreativeWorkshopProject(projectId: string, legacyProjectName?: string) {
-  const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
+  const worldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
+  if (!worldbookName) return [] as WorldbookEntry[];
   const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
   await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-
-
   return deletedEntries;
 }
 
@@ -298,13 +297,24 @@ export async function updateCreativeWorkshopProject(
   legacyProjectName?: string,
 ) {
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
-  const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
-  await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
-  await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-  await applyPreparedProject(projectId, detail, prepared, worldbookName);
+  const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
+  let worldbookName: string | null = installedWorldbookName;
+  if (installedWorldbookName) {
+    worldbookName = await ensureTargetWorldbook(installedWorldbookName);
+    await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
+    await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+  } else if (prepared.length > 0) {
+    worldbookName = getCurrentWorldbookName();
+  }
+  if (prepared.length > 0 && worldbookName) {
+    await applyPreparedProject(projectId, detail, prepared, worldbookName);
+  }
   if (legacyProjectName && legacyProjectName !== projectId) {
     deleteCreativeWorkshopInstallRecord(legacyProjectName);
   }
-  setCreativeWorkshopInstallRecord(projectId, worldbookName);
+  setCreativeWorkshopInstallRecord(projectId, {
+    worldbookName: prepared.length > 0 ? worldbookName : null,
+    installedVersion: detail.project.version || expectedVersion || null,
+  });
   return detail;
 }

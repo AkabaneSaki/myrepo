@@ -7,7 +7,7 @@
 
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -118,6 +118,8 @@ async function resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectN
         (legacyProjectName ? getCreativeWorkshopInstallRecord(legacyProjectName) : null);
     if (recorded?.worldbookName)
         return recorded.worldbookName;
+    if (recorded && recorded.worldbookName === null)
+        return null;
     const candidates = getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName);
     const existingNames = new Set(getWorldbookNames());
     for (const worldbookName of candidates) {
@@ -132,13 +134,15 @@ async function resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectN
     }
     return null;
 }
-function setCreativeWorkshopInstallRecord(projectId, worldbookName) {
+function setCreativeWorkshopInstallRecord(projectId, patch) {
     const registry = readInstallRegistry();
     const scopeKey = getRegistryScopeKey();
     registry[scopeKey] = registry[scopeKey] || {};
+    const current = registry[scopeKey][projectId];
     registry[scopeKey][projectId] = {
         projectId,
-        worldbookName,
+        worldbookName: patch.worldbookName !== undefined ? patch.worldbookName : current?.worldbookName ?? null,
+        installedVersion: patch.installedVersion !== undefined ? patch.installedVersion : current?.installedVersion ?? null,
         installedAt: Date.now(),
     };
     writeInstallRegistry(registry);
@@ -490,7 +494,8 @@ async function listInstalledCreativeWorkshopProjects() {
         const projectRegexes = groupedRegexes[projectId] || [];
         const firstEntry = projectEntries[0];
         const firstRegex = projectRegexes[0];
-        const localVersion = firstEntry ? _.get(firstEntry, 'extra.cw_project_version', null) : null;
+        const localVersion = registry[projectId]?.installedVersion ||
+            (firstEntry ? _.get(firstEntry, 'extra.cw_project_version', null) : null);
         const legacyProjectName = projectEntries
             .map(entry => _.get(entry, 'extra.fate_project_name'))
             .find(value => _.isString(value) && Boolean(value)) ||
@@ -515,6 +520,7 @@ async function listInstalledCreativeWorkshopProjects() {
 ;// ./src/CreativeWorkshop/services/regex.ts
 
 
+
 async function installCreativeWorkshopRegex(projectId, selectedEntryKeys, expectedVersion, legacyProjectName) {
     const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
     const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
@@ -528,7 +534,7 @@ async function installCreativeWorkshopRegex(projectId, selectedEntryKeys, expect
     if (regexEntries.length === 0) {
         return [];
     }
-    return updateTavernRegexesWith(regexes => {
+    const result = await updateTavernRegexesWith(regexes => {
         const filtered = regexes.filter(regex => {
             const regexId = getCreativeWorkshopRegexId(regex);
             return !regexId.startsWith(`creative_workshop:${projectId}:`) &&
@@ -560,6 +566,10 @@ async function installCreativeWorkshopRegex(projectId, selectedEntryKeys, expect
         }));
         return [...filtered, ...appended];
     }, { scope: 'character' });
+    setCreativeWorkshopInstallRecord(projectId, {
+        installedVersion: detail.project.version || expectedVersion || null,
+    });
+    return result;
 }
 async function uninstallCreativeWorkshopRegex(projectId, legacyProjectName) {
     return updateTavernRegexesWith(regexes => regexes.filter(regex => {
@@ -703,9 +713,6 @@ function getCurrentWorldbookName() {
     if (!charWorldbooks.primary)
         throw new Error('当前角色卡未绑定世界书');
     return charWorldbooks.primary;
-}
-async function getInstalledWorldbookName(projectId, legacyProjectName) {
-    return (await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName)) || getCurrentWorldbookName();
 }
 async function ensureTargetWorldbook(worldbookName) {
     const target = worldbookName.trim();
@@ -903,29 +910,48 @@ async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredW
 }
 async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion) {
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
+    if (prepared.length === 0)
+        return detail;
     const worldbookName = requestedWorldbookName
         ? await ensureTargetWorldbook(requestedWorldbookName)
         : getCurrentWorldbookName();
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
-    setCreativeWorkshopInstallRecord(projectId, worldbookName);
+    setCreativeWorkshopInstallRecord(projectId, {
+        worldbookName,
+        installedVersion: detail.project.version || expectedVersion || null,
+    });
     return detail;
 }
 async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
-    const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
+    const worldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
+    if (!worldbookName)
+        return [];
     const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
     await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
     return deletedEntries;
 }
 async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName) {
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
-    const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
-    await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
-    await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-    await applyPreparedProject(projectId, detail, prepared, worldbookName);
+    const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
+    let worldbookName = installedWorldbookName;
+    if (installedWorldbookName) {
+        worldbookName = await ensureTargetWorldbook(installedWorldbookName);
+        await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
+        await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+    }
+    else if (prepared.length > 0) {
+        worldbookName = getCurrentWorldbookName();
+    }
+    if (prepared.length > 0 && worldbookName) {
+        await applyPreparedProject(projectId, detail, prepared, worldbookName);
+    }
     if (legacyProjectName && legacyProjectName !== projectId) {
         deleteCreativeWorkshopInstallRecord(legacyProjectName);
     }
-    setCreativeWorkshopInstallRecord(projectId, worldbookName);
+    setCreativeWorkshopInstallRecord(projectId, {
+        worldbookName: prepared.length > 0 ? worldbookName : null,
+        installedVersion: detail.project.version || expectedVersion || null,
+    });
     return detail;
 }
 

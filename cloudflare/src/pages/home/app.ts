@@ -8,10 +8,14 @@ import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
 import { homeUploadPreviewScript } from './upload-preview';
 import { homeUtilsScript } from './utils';
+import { PROJECT_CONTENT_POLICY } from '../../config/project-content-policy';
+
+const projectContentPolicyJson = JSON.stringify(PROJECT_CONTENT_POLICY);
 
 export const homeScript = String.raw`
 (function() {
   const app = document.getElementById('app');
+  const PROJECT_CONTENT_POLICY = ${projectContentPolicyJson};
 
   ${homeStateScript}
   ${homeUtilsScript}

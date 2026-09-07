@@ -2,7 +2,8 @@ const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_regist
 
 export type CreativeWorkshopInstallRecord = {
   projectId: string;
-  worldbookName: string;
+  worldbookName: string | null;
+  installedVersion?: string | null;
   installedAt: number;
 };
 
@@ -64,6 +65,7 @@ export async function resolveCreativeWorkshopInstallWorldbook(
   const recorded = getCreativeWorkshopInstallRecord(projectId) ||
     (legacyProjectName ? getCreativeWorkshopInstallRecord(legacyProjectName) : null);
   if (recorded?.worldbookName) return recorded.worldbookName;
+  if (recorded && recorded.worldbookName === null) return null;
 
   const candidates = getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName);
   const existingNames = new Set(getWorldbookNames());
@@ -86,13 +88,18 @@ export async function resolveCreativeWorkshopInstallWorldbook(
   return null;
 }
 
-export function setCreativeWorkshopInstallRecord(projectId: string, worldbookName: string) {
+export function setCreativeWorkshopInstallRecord(
+  projectId: string,
+  patch: { worldbookName?: string | null; installedVersion?: string | null },
+) {
   const registry = readInstallRegistry();
   const scopeKey = getRegistryScopeKey();
   registry[scopeKey] = registry[scopeKey] || {};
+  const current = registry[scopeKey][projectId];
   registry[scopeKey][projectId] = {
     projectId,
-    worldbookName,
+    worldbookName: patch.worldbookName !== undefined ? patch.worldbookName : current?.worldbookName ?? null,
+    installedVersion: patch.installedVersion !== undefined ? patch.installedVersion : current?.installedVersion ?? null,
     installedAt: Date.now(),
   };
   writeInstallRegistry(registry);
