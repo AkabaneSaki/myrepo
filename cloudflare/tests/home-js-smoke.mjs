@@ -34,6 +34,16 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+const clientVersionSource = await readFile(resolve('../src/CreativeWorkshop/version.ts'), 'utf8');
+const clientVersionMatch = clientVersionSource.match(/CREATIVE_WORKSHOP_CLIENT_VERSION\s*=\s*'([0-9]+\.[0-9]+\.[0-9]+)'/);
+const advertisedVersionMatch = fragments.homeLayoutRenderScript.match(/WORKSHOP_RELEASE_VERSION = \"([0-9]+\.[0-9]+\.[0-9]+)\"/);
+const advertisedImportMatch = fragments.homeLayoutRenderScript.match(/myrepo@([0-9]+\.[0-9]+\.[0-9]+)\/test-dist\/CreativeWorkshop\/index\.js/);
+assert.ok(clientVersionMatch, 'Creative Workshop client self-version must be readable');
+assert.ok(advertisedVersionMatch, 'Workshop advertised release version must be readable');
+assert.ok(advertisedImportMatch, 'Workshop advertised release import tag must be readable');
+assert.equal(advertisedVersionMatch[1], clientVersionMatch[1], 'Advertised Workshop release must match client self-version');
+assert.equal(advertisedImportMatch[1], clientVersionMatch[1], 'Advertised Workshop import tag must match client self-version');
+
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /审核外链/);
 assert.match(fragments.homeDetailModalRenderScript, /collectProjectExternalLinks/);
@@ -261,17 +271,19 @@ assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.12', '2.0.13'), -1);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.13', '2.0.13'), 0);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.14', '2.0.13'), 1);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.9', '2.0.12'), -1);
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
 versionState.tavern.clientVersionResolved = true;
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), true);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
 versionState.tavern.clientVersion = '2.0.12';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), true);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
 versionState.tavern.clientVersion = '2.0.13';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
 versionState.tavern.clientVersion = '2.0.14';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
+versionState.tavern.clientVersion = '2.0.15';
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
 versionState.tavern.clientVersion = 'not-a-version';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.13'), true);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
 assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('broken-release'), false);
 
 const dateUi = Function(`${fragments.homeUtilsScript}; return { getProjectPublishedAt };`)();
