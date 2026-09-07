@@ -1,9 +1,10 @@
 import { Num, OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
+import { validateProjectContentPolicy } from '../config/project-content-policy';
 import type { AppContext } from '../types';
 import { projectDb, userDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
-import { validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
+import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
 import { r2Storage } from '../utils/r2';
@@ -50,23 +51,27 @@ async function readDirectReviewContentText(
 
 async function validateReviewPayloads(
   c: AppContext,
-  project: { id: string; publishedProjectId?: string | null },
+  project: { id: string; publishedProjectId?: string | null; tags?: string[] },
 ): Promise<{ valid: true } | { valid: false; error: string }> {
-  let validPayloadCount = 0;
+  const presence = { worldbook: false, regex: false };
 
   for (const kind of ['worldbook', 'regex'] as const) {
     const object = await readReviewContent(c, project.id, project.publishedProjectId, kind);
     if (!object) continue;
 
-    const validation = validateProjectContentText(await object.text(), kind);
+    const text = await object.text();
+    if (isEmptyProjectContentText(text, kind)) continue;
+
+    const validation = validateProjectContentText(text, kind);
     if (validation.valid === false) {
       return { valid: false, error: validation.error };
     }
-    validPayloadCount += 1;
+    presence[kind] = true;
   }
 
-  if (validPayloadCount === 0) {
-    return { valid: false, error: 'Cannot approve project without a valid worldbook or regex payload' };
+  const policyValidation = validateProjectContentPolicy(project.tags, presence);
+  if (policyValidation.valid === false) {
+    return { valid: false, error: policyValidation.error };
   }
 
   return { valid: true };

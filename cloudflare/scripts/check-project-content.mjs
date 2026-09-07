@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { validateProjectContentPolicy } from '../src/config/project-content-policy.ts';
 import {
   extractProjectEntries,
+  isEmptyProjectContentText,
   removeProjectEntryFromJson,
   validateProjectContentText,
 } from '../src/utils/project-content.ts';
@@ -39,7 +41,22 @@ assert.throws(() => removeProjectEntryFromJson(arrayBook, 'worldbook', 'uid:999'
 
 assert.equal(validateProjectContentText(arrayBook, 'worldbook').valid, true);
 assert.equal(validateProjectContentText(objectBook, 'worldbook').valid, true);
-assert.equal(validateProjectContentText('[{"id":"cleanup","findRegex":"foo"}]', 'regex').valid, true);
+assert.equal(validateProjectContentText('[{"id":"cleanup","scriptName":"Cleanup","findRegex":"foo"}]', 'regex').valid, true);
+assert.equal(validateProjectContentText(arrayBook, 'regex').valid, false);
+assert.match(validateProjectContentText(arrayBook, 'regex').error, /世界书/);
+assert.equal(validateProjectContentText(singleRegex, 'worldbook').valid, false);
+assert.match(validateProjectContentText(singleRegex, 'worldbook').error, /正则/);
+assert.equal(validateProjectContentText('[{"id":"cleanup","findRegex":"foo"}]', 'regex').valid, false);
+assert.equal(isEmptyProjectContentText('[]', 'regex'), true);
+assert.equal(isEmptyProjectContentText('{"entries":{}}', 'regex'), true);
+assert.equal(isEmptyProjectContentText('{"entries":[]}', 'worldbook'), true);
+assert.equal(validateProjectContentPolicy(['角色'], { worldbook: false, regex: true }).valid, false);
+assert.equal(validateProjectContentPolicy(['系统'], { worldbook: false, regex: true }).valid, false);
+assert.equal(validateProjectContentPolicy(['事件'], { worldbook: false, regex: true }).valid, false);
+assert.equal(validateProjectContentPolicy(['扩展'], { worldbook: false, regex: true }).valid, true);
+assert.equal(validateProjectContentPolicy(['扩展', '角色'], { worldbook: false, regex: true }).valid, false);
+assert.equal(validateProjectContentPolicy(['扩展'], { worldbook: true, regex: false }).valid, true);
+assert.equal(validateProjectContentPolicy(['扩展'], { worldbook: false, regex: false }).valid, false);
 assert.equal(validateProjectContentText(singleRegex, 'regex').valid, true);
 assert.equal(validateProjectContentText('{"hello":"world"}', 'worldbook').valid, false);
 assert.equal(validateProjectContentText('{"hello":"world"}', 'regex').valid, false);

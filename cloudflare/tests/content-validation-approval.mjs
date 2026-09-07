@@ -53,20 +53,21 @@ async function api(path, { method = 'GET', token, body, expected = 200, contentT
   return data;
 }
 
-async function createProject(name) {
+async function createProject(name, tags = ['角色']) {
   return api('/api/projects', {
     method: 'POST',
     token: creatorToken,
-    body: { name, description: 'validation test', tags: ['角色'] },
+    body: { name, description: 'validation test', tags },
   });
 }
 
-async function approve(projectId) {
+async function approve(projectId, expected = 200) {
   const detail = await api(`/api/projects/${projectId}`, { token: creatorToken });
   return api(`/api/admin/review/${projectId}`, {
     method: 'POST',
     token: adminToken,
     body: { action: 'approve', expectedRevision: detail.project.draftRevision },
+    expected,
   });
 }
 
@@ -168,18 +169,42 @@ try {
   await approve(metadataDraft.projectId);
   cleanupIds.delete(metadataDraft.projectId);
 
-  const regexOnly = await createProject('Validation Regex Only');
-  cleanupIds.add(regexOnly.projectId);
-  await api(`/api/projects/${regexOnly.projectId}/upload-regex`, {
+  const roleRegexOnly = await createProject('Validation Regex Only');
+  cleanupIds.add(roleRegexOnly.projectId);
+  await api(`/api/projects/${roleRegexOnly.projectId}/upload-regex`, {
     method: 'POST',
     token: creatorToken,
     body: regex,
   });
-  await approve(regexOnly.projectId);
+  await approve(roleRegexOnly.projectId, 409);
 
-  const publishedRegex = await api(`/api/projects/${regexOnly.projectId}`);
+  const extensionRegexOnly = await createProject('Validation Extension Regex Only', ['扩展']);
+  cleanupIds.add(extensionRegexOnly.projectId);
+  await api(`/api/projects/${extensionRegexOnly.projectId}/upload-regex`, {
+    method: 'POST',
+    token: creatorToken,
+    body: regex,
+  });
+  await approve(extensionRegexOnly.projectId);
+
+  const publishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
   assert.equal(publishedRegex.project.status, 'approved');
   assert.equal(publishedRegex.regexEntriesPreview.length, 1);
+
+  const typeMismatch = await createProject('Validation Type Mismatch');
+  cleanupIds.add(typeMismatch.projectId);
+  await api(`/api/projects/${typeMismatch.projectId}/upload-regex`, {
+    method: 'POST',
+    token: creatorToken,
+    body: worldbook,
+    expected: 400,
+  });
+  await api(`/api/projects/${typeMismatch.projectId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: regex,
+    expected: 400,
+  });
 
   console.log('content validation and approval preconditions: ok');
 } finally {
