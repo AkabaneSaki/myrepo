@@ -1,6 +1,9 @@
 import type { AppContext, ProjectReviewTarget } from '../types';
 import {
+  MAX_DISPLAY_TAGS,
+  getProjectFacetTagValues,
   normalizeCustomTags,
+  normalizeDisplayTags,
   normalizeExtensionType,
   normalizeProjectFacets,
   resolveProjectType,
@@ -228,6 +231,7 @@ export const projectDb = {
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
       customTags?: string[];
+      displayTags?: string[];
       tags?: string[];
       coverImage?: string;
       downloadUrl?: string;
@@ -250,9 +254,9 @@ export const projectDb = {
         `
 			INSERT INTO projects (
 				id, name, description, version, version_label, author_id, author_name, author_avatar,
-				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, tags, cover_image, root_project_id, published_project_id,
+				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -273,6 +277,7 @@ export const projectDb = {
         project.extensionType || null,
         JSON.stringify(project.facets || {}),
         JSON.stringify(project.customTags || []),
+        JSON.stringify(project.displayTags || []),
         JSON.stringify(project.tags || []),
         project.coverImage || null,
         project.rootProjectId || project.id,
@@ -326,6 +331,7 @@ export const projectDb = {
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
       customTags?: string[];
+      displayTags?: string[];
       tags?: string[];
       coverImage?: string;
       downloadUrl?: string;
@@ -377,6 +383,10 @@ export const projectDb = {
     if (updates.customTags !== undefined) {
       setClauses.push('custom_tags = ?');
       values.push(JSON.stringify(updates.customTags));
+    }
+    if (updates.displayTags !== undefined) {
+      setClauses.push('display_tags = ?');
+      values.push(JSON.stringify(updates.displayTags));
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?');
@@ -538,8 +548,9 @@ export const projectDb = {
     }
 
     if (options.tag) {
-      conditions.push('p.tags LIKE ?');
-      values.push(`%"${options.tag}"%`);
+      conditions.push('(p.facets LIKE ? OR p.custom_tags LIKE ? OR p.tags LIKE ?)');
+      const tagPattern = `%"${options.tag}"%`;
+      values.push(tagPattern, tagPattern, tagPattern);
     }
 
     const searchTerm = options.search?.trim();
@@ -827,6 +838,7 @@ export const projectDb = {
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
       customTags?: string[];
+      displayTags?: string[];
       tags?: string[];
       coverImage?: string;
     },
@@ -845,6 +857,7 @@ export const projectDb = {
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
         customTags: updates.customTags ?? existingDraft.customTags,
+        displayTags: updates.displayTags ?? existingDraft.displayTags,
         tags: updates.tags ?? existingDraft.tags,
         coverImage: updates.coverImage ?? existingDraft.coverImage ?? undefined,
       });
@@ -866,6 +879,7 @@ export const projectDb = {
       extensionType: updates.extensionType !== undefined ? updates.extensionType : published.extensionType,
       facets: updates.facets ?? published.facets,
       customTags: updates.customTags ?? published.customTags,
+      displayTags: updates.displayTags ?? published.displayTags,
       tags: updates.tags ?? published.tags,
       coverImage: updates.coverImage ?? published.coverImage ?? undefined,
       downloadUrl: published.downloadUrl || undefined,
@@ -1055,7 +1069,24 @@ function parseProjectRow(row: Record<string, unknown>) {
       rawCustomTags = undefined;
     }
   }
-  const customTags = normalizeCustomTags(rawCustomTags, parsedTags);
+  const officialTagValues = new Set(getProjectFacetTagValues(facets));
+  const customTags = normalizeCustomTags(rawCustomTags, parsedTags)
+    .filter(tag => !officialTagValues.has(tag));
+
+  let rawDisplayTags: unknown = undefined;
+  if (typeof row.display_tags === 'string' && row.display_tags.trim()) {
+    try {
+      const parsed = JSON.parse(row.display_tags);
+      if (Array.isArray(parsed)) rawDisplayTags = parsed;
+    } catch {
+      rawDisplayTags = undefined;
+    }
+  }
+  const displayTags = normalizeDisplayTags(
+    rawDisplayTags === undefined ? customTags.slice(0, MAX_DISPLAY_TAGS) : rawDisplayTags,
+    facets,
+    customTags,
+  ).slice(0, MAX_DISPLAY_TAGS);
 
   const rawVersion = String(row.version ?? '').trim();
   const version = normalizeProjectVersionBase(rawVersion);
@@ -1087,6 +1118,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     extensionType,
     facets,
     customTags,
+    displayTags,
     tags: parsedTags,
     coverImage: row.cover_image as string | null,
     worldbookEntriesPreview: [],

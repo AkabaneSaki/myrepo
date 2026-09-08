@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { CHARACTER_FACET_OPTIONS, EXTENSION_TYPES, MAX_CUSTOM_TAGS, PROJECT_TYPES } from './config/project-taxonomy';
+import { CHARACTER_FACET_OPTIONS, EXTENSION_TYPES, MAX_CUSTOM_TAGS, MAX_DISPLAY_TAGS, PROJECT_TYPES } from './config/project-taxonomy';
 import type { Env } from './env';
 
 export type AppContext = Context<{ Bindings: Env }>;
@@ -123,6 +123,7 @@ export const Project = z.object({
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型，仅扩展项目使用'),
   facets: ProjectFacets.default({}).describe('角色官方属性标签'),
   customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).default([]).describe('创作者自定义标签'),
+  displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).default([]).describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签镜像'),
   coverImage: z.string().optional().describe('封面图片 URL'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),
@@ -168,6 +169,7 @@ export const ProjectCreateRequest = z.object({
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
   customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).optional().describe('创作者自定义标签'),
+  displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
 });
@@ -181,6 +183,7 @@ export const ProjectUpdateRequest = z.object({
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
   customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).optional().describe('创作者自定义标签'),
+  displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).optional().describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
 });

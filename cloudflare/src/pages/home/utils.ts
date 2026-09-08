@@ -117,10 +117,10 @@ function getProjectTypeDisplayLabel(project) {
 
 function getProjectCustomTags(project) {
   const explicit = project?.customTags ?? project?.custom_tags;
-  if (Array.isArray(explicit)) return explicit.map(tag => String(tag).trim()).filter(Boolean);
-  return (project?.tags || [])
-    .map(tag => String(tag).trim())
-    .filter(tag => tag && !normalizeProjectTypeValue(tag));
+  const values = Array.isArray(explicit)
+    ? explicit
+    : (project?.tags || []).filter(tag => !normalizeProjectTypeValue(String(tag).trim()));
+  return Array.from(new Set(values.map(tag => String(tag).trim()).filter(Boolean)));
 }
 
 function getProjectFacetTags(project) {
@@ -128,16 +128,27 @@ function getProjectFacetTags(project) {
   const result = [];
   for (const key of Object.keys(PROJECT_TAXONOMY.characterFacets || {})) {
     const values = Array.isArray(facets[key]) ? facets[key] : [];
-    values.forEach(value => result.push(key + ' · ' + String(value)));
+    values.forEach(value => result.push(String(value).trim()));
   }
-  return result;
+  return Array.from(new Set(result.filter(Boolean)));
+}
+
+function getProjectTagPool(project) {
+  return Array.from(new Set([...getProjectFacetTags(project), ...getProjectCustomTags(project)]));
+}
+
+function getProjectDisplayTags(project) {
+  const maxTags = Number(PROJECT_TAXONOMY.maxDisplayTags || PROJECT_TAXONOMY.display?.maxCardTags || 5);
+  const pool = new Set(getProjectTagPool(project));
+  const explicit = project?.displayTags ?? project?.display_tags;
+  if (Array.isArray(explicit)) {
+    return Array.from(new Set(explicit.map(tag => String(tag).trim()).filter(tag => tag && pool.has(tag)))).slice(0, maxTags);
+  }
+  return getProjectCustomTags(project).slice(0, maxTags);
 }
 
 function getProjectDetailTags(project) {
-  return [
-    ...getProjectFacetTags(project),
-    ...getProjectCustomTags(project),
-  ];
+  return getProjectTagPool(project);
 }
 
 function getTypeClassByBaseTag(baseTag) {
@@ -369,10 +380,10 @@ function isProjectEditable(project) {
 }
 
 function parseTagsInput(value) {
-  return String(value || '')
+  return Array.from(new Set(String(value || '')
     .split(',')
     .map(item => item.trim())
-    .filter(Boolean);
+    .filter(Boolean)));
 }
 
 function getEntryStrategy(entry) {

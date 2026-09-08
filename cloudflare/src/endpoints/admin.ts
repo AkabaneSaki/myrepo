@@ -318,6 +318,7 @@ export class AdminReview extends OpenAPIRoute {
         extensionType: project.extensionType,
         facets: project.facets,
         customTags: project.customTags,
+        displayTags: project.displayTags,
         tags: project.tags,
         coverImage: publishedAssets.coverImage || project.coverImage || undefined,
         downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,

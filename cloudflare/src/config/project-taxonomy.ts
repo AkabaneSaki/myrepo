@@ -4,7 +4,8 @@ export type ProjectType = (typeof PROJECT_TYPES)[number];
 export const EXTENSION_TYPES = ['规则', '内容'] as const;
 export type ExtensionType = (typeof EXTENSION_TYPES)[number];
 
-export const MAX_CUSTOM_TAGS = 4;
+export const MAX_CUSTOM_TAGS = 20;
+export const MAX_DISPLAY_TAGS = 5;
 
 export const SYSTEM_SIGNAL_DISPLAY_POLICY = {
   ejs: { label: 'EJS', card: false, detail: true },
@@ -12,7 +13,7 @@ export const SYSTEM_SIGNAL_DISPLAY_POLICY = {
 } as const;
 
 export const TAXONOMY_DISPLAY_POLICY = {
-  cardCustomTags: true,
+  maxCardTags: MAX_DISPLAY_TAGS,
 } as const;
 
 export const CHARACTER_FACET_OPTIONS = {
@@ -108,6 +109,7 @@ export const PROJECT_TAXONOMY = {
   extensionTypes: EXTENSION_TYPES,
   characterFacets: CHARACTER_FACET_OPTIONS,
   maxCustomTags: MAX_CUSTOM_TAGS,
+  maxDisplayTags: MAX_DISPLAY_TAGS,
   systemSignals: SYSTEM_SIGNAL_DISPLAY_POLICY,
   display: TAXONOMY_DISPLAY_POLICY,
 } as const;
@@ -207,6 +209,28 @@ export function normalizeCustomTags(value: unknown, legacyTags?: readonly string
   return normalizeStringList(source).filter(tag => !LEGACY_BASE_TAGS.has(tag) && tag !== '系统核心');
 }
 
+export function getProjectFacetTagValues(facets: ProjectFacets): string[] {
+  const result: string[] = [];
+  for (const key of Object.keys(CHARACTER_FACET_OPTIONS) as CharacterFacetKey[]) {
+    const values = Array.isArray(facets[key]) ? facets[key] : [];
+    for (const value of values) result.push(value);
+  }
+  return normalizeStringList(result);
+}
+
+export function buildProjectTagPool(facets: ProjectFacets, customTags: readonly string[]): string[] {
+  return normalizeStringList([...getProjectFacetTagValues(facets), ...customTags]);
+}
+
+export function normalizeDisplayTags(
+  value: unknown,
+  facets: ProjectFacets,
+  customTags: readonly string[],
+): string[] {
+  const pool = new Set(buildProjectTagPool(facets, customTags));
+  return normalizeStringList(value).filter(tag => pool.has(tag));
+}
+
 export function buildLegacyProjectTags(projectType: ProjectType, customTags: readonly string[]): string[] {
   return [LEGACY_BASE_TAG_BY_PROJECT_TYPE[projectType], ...normalizeStringList(customTags)];
 }
@@ -216,6 +240,7 @@ export type NormalizedProjectTaxonomy = {
   extensionType: ExtensionType | null;
   facets: ProjectFacets;
   customTags: string[];
+  displayTags: string[];
   legacyTags: string[];
 };
 
@@ -232,7 +257,16 @@ export function normalizeProjectTaxonomyInput(
   const rawFacets = input.facets ?? input.projectFacets ?? input.project_facets;
   const unknownFacets = getUnknownProjectFacetValues(rawFacets, projectType);
   const facets = normalizeProjectFacets(rawFacets, projectType);
-  const customTags = normalizeCustomTags(input.customTags ?? input.custom_tags, legacyTags);
+  const officialTagValues = new Set(getProjectFacetTagValues(facets));
+  const customTags = normalizeCustomTags(input.customTags ?? input.custom_tags, legacyTags)
+    .filter(tag => !officialTagValues.has(tag));
+  const rawDisplayTags = input.displayTags ?? input.display_tags;
+  const normalizedDisplayInput = rawDisplayTags === undefined ? undefined : normalizeStringList(rawDisplayTags);
+  const tagPool = new Set(buildProjectTagPool(facets, customTags));
+  const unknownDisplayTags = normalizedDisplayInput?.filter(tag => !tagPool.has(tag)) || [];
+  const displayTags = normalizedDisplayInput === undefined
+    ? customTags.slice(0, MAX_DISPLAY_TAGS)
+    : normalizedDisplayInput.filter(tag => tagPool.has(tag));
 
   if (explicitProjectTypeValue !== undefined && explicitProjectTypeValue !== null && !explicitProjectType) {
     return { value: null, error: '无效的项目分类' };
@@ -252,6 +286,12 @@ export function normalizeProjectTaxonomyInput(
   if (customTags.length > MAX_CUSTOM_TAGS) {
     return { value: null, error: `自定义标签最多 ${MAX_CUSTOM_TAGS} 个` };
   }
+  if ((normalizedDisplayInput?.length || 0) > MAX_DISPLAY_TAGS) {
+    return { value: null, error: `首页展示标签最多 ${MAX_DISPLAY_TAGS} 个` };
+  }
+  if (unknownDisplayTags.length > 0) {
+    return { value: null, error: `首页展示标签必须来自已选官方标签或自定义标签：${unknownDisplayTags.join('、')}` };
+  }
 
   return {
     value: {
@@ -259,6 +299,7 @@ export function normalizeProjectTaxonomyInput(
       extensionType,
       facets,
       customTags,
+      displayTags,
       legacyTags: buildLegacyProjectTags(projectType, customTags),
     },
   };

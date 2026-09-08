@@ -116,6 +116,7 @@ export class ProjectList extends OpenAPIRoute {
                   extensionType: z.enum(['规则', '内容']).nullable(),
                   facets: z.record(z.array(z.string())),
                   customTags: z.array(z.string()),
+                  displayTags: z.array(z.string()),
                   tags: z.array(z.string()),
                   coverImage: z.string().nullable(),
                   likesCount: z.number(),
@@ -323,6 +324,7 @@ export class ProjectCreate extends OpenAPIRoute {
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
               customTags: z.array(z.string()).optional(),
+              displayTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).default([]),
               coverImage: Str({ required: false }),
             }),
@@ -408,6 +410,7 @@ export class ProjectCreate extends OpenAPIRoute {
         extensionType: taxonomy.extensionType,
         facets: taxonomy.facets,
         customTags: taxonomy.customTags,
+        displayTags: taxonomy.displayTags,
         tags: taxonomy.legacyTags,
         coverImage,
       });
@@ -811,6 +814,7 @@ export class ProjectUpdate extends OpenAPIRoute {
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
               customTags: z.array(z.string()).optional(),
+              displayTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).optional(),
               coverImage: Str({ required: false }),
             }),
@@ -873,6 +877,16 @@ export class ProjectUpdate extends OpenAPIRoute {
       taxonomyInput.customTags = project.customTags;
     }
 
+    const tagPoolChanged = data.body.projectType !== undefined
+      || data.body.facets !== undefined
+      || data.body.customTags !== undefined
+      || data.body.tags !== undefined;
+    if (data.body.displayTags !== undefined) {
+      taxonomyInput.displayTags = data.body.displayTags;
+    } else if (!tagPoolChanged) {
+      taxonomyInput.displayTags = project.displayTags;
+    }
+
     const taxonomyResult = normalizeProjectTaxonomyInput(taxonomyInput, {
       requireExtensionSubtypeForExplicitType: data.body.projectType === '扩展',
     });
@@ -886,6 +900,7 @@ export class ProjectUpdate extends OpenAPIRoute {
       extensionType: taxonomy.extensionType,
       facets: taxonomy.facets,
       customTags: taxonomy.customTags,
+      displayTags: taxonomy.displayTags,
       tags: taxonomy.legacyTags,
       ...(data.body.versionLabel !== undefined
         ? { versionLabel: typeof data.body.versionLabel === 'string' ? data.body.versionLabel.trim() || null : null }

@@ -24,10 +24,12 @@ insert.run('extension', 'Extension', JSON.stringify(['扩展', '战斗']));
 insert.run('invalid', 'Invalid', 'not-json');
 
 const migration = await readFile(new URL('../migrations/0008_project_taxonomy.sql', import.meta.url), 'utf8');
+const displayTagsMigration = await readFile(new URL('../migrations/0009_project_display_tags.sql', import.meta.url), 'utf8');
 db.exec(migration);
+db.exec(displayTagsMigration);
 
 const columns = db.prepare('PRAGMA table_info(projects)').all();
-for (const name of ['project_type', 'extension_type', 'facets', 'custom_tags']) {
+for (const name of ['project_type', 'extension_type', 'facets', 'custom_tags', 'display_tags']) {
   assert.equal(columns.some(column => column.name === name), true, `missing column ${name}`);
 }
 
@@ -50,12 +52,13 @@ assert.deepEqual(JSON.parse(rows.invalid.custom_tags), []);
 
 insert.run('new-default', 'New default', JSON.stringify([]));
 const defaultRow = db
-  .prepare('SELECT project_type, extension_type, facets, custom_tags FROM projects WHERE id = ?')
+  .prepare('SELECT project_type, extension_type, facets, custom_tags, display_tags FROM projects WHERE id = ?')
   .get('new-default');
 assert.equal(defaultRow.project_type, '系统核心');
 assert.equal(defaultRow.extension_type, null);
 assert.deepEqual(JSON.parse(defaultRow.facets), {});
 assert.deepEqual(JSON.parse(defaultRow.custom_tags), []);
+assert.equal(defaultRow.display_tags, null);
 
 const indexes = db.prepare("PRAGMA index_list('projects')").all();
 assert.equal(indexes.some(index => index.name === 'idx_projects_public_type_published'), true);

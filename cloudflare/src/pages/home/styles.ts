@@ -110,8 +110,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .tag { background:rgba(255,255,255,0.08); padding:2px 10px; border-radius:30px; font-size:0.7rem; }
 .tag-system-ejs { color:#E9D5FF; background:rgba(147,51,234,.16); border:1px solid rgba(192,132,252,.42); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
 .tag-system-artwork { color:#A5F3FC; background:rgba(8,145,178,.14); border:1px solid rgba(34,211,238,.34); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
-.tag-system-artwork-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none; border-radius:7px; color:#67E8F9; background:rgba(8,145,178,.12); border:1px solid rgba(34,211,238,.3); font-size:.7rem; box-shadow:inset 0 0 0 1px rgba(255,255,255,.025); }
-.tag-system-artwork-icon i { line-height:1; }
+.card-artwork-badge { position:absolute; left:12px; top:12px; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:9px; color:#67E8F9; background:rgba(8,47,73,.82); border:1px solid rgba(34,211,238,.42); font-size:.78rem; box-shadow:0 6px 16px rgba(2,8,23,.28),inset 0 0 0 1px rgba(255,255,255,.035); backdrop-filter:blur(8px); }
+.card-artwork-badge i { line-height:1; }
   .card-meta { font-size:0.75rem; opacity:0.7; }
   .card-meta--version { align-items:center; }
   .version-block { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -168,6 +168,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .taxonomy-chip input:checked + span { border-color:rgba(129,140,248,.62); background:rgba(99,102,241,.22); color:#EEF2FF; box-shadow:0 0 0 1px rgba(129,140,248,.12) inset; }
 .taxonomy-chip input:checked + span::before { content:'✓'; margin-right:5px; color:#C7D2FE; font-size:.72rem; font-weight:800; }
 .taxonomy-chip:active span { transform:scale(.97); }
+.display-tags-label { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.display-tags-label small { color:rgba(199,210,254,.8); font-size:.75rem; font-weight:700; }
+.display-tag-picker { padding:10px 0 2px; }
+.display-tag-picker-empty { width:100%; padding:10px 12px; border:1px dashed rgba(148,163,184,.2); border-radius:12px; color:rgba(148,163,184,.68); font-size:.8rem; }
 .form-hint { margin-top:6px; font-size:.82rem; line-height:1.45; color:rgba(226,232,240,.62); }
 .file-drop { border:2px dashed rgba(255,255,255,0.2); border-radius:12px; padding:30px; text-align:center; cursor:pointer; transition:0.2s; }
 .file-drop:hover { border-color:#6366F1; background:rgba(99,102,241,0.1); }

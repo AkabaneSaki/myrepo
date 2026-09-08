@@ -198,7 +198,8 @@ try {
         组织: ['教会/神殿'],
         势力: ['王国'],
       },
-      customTags: ['纯爱', '慢热'],
+      customTags: ['纯爱', '慢热', '人鱼', '纯爱'],
+      displayTags: ['人鱼', '纯爱', '慢热', '人鱼'],
       tags: ['角色', '纯爱', '慢热'],
     },
   });
@@ -215,6 +216,7 @@ try {
   assert.deepEqual(structuredCharacterDraftDetail.project.facets.种族, ['人鱼']);
   assert.deepEqual(structuredCharacterDraftDetail.project.facets.个性, ['hnh']);
   assert.deepEqual(structuredCharacterDraftDetail.project.customTags, ['纯爱', '慢热']);
+  assert.deepEqual(structuredCharacterDraftDetail.project.displayTags, ['人鱼', '纯爱', '慢热']);
   assert.deepEqual(structuredCharacterDraftDetail.project.tags, ['角色', '纯爱', '慢热']);
   await approve(structuredCharacter.projectId);
 
@@ -222,6 +224,7 @@ try {
   assert.equal(structuredCharacterPublished.project.projectType, '角色');
   assert.deepEqual(structuredCharacterPublished.project.facets.势力, ['王国']);
   assert.deepEqual(structuredCharacterPublished.project.customTags, ['纯爱', '慢热']);
+  assert.deepEqual(structuredCharacterPublished.project.displayTags, ['人鱼', '纯爱', '慢热']);
 
   const taxonomyDraft = await api(`/api/projects/${structuredCharacter.projectId}`, {
     method: 'PUT',
@@ -240,6 +243,7 @@ try {
   assert.equal(taxonomyDraftDetail.project.extensionType, '规则');
   assert.deepEqual(taxonomyDraftDetail.project.facets, {});
   assert.deepEqual(taxonomyDraftDetail.project.customTags, ['战斗']);
+  assert.deepEqual(taxonomyDraftDetail.project.displayTags, ['战斗']);
   assert.deepEqual(taxonomyDraftDetail.project.tags, ['扩展', '战斗']);
   await approve(taxonomyDraft.projectId);
   cleanupIds.delete(taxonomyDraft.projectId);
@@ -249,6 +253,7 @@ try {
   assert.equal(taxonomyPublished.project.extensionType, '规则');
   assert.deepEqual(taxonomyPublished.project.facets, {});
   assert.deepEqual(taxonomyPublished.project.customTags, ['战斗']);
+  assert.deepEqual(taxonomyPublished.project.displayTags, ['战斗']);
   assert.deepEqual(taxonomyPublished.project.tags, ['扩展', '战斗']);
 
   const roleRegexOnly = await createProject('Validation Regex Only');

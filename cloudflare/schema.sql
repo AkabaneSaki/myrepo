@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS projects (
     extension_type TEXT,
     facets TEXT NOT NULL DEFAULT '{}',
     custom_tags TEXT NOT NULL DEFAULT '[]',
+    display_tags TEXT,
     tags TEXT DEFAULT '[]',
     cover_image TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
