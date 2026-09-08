@@ -1,5 +1,5 @@
 import type { ProjectEntryKind } from '../utils/project-content';
-import { PROJECT_TYPES, resolveProjectType, type ProjectType } from './project-taxonomy';
+import { PROJECT_TYPES, resolveProjectType, type ProjectType } from './project-taxonomy.ts';
 
 export const PROJECT_BASE_TAGS = PROJECT_TYPES;
 export type ProjectBaseTag = ProjectType;
