@@ -31,11 +31,13 @@ Creative Workshop 目前不需要 repo-wide reconstruction。
 
 可变内容 / 玩法规则
 └─ cloudflare/src/config/project-content-policy.ts
-   ├─ 系统 / 角色 / 事件 => 世界书必填
+   ├─ 系统核心 / 角色 / 事件 => 世界书必填
    └─ 扩展 => 世界书 OR 正则至少一个
 ```
 
-`project-content-policy.ts` 在本次扫描时属于 #22 本地 WIP；在进入 `origin/staging` / staging Worker 前，不要把它当成已发布行为。
+结构化分类 / 标签规则由 `cloudflare/src/config/project-taxonomy.ts` 维护，包括 `projectType`、`extensionType`、角色官方 facets、`customTags` 与 `displayTags`。
+
+2026-09-08 当前 staging 代码线已经包含上述 content policy 与 taxonomy 实现；旧版“#22 尚为本地 WIP、#21 尚未实现”的说明已失效。当前本地未进入 staging 的工作是 `feature/admin-review-continuous-flow` 审核 UX follow-up。
 
 ---
 
@@ -100,7 +102,7 @@ src/CreativeWorkshop/
 
 | 领域 | 当前状态 | 判断 | 处理时机 |
 |---|---|---|---|
-| 项目分类 + 内容要求 | 分类知识分布在 Worker、Web、Tavern；#22 已开始建立 policy | **值得集中** | **现在 / #21 前** |
+| 项目分类 + 内容要求 | content policy + taxonomy 已落地；legacy tags 继续作兼容镜像 | **已集中核心规则** | 后续改分类时维护 contract，不做 repo-wide 重构 |
 | 世界书 / 正则文件格式 | `project-content.ts` | **保持硬编码** | 只有 ST 格式变化时 |
 | 上传 / 字段 limits | 10MB、名称 100、版本名称 80、tag 数等有重复 | **可集中，但非当前优先** | 真正改限制或出现 drift 时 |
 | 权限判断 | `author OR admin` 在多个 endpoint 重复 | **值得提取为权限函数** | 做 admin / creator permission 功能时 |
@@ -117,7 +119,7 @@ src/CreativeWorkshop/
 
 ## 4. 分类 / Taxonomy：当前最需要记住的地方
 
-当前数据库基础标签仍是：
+旧 `tags` 基础标签兼容镜像仍是：
 
 ```text
 系统
@@ -126,7 +128,9 @@ src/CreativeWorkshop/
 事件
 ```
 
-其中当前产品语义里的“系统核心”仍存为 `系统`，不要仅为了改显示名称做数据库迁移。
+`project_type` 现在直接存 canonical `系统核心`；legacy `tags` 仍把它镜像为 `系统` 供旧客户端兼容。不要仅为了显示名称删除兼容镜像。
+
+Canonical `projectType` 是 `事件 / 系统核心 / 角色 / 扩展`；扩展另有 `extensionType = 规则 / 内容`。角色项目可使用结构化 `facets`，并同时保留 `customTags`；`displayTags` 最多 5 个，只能从已选 facets + customTags 中挑选。核心规则位于 `cloudflare/src/config/project-taxonomy.ts`，迁移为 `0008_project_taxonomy.sql` 与 `0009_project_display_tags.sql`。
 
 ### 当前涉及位置
 
@@ -162,7 +166,7 @@ tags.includes('角色')
 tags.includes('事件')
 ```
 
-这意味着 #21 真正拆分类前，需要再次检查这里。
+#21 taxonomy 已经落地；这里现在属于 legacy client compatibility seam。未来改 taxonomy 时仍要回归，但不要让旧客户端必须理解最新分类才能安装。
 
 ### 未来目标
 
@@ -227,7 +231,7 @@ cloudflare/src/endpoints/auth.ts
 - 上传文件：`10MB`
 - 项目名称：`100`
 - 版本名称：`80`
-- 创建时 tags：最多 `4`
+- 自定义标签 `customTags`：最多 `20`；首页展示 `displayTags`：最多 `5`
 - 项目列表默认 page size：`20`
 - 项目列表最大 page size：`50`
 - rejected login reminder 查询：`50`
@@ -252,7 +256,7 @@ cloudflare/src/utils/db.ts
 - 因重复限制造成真实 bug；
 - 新功能需要新增多组共享 limits。
 
-仅仅因为“现在重复了”不构成 #22 期间重构理由。
+仅仅因为“现在重复了”不构成当前审核 UX / P2 收尾阶段的重构理由。
 
 ---
 
@@ -504,22 +508,22 @@ DB / R2 存储结构
 
 ## 13. 当前 P2 的边界
 
-本次 audit 不改变 P2 顺序。
+#22 regex-only 与 #21 taxonomy 已经进入当前 staging 代码线；现在不要再按旧顺序重复实现。当前未进入 staging 的工作是连续审核 UX follow-up。
 
 当前方向：
 
 ```text
-#22 Checkpoint 1
-严格 ST 文件识别 + 中央 content policy
+staging baseline: #22 regex-only + #21 taxonomy/displayTags
+current local WIP: admin review continuous flow
 ↓
-staging 验证
+update smoke assertions + CSS / diff review + tests
 ↓
-#22 regex-only 完整生命周期
+commit → integrate/push origin/staging → deploy exact SHA
 ↓
-#21 taxonomy
+Master staging acceptance → owner PR only after acceptance
 ```
 
-不要在 #22 顺手做：
+当前审核 UX follow-up 不要顺手做：
 
 - limits 重构
 - OAuth 重构
@@ -534,17 +538,17 @@ staging 验证
 
 ## 14. 本次扫描时的工作区提醒
 
-扫描发生时主 worktree 为并行 UI 分支：
+2026-09-08 当前文档同步时，主 worktree 为审核 UX 任务分支：
 
 ```text
-feat/mobile-workshop-redesign
+feature/admin-review-continuous-flow
 ```
 
-同时存在 P2 本地修改和其他并行文件。
+代码 WIP 目前集中在 `cloudflare/src/endpoints/admin.ts` 与 `cloudflare/src/pages/home/modals.ts`；本次文档同步又修改了 live docs。Master 另外提出的角色标签继续优化应保持为后续独立 commit，不与审核 UX 混合。
 
 因此未来提交 P2 时：
 
 - 只 stage 明确的 P2 文件；
 - 不使用 `git add .`；
-- 不把 mobile UI / 临时 lockfile 意外混入 P2 commit；
+- 不把后续角色标签调整或其他并行 UI 工作意外混进审核 UX commit；
 - `origin/staging` 与 staging Worker 仍需分别验证 exact SHA。

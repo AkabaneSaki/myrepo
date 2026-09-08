@@ -1,6 +1,47 @@
 # Creative Workshop Creator Capability Audit — 2026-09-05
 
-Status: **audit record, updated after same-day fixes**
+Status: **historical audit record with 2026-09-08 current-status addendum**
+
+## 2026-09-08 Current-status addendum
+
+The findings below describe the 2026-09-05 state and are intentionally preserved as audit history. Before treating a “remaining issue” as current, use this addendum plus the latest code.
+
+### Findings now fixed in the current staging code line
+
+- **Published cover review isolation**: `ProjectCoverUpload` now creates/reuses the review draft first, then writes the cover under the draft project prefix. A newly created draft is cleaned up when the upload itself fails. Published cover bytes are not overwritten before approval.
+- **Actual worldbook/regex content validation**: both project and regex upload endpoints call `validateProjectContentText` on the submitted bytes/text rather than trusting MIME/frontend checks alone.
+- **Approval minimum-content validation**: admin approval re-reads review payloads, validates each supported payload, then applies `validateProjectContentPolicy`.
+- **Regex-only extension flow**: current policy is `系统核心 / 角色 / 事件 => worldbook required`, `扩展 => worldbook OR regex`. The current Web create/edit flow exposes the same either-content behavior for `扩展`, and install flow can proceed when only regex entries exist.
+- **Structured taxonomy**: project type / extension subtype / role facets / custom tags / homepage display tags are now normalized server-side. Legacy `tags` remains a compatibility mirror rather than the canonical model.
+
+Relevant current sources:
+
+```text
+cloudflare/src/config/project-content-policy.ts
+cloudflare/src/config/project-taxonomy.ts
+cloudflare/src/endpoints/projects.ts
+cloudflare/src/endpoints/admin.ts
+cloudflare/src/pages/home/modals.ts
+cloudflare/migrations/0008_project_taxonomy.sql
+cloudflare/migrations/0009_project_display_tags.sql
+```
+
+### Findings that still matter
+
+The following remain valid backlog unless a later task explicitly closes them:
+
+- create/edit submission is not fully atomic; metadata/draft creation and subsequent file uploads can still fail part-way through;
+- no-op edit guard is still desirable;
+- author/admin private test reads may still distort public download counters;
+- `隐藏` semantics still need a product decision between unlisted and truly private;
+- optional cover still needs an explicit remove-cover action;
+- validation/limits parity should be checked when those limits are next changed rather than triggering a broad refactor now.
+
+### Current review-UX follow-up
+
+`feature/admin-review-continuous-flow` is a local WIP on top of the current staging baseline. It does **not** change creator capabilities. Its goal is reviewer efficiency: remove internal trace metadata from normal review UI, keep it in admin logs/history, add previous/next navigation, and auto-open the next queued item after approve/reject.
+
+The 2026-09-05 sections below should therefore be read as historical evidence, not as the current TODO order.
 
 ## Scope
 

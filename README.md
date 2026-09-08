@@ -43,7 +43,8 @@
 - 项目列表、详情、创建、更新、删除
 - 项目文件、封面与正则文件上传
 - 点赞、订阅、可见性切换
-- 管理员审核、项目管理、管理员列表与日志查询
+- 管理员审核、连续审核队列、项目管理、管理员列表与审计日志查询
+- 结构化项目分类、扩展子类型、角色官方标签、自定义标签与首页展示标签
 - 基于 D1 的项目数据管理，表结构定义见 [`cloudflare/schema.sql`](cloudflare/schema.sql)
 
 ## 仓库结构
@@ -106,9 +107,18 @@ D1 的基础表结构定义在 [`cloudflare/schema.sql`](cloudflare/schema.sql)�
 - `projects`
 - `project_likes`
 - `project_subscribes`
+- `admin_action_logs`
+- `super_admins`
 - `admins`
 
 这些表用于支撑用户体系、项目管理、互动行为与后台审核功能。
+
+当前 Workshop 开发状态与架构边界优先看：
+
+- [`docs/plans/workshop-p2.md`](docs/plans/workshop-p2.md)：当前 P2 / 本地 WIP / staging 状态；
+- [`docs/audits/workshop-policy-architecture-reference-20260908.md`](docs/audits/workshop-policy-architecture-reference-20260908.md)：taxonomy、内容规则与维护边界；
+- [`cloudflare/README.md`](cloudflare/README.md)：Worker 目录、验证脚本与审核流程；
+- [`docs/GIT-WORKFLOW.md`](docs/GIT-WORKFLOW.md)：Git、staging Worker 与 production 的发布 SOP。
 
 ## 使用说明
 
