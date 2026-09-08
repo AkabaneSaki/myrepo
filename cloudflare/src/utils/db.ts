@@ -1,4 +1,13 @@
 import type { AppContext, ProjectReviewTarget } from '../types';
+import {
+  normalizeCustomTags,
+  normalizeExtensionType,
+  normalizeProjectFacets,
+  resolveProjectType,
+  type ExtensionType,
+  type ProjectFacets,
+  type ProjectType,
+} from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
@@ -215,6 +224,10 @@ export const projectDb = {
       authorId: string;
       authorName: string;
       authorAvatar: string;
+      projectType: ProjectType;
+      extensionType?: ExtensionType | null;
+      facets?: ProjectFacets;
+      customTags?: string[];
       tags?: string[];
       coverImage?: string;
       downloadUrl?: string;
@@ -237,9 +250,9 @@ export const projectDb = {
         `
 			INSERT INTO projects (
 				id, name, description, version, version_label, author_id, author_name, author_avatar,
-				status, download_url, file_size, has_ejs, has_character_artwork, tags, cover_image, root_project_id, published_project_id,
+				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, tags, cover_image, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -256,6 +269,10 @@ export const projectDb = {
         project.fileSize || null,
         project.hasEjs ? 1 : 0,
         project.hasCharacterArtwork ? 1 : 0,
+        project.projectType,
+        project.extensionType || null,
+        JSON.stringify(project.facets || {}),
+        JSON.stringify(project.customTags || []),
         JSON.stringify(project.tags || []),
         project.coverImage || null,
         project.rootProjectId || project.id,
@@ -305,6 +322,10 @@ export const projectDb = {
       description?: string;
       version?: string;
       versionLabel?: string | null;
+      projectType?: ProjectType;
+      extensionType?: ExtensionType | null;
+      facets?: ProjectFacets;
+      customTags?: string[];
       tags?: string[];
       coverImage?: string;
       downloadUrl?: string;
@@ -340,6 +361,22 @@ export const projectDb = {
     if (updates.versionLabel !== undefined) {
       setClauses.push('version_label = ?');
       values.push(updates.versionLabel);
+    }
+    if (updates.projectType !== undefined) {
+      setClauses.push('project_type = ?');
+      values.push(updates.projectType);
+    }
+    if (updates.extensionType !== undefined) {
+      setClauses.push('extension_type = ?');
+      values.push(updates.extensionType);
+    }
+    if (updates.facets !== undefined) {
+      setClauses.push('facets = ?');
+      values.push(JSON.stringify(updates.facets));
+    }
+    if (updates.customTags !== undefined) {
+      setClauses.push('custom_tags = ?');
+      values.push(JSON.stringify(updates.customTags));
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?');
@@ -467,6 +504,7 @@ export const projectDb = {
       pageSize: number;
       status?: string;
       authorId?: string;
+      projectType?: ProjectType;
       tag?: string;
       search?: string;
       sort?: 'published' | 'updated' | 'likes' | 'subscribes' | 'downloads';
@@ -494,6 +532,11 @@ export const projectDb = {
       values.push(options.authorId);
     }
 
+    if (options.projectType) {
+      conditions.push('p.project_type = ?');
+      values.push(options.projectType);
+    }
+
     if (options.tag) {
       conditions.push('p.tags LIKE ?');
       values.push(`%"${options.tag}"%`);
@@ -501,9 +544,9 @@ export const projectDb = {
 
     const searchTerm = options.search?.trim();
     if (searchTerm) {
-      conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
+      conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
       const searchPattern = `%${searchTerm}%`;
-      values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -775,7 +818,18 @@ export const projectDb = {
   createDraftFromPublished: async (
     c: AppContext,
     publishedProjectId: string,
-    updates: { name?: string; description?: string; version?: string; versionLabel?: string | null; tags?: string[]; coverImage?: string },
+    updates: {
+      name?: string;
+      description?: string;
+      version?: string;
+      versionLabel?: string | null;
+      projectType?: ProjectType;
+      extensionType?: ExtensionType | null;
+      facets?: ProjectFacets;
+      customTags?: string[];
+      tags?: string[];
+      coverImage?: string;
+    },
   ) => {
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
@@ -787,6 +841,10 @@ export const projectDb = {
         description: updates.description ?? existingDraft.description ?? '',
         version: nextVersion,
         versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : existingDraft.versionLabel,
+        projectType: updates.projectType ?? existingDraft.projectType,
+        extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
+        facets: updates.facets ?? existingDraft.facets,
+        customTags: updates.customTags ?? existingDraft.customTags,
         tags: updates.tags ?? existingDraft.tags,
         coverImage: updates.coverImage ?? existingDraft.coverImage ?? undefined,
       });
@@ -804,6 +862,10 @@ export const projectDb = {
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
+      projectType: updates.projectType ?? published.projectType,
+      extensionType: updates.extensionType !== undefined ? updates.extensionType : published.extensionType,
+      facets: updates.facets ?? published.facets,
+      customTags: updates.customTags ?? published.customTags,
       tags: updates.tags ?? published.tags,
       coverImage: updates.coverImage ?? published.coverImage ?? undefined,
       downloadUrl: published.downloadUrl || undefined,
@@ -973,6 +1035,28 @@ function parseProjectRow(row: Record<string, unknown>) {
     parsedTags = [];
   }
 
+  const projectType = resolveProjectType(row.project_type, parsedTags);
+  const extensionType = projectType === '扩展' ? normalizeExtensionType(row.extension_type) : null;
+
+  let rawFacets: unknown = {};
+  try {
+    rawFacets = typeof row.facets === 'string' && row.facets.trim() ? JSON.parse(row.facets) : {};
+  } catch {
+    rawFacets = {};
+  }
+  const facets = normalizeProjectFacets(rawFacets, projectType);
+
+  let rawCustomTags: unknown = undefined;
+  if (typeof row.custom_tags === 'string' && row.custom_tags.trim()) {
+    try {
+      const parsed = JSON.parse(row.custom_tags);
+      if (Array.isArray(parsed)) rawCustomTags = parsed;
+    } catch {
+      rawCustomTags = undefined;
+    }
+  }
+  const customTags = normalizeCustomTags(rawCustomTags, parsedTags);
+
   const rawVersion = String(row.version ?? '').trim();
   const version = normalizeProjectVersionBase(rawVersion);
   const explicitVersionLabel = typeof row.version_label === 'string' ? row.version_label.trim() : '';
@@ -999,6 +1083,10 @@ function parseProjectRow(row: Record<string, unknown>) {
     downloadsCount: Number(row.downloads_count ?? 0),
     hasEjs: Number(row.has_ejs ?? 0) === 1,
     hasCharacterArtwork: Number(row.has_character_artwork ?? 0) === 1,
+    projectType,
+    extensionType,
+    facets,
+    customTags,
     tags: parsedTags,
     coverImage: row.cover_image as string | null,
     worldbookEntriesPreview: [],

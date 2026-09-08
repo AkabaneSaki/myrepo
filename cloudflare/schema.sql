@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS projects (
     likes_count INTEGER NOT NULL DEFAULT 0,
     has_ejs INTEGER NOT NULL DEFAULT 0,
     has_character_artwork INTEGER NOT NULL DEFAULT 0,
+    project_type TEXT NOT NULL DEFAULT '系统核心',
+    extension_type TEXT,
+    facets TEXT NOT NULL DEFAULT '{}',
+    custom_tags TEXT NOT NULL DEFAULT '[]',
     tags TEXT DEFAULT '[]',
     cover_image TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -61,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_public_likes
     ON projects(status, is_published, visibility, likes_count DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_latest_approved
     ON projects(status, is_published, visibility, latest_approved_at DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_public_type_published
+    ON projects(status, is_published, visibility, project_type, latest_approved_at DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_author_status_reviewed
     ON projects(author_id, status, reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_guilds ON users(guilds);

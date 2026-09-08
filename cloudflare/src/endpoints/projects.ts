@@ -1,6 +1,7 @@
 import { Bool, Num, OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../types';
+import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import {
@@ -80,6 +81,7 @@ export class ProjectList extends OpenAPIRoute {
       query: z.object({
         page: Num({ description: 'Page number', default: 0 }),
         pageSize: Num({ description: 'Page size', default: 20 }),
+        projectType: z.enum(PROJECT_TYPES).optional().describe('Filter by project type'),
         tag: Str({ required: false }).describe('Filter by tag'),
         search: Str({ required: false }).describe('Search keyword'),
         sort: projectListSortSchema.default('published').describe('Sort mode'),
@@ -110,6 +112,10 @@ export class ProjectList extends OpenAPIRoute {
                   downloadsCount: z.number(),
                   hasEjs: z.boolean(),
                   hasCharacterArtwork: z.boolean(),
+                  projectType: z.enum(PROJECT_TYPES),
+                  extensionType: z.enum(['规则', '内容']).nullable(),
+                  facets: z.record(z.array(z.string())),
+                  customTags: z.array(z.string()),
                   tags: z.array(z.string()),
                   coverImage: z.string().nullable(),
                   likesCount: z.number(),
@@ -130,13 +136,14 @@ export class ProjectList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const data = await this.getValidatedData<typeof this.schema>();
-    const { page, pageSize, tag, search, sort } = data.query;
+    const { page, pageSize, projectType, tag, search, sort } = data.query;
     const payload = await getCurrentUserFromRequest(c);
 
     const result = await projectDb.list(c, {
       page,
       pageSize,
       approvedOnly: true, // 只返回已审核通过的项目
+      projectType,
       tag,
       search,
       sort,
@@ -312,6 +319,10 @@ export class ProjectCreate extends OpenAPIRoute {
               name: Str({ description: 'Project name' }),
               description: Str({ required: false }).describe('Project description'),
               versionLabel: z.string().max(80).nullable().optional(),
+              projectType: z.enum(PROJECT_TYPES).optional(),
+              extensionType: z.enum(['规则', '内容']).nullable().optional(),
+              facets: z.record(z.array(z.string())).optional(),
+              customTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).default([]),
               coverImage: Str({ required: false }),
             }),
@@ -350,8 +361,15 @@ export class ProjectCreate extends OpenAPIRoute {
         return c.json({ error: 'Version label must be text' }, 400);
       }
       const versionLabel = typeof rawVersionLabel === 'string' ? rawVersionLabel.trim() || null : rawVersionLabel;
-      const tags = Array.isArray(rawBody.tags) ? rawBody.tags.filter(tag => typeof tag === 'string') : [];
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
+
+      const taxonomyResult = normalizeProjectTaxonomyInput(rawBody as Record<string, unknown>, {
+        requireExtensionSubtypeForExplicitType: true,
+      });
+      if (!taxonomyResult.value) {
+        return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
+      }
+      const taxonomy = taxonomyResult.value;
 
       if (!name) {
         return c.json({ error: 'Project name is required' }, 400);
@@ -386,7 +404,11 @@ export class ProjectCreate extends OpenAPIRoute {
         authorId: payload.userId,
         authorName: payload.username,
         authorAvatar: payload.avatar || '',
-        tags,
+        projectType: taxonomy.projectType,
+        extensionType: taxonomy.extensionType,
+        facets: taxonomy.facets,
+        customTags: taxonomy.customTags,
+        tags: taxonomy.legacyTags,
         coverImage,
       });
 
@@ -785,6 +807,10 @@ export class ProjectUpdate extends OpenAPIRoute {
               name: Str({ required: false }),
               description: Str({ required: false }),
               versionLabel: z.string().max(80).nullable().optional(),
+              projectType: z.enum(PROJECT_TYPES).optional(),
+              extensionType: z.enum(['规则', '内容']).nullable().optional(),
+              facets: z.record(z.array(z.string())).optional(),
+              customTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).optional(),
               coverImage: Str({ required: false }),
             }),
@@ -807,12 +833,6 @@ export class ProjectUpdate extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { projectId } = data.params;
-    const updates = {
-      ...data.body,
-      ...(data.body.versionLabel !== undefined
-        ? { versionLabel: typeof data.body.versionLabel === 'string' ? data.body.versionLabel.trim() || null : null }
-        : {}),
-    };
 
     // 检查项目是否存在且属于当前用户
     const project = await projectDb.get(c, projectId);
@@ -823,6 +843,54 @@ export class ProjectUpdate extends OpenAPIRoute {
     if (project.authorId !== payload.userId && !payload.isAdmin) {
       return c.json({ error: 'Permission denied' }, 403);
     }
+
+    const taxonomyInput: Record<string, unknown> = {
+      tags: data.body.tags ?? project.tags,
+    };
+    if (data.body.projectType !== undefined) {
+      taxonomyInput.projectType = data.body.projectType;
+    } else if (data.body.tags === undefined) {
+      taxonomyInput.projectType = project.projectType;
+    }
+
+    const targetProjectType = data.body.projectType
+      ?? (data.body.tags !== undefined ? undefined : project.projectType);
+    if (data.body.extensionType !== undefined) {
+      taxonomyInput.extensionType = data.body.extensionType;
+    } else if (targetProjectType === '扩展' || (targetProjectType === undefined && project.projectType === '扩展')) {
+      taxonomyInput.extensionType = project.extensionType;
+    }
+
+    if (data.body.facets !== undefined) {
+      taxonomyInput.facets = data.body.facets;
+    } else if (targetProjectType === '角色' || (targetProjectType === undefined && project.projectType === '角色')) {
+      taxonomyInput.facets = project.facets;
+    }
+
+    if (data.body.customTags !== undefined) {
+      taxonomyInput.customTags = data.body.customTags;
+    } else if (data.body.tags === undefined) {
+      taxonomyInput.customTags = project.customTags;
+    }
+
+    const taxonomyResult = normalizeProjectTaxonomyInput(taxonomyInput, {
+      requireExtensionSubtypeForExplicitType: data.body.projectType === '扩展',
+    });
+    if (!taxonomyResult.value) {
+      return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
+    }
+    const taxonomy = taxonomyResult.value;
+    const updates = {
+      ...data.body,
+      projectType: taxonomy.projectType,
+      extensionType: taxonomy.extensionType,
+      facets: taxonomy.facets,
+      customTags: taxonomy.customTags,
+      tags: taxonomy.legacyTags,
+      ...(data.body.versionLabel !== undefined
+        ? { versionLabel: typeof data.body.versionLabel === 'string' ? data.body.versionLabel.trim() || null : null }
+        : {}),
+    };
 
     if (project.isPublished && project.status === 'approved') {
       const targetVersion = bumpProjectVersionWithLegacyFallback(project.version, 'patch');

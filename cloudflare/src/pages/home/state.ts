@@ -384,6 +384,8 @@ function getFilteredProjects() {
           project.description,
           project.authorGlobalName,
           project.authorName,
+          getProjectTypeDisplayLabel(project),
+          ...getProjectDetailTags(project),
           ...(Array.isArray(project.tags) ? project.tags : []),
         ]
           .filter(Boolean)

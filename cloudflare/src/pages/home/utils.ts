@@ -1,6 +1,6 @@
 export const homeUtilsScript = String.raw`
 const BASE_TAG_META = [
-  { value: '系统', label: '系统', typeClass: 'system' },
+  { value: '系统核心', label: '系统核心', typeClass: 'system' },
   { value: '扩展', label: '扩展', typeClass: 'extension' },
   { value: '角色', label: '角色', typeClass: 'character' },
   { value: '事件', label: '事件', typeClass: 'event' },
@@ -88,12 +88,60 @@ function getProjectPublishedAt(project) {
   return project?.latestApprovedAt || project?.createdAt || '';
 }
 
+function normalizeProjectTypeValue(value) {
+  const normalized = String(value || '').trim();
+  if (normalized === '系统') return '系统核心';
+  return BASE_TAGS.includes(normalized) ? normalized : '';
+}
+
 function getBaseTag(project) {
-  return (project.tags || []).find(tag => BASE_TAGS.includes(tag)) || BASE_TAGS[0];
+  const explicit = normalizeProjectTypeValue(project?.projectType ?? project?.project_type);
+  if (explicit) return explicit;
+  for (const tag of project?.tags || []) {
+    const legacyType = normalizeProjectTypeValue(tag);
+    if (legacyType) return legacyType;
+  }
+  return '系统核心';
+}
+
+function getProjectExtensionType(project) {
+  const value = String(project?.extensionType ?? project?.extension_type ?? '').trim();
+  return (PROJECT_TAXONOMY.extensionTypes || []).includes(value) ? value : '';
+}
+
+function getProjectTypeDisplayLabel(project) {
+  const projectType = getBaseTag(project);
+  const extensionType = projectType === '扩展' ? getProjectExtensionType(project) : '';
+  return extensionType ? projectType + ' · ' + extensionType : projectType;
+}
+
+function getProjectCustomTags(project) {
+  const explicit = project?.customTags ?? project?.custom_tags;
+  if (Array.isArray(explicit)) return explicit.map(tag => String(tag).trim()).filter(Boolean);
+  return (project?.tags || [])
+    .map(tag => String(tag).trim())
+    .filter(tag => tag && !normalizeProjectTypeValue(tag));
+}
+
+function getProjectFacetTags(project) {
+  const facets = project?.facets && typeof project.facets === 'object' && !Array.isArray(project.facets) ? project.facets : {};
+  const result = [];
+  for (const key of Object.keys(PROJECT_TAXONOMY.characterFacets || {})) {
+    const values = Array.isArray(facets[key]) ? facets[key] : [];
+    values.forEach(value => result.push(key + ' · ' + String(value)));
+  }
+  return result;
+}
+
+function getProjectDetailTags(project) {
+  return [
+    ...getProjectFacetTags(project),
+    ...getProjectCustomTags(project),
+  ];
 }
 
 function getTypeClassByBaseTag(baseTag) {
-  const matched = BASE_TAG_META.find(item => item.value === baseTag);
+  const matched = BASE_TAG_META.find(item => item.value === normalizeProjectTypeValue(baseTag));
   return matched ? matched.typeClass : 'system';
 }
 
@@ -103,7 +151,7 @@ function getTypeClass(project) {
 
 function matchProjectBaseTag(project, activeBaseTag) {
   if (!activeBaseTag || activeBaseTag === 'all') return true;
-  return getBaseTag(project) === activeBaseTag;
+  return getBaseTag(project) === normalizeProjectTypeValue(activeBaseTag);
 }
 
 function getAuthorName(project) {

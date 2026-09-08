@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { CHARACTER_FACET_OPTIONS, EXTENSION_TYPES, MAX_CUSTOM_TAGS, PROJECT_TYPES } from './config/project-taxonomy';
 import type { Env } from './env';
 
 export type AppContext = Context<{ Bindings: Env }>;
@@ -10,6 +11,22 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>;
 
 export const ProjectReviewTarget = z.enum(['project', 'draft']);
 export type ProjectReviewTarget = z.infer<typeof ProjectReviewTarget>;
+
+export const ProjectCategory = z.enum(PROJECT_TYPES);
+export type ProjectCategory = z.infer<typeof ProjectCategory>;
+
+export const ProjectExtensionType = z.enum(EXTENSION_TYPES);
+export type ProjectExtensionType = z.infer<typeof ProjectExtensionType>;
+
+export const ProjectFacets = z.object({
+  种族: z.array(z.enum(CHARACTER_FACET_OPTIONS.种族)).optional(),
+  身份: z.array(z.enum(CHARACTER_FACET_OPTIONS.身份)).optional(),
+  个性: z.array(z.enum(CHARACTER_FACET_OPTIONS.个性)).optional(),
+  外貌特征: z.array(z.enum(CHARACTER_FACET_OPTIONS.外貌特征)).optional(),
+  组织: z.array(z.enum(CHARACTER_FACET_OPTIONS.组织)).optional(),
+  势力: z.array(z.enum(CHARACTER_FACET_OPTIONS.势力)).optional(),
+});
+export type ProjectFacets = z.infer<typeof ProjectFacets>;
 
 const ProjectEntryInspection = z.object({
   hasEjs: z.boolean().default(false).describe('系统检测到条目包含 EJS'),
@@ -102,7 +119,11 @@ export const Project = z.object({
   downloadsCount: z.number().int().min(0).default(0).describe('下载次数'),
   hasEjs: z.boolean().default(false).describe('项目内容静态检测到 EJS'),
   hasCharacterArtwork: z.boolean().default(false).describe('项目内容静态检测到完整角色立绘模板'),
-  tags: z.array(z.string()).default([]).describe('项目标签'),
+  projectType: ProjectCategory.default('系统核心').describe('项目基础分类'),
+  extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型，仅扩展项目使用'),
+  facets: ProjectFacets.default({}).describe('角色官方属性标签'),
+  customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).default([]).describe('创作者自定义标签'),
+  tags: z.array(z.string()).default([]).describe('旧客户端兼容标签镜像'),
   coverImage: z.string().optional().describe('封面图片 URL'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),
   regexEntriesPreview: z.array(RegexEntryPreview).default([]).describe('正则条目预览'),
@@ -132,7 +153,8 @@ export const ProjectListQuery = z.object({
   pageSize: z.number().int().min(1).max(50).default(20).describe('每页数量'),
   status: ProjectStatus.optional().describe('审核状态筛选'),
   authorId: z.string().optional().describe('作者 ID 筛选'),
-  tag: z.string().optional().describe('标签筛选'),
+  projectType: ProjectCategory.optional().describe('项目基础分类筛选'),
+  tag: z.string().optional().describe('旧标签筛选'),
   search: z.string().optional().describe('搜索关键词'),
   sort: z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']).default('published').describe('排序方式'),
 });
@@ -142,7 +164,11 @@ export const ProjectCreateRequest = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
-  tags: z.array(z.string()).default([]).describe('项目标签'),
+  projectType: ProjectCategory.optional().describe('项目基础分类；旧客户端可继续只发送 tags'),
+  extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
+  facets: ProjectFacets.optional().describe('角色官方属性标签'),
+  customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).optional().describe('创作者自定义标签'),
+  tags: z.array(z.string()).default([]).describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
 });
 
@@ -151,7 +177,11 @@ export const ProjectUpdateRequest = z.object({
   name: z.string().optional().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
-  tags: z.array(z.string()).optional().describe('项目标签'),
+  projectType: ProjectCategory.optional().describe('项目基础分类'),
+  extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
+  facets: ProjectFacets.optional().describe('角色官方属性标签'),
+  customTags: z.array(z.string()).max(MAX_CUSTOM_TAGS).optional().describe('创作者自定义标签'),
+  tags: z.array(z.string()).optional().describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
 });
 

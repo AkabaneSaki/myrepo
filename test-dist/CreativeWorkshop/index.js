@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -578,6 +578,73 @@ async function updateCreativeWorkshopRegex(projectId, expectedVersion, legacyPro
     return installCreativeWorkshopRegex(projectId, undefined, expectedVersion, legacyProjectName);
 }
 
+;// ./src/CreativeWorkshop/services/project-type.ts
+const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
+const CREATIVE_WORKSHOP_EXTENSION_TYPES = ['规则', '内容'];
+function normalizeProjectType(value) {
+    if (typeof value !== 'string')
+        return null;
+    const normalized = value.trim();
+    if (normalized === '系统')
+        return '系统核心';
+    return CREATIVE_WORKSHOP_PROJECT_TYPES.includes(normalized)
+        ? normalized
+        : null;
+}
+function normalizeExtensionType(value) {
+    if (typeof value !== 'string')
+        return null;
+    const normalized = value.trim();
+    return CREATIVE_WORKSHOP_EXTENSION_TYPES.includes(normalized)
+        ? normalized
+        : null;
+}
+function normalizeLegacyTags(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .filter((tag) => typeof tag === 'string')
+        .map(tag => tag.trim())
+        .filter(Boolean);
+}
+function resolveCreativeWorkshopProjectType(project) {
+    if (!project || typeof project !== 'object')
+        return '系统核心';
+    const explicitType = normalizeProjectType(project.projectType ?? project.project_type);
+    if (explicitType)
+        return explicitType;
+    const tags = normalizeLegacyTags(project.tags);
+    if (tags.includes('系统') || tags.includes('系统核心'))
+        return '系统核心';
+    if (tags.includes('角色'))
+        return '角色';
+    if (tags.includes('事件'))
+        return '事件';
+    if (tags.includes('扩展'))
+        return '扩展';
+    return '系统核心';
+}
+function resolveCreativeWorkshopExtensionType(project) {
+    if (!project || resolveCreativeWorkshopProjectType(project) !== '扩展')
+        return null;
+    return normalizeExtensionType(project.extensionType ?? project.extension_type);
+}
+function getCreativeWorkshopProjectTypeLabel(project) {
+    const projectType = resolveCreativeWorkshopProjectType(project);
+    if (projectType !== '扩展')
+        return projectType;
+    const extensionType = resolveCreativeWorkshopExtensionType(project);
+    return extensionType ? `${extensionType}扩展` : '扩展';
+}
+function formatCreativeWorkshopEntryName(entryName, project, projectName) {
+    const projectType = resolveCreativeWorkshopProjectType(project);
+    if (projectType === '系统核心') {
+        return entryName.startsWith('命定系统-') ? entryName : `命定系统-${entryName}`;
+    }
+    const typeLabel = getCreativeWorkshopProjectTypeLabel(project);
+    return entryName.startsWith('[DLC]') ? entryName : `[DLC][${typeLabel}][${projectName}]${entryName}`;
+}
+
 ;// ./src/CreativeWorkshop/services/worldbook-normalize.ts
 function getCreativeWorkshopWorldbookEntryKey(entry, index) {
     if (_.isString(entry.entryKey) && entry.entryKey)
@@ -703,6 +770,7 @@ function getCreativeWorkshopFiniteNumber(entry, rawPath, previewPath, defaultVal
 
 
 
+
 function getCurrentWorldbookName() {
     const charWorldbooks = getCharWorldbookNames('current');
     if (!charWorldbooks.primary)
@@ -725,13 +793,6 @@ async function ensureTargetWorldbook(worldbookName) {
         });
     }
     return target;
-}
-function renameEntry(entryName, tags, projectName) {
-    if (tags.includes('系统')) {
-        return entryName.startsWith('命定系统-') ? entryName : `命定系统-${entryName}`;
-    }
-    const type = tags.includes('角色') ? '角色' : tags.includes('事件') ? '事件' : '扩展';
-    return entryName.startsWith('[DLC]') ? entryName : `[DLC][${type}][${projectName}]${entryName}`;
 }
 function arrayField(entry, rawPath, previewPath) {
     const rawValue = _.get(entry, rawPath);
@@ -802,7 +863,7 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName) 
         return;
     await updateWorldbookWith(worldbookName, worldbook => {
         prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
-            const name = renameEntry(entry.comment || entry.name || `条目${index + 1}`, detail.project.tags || [], detail.project.name || '未命名项目');
+            const name = formatCreativeWorkshopEntryName(entry.comment || entry.name || `条目${index + 1}`, detail.project, detail.project.name || '未命名项目');
             const stableKey = `${projectId}:${entryKey}`;
             const legacyKey = `${projectId}:${index}`;
             const existingIndex = worldbook.findIndex(item => {

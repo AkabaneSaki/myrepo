@@ -5,6 +5,7 @@ import {
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail, fetchCreativeWorkshopProjectWorldbookSource } from './project-fetch';
+import { formatCreativeWorkshopEntryName } from './project-type';
 import {
   getCreativeWorkshopFiniteNumber,
   getCreativeWorkshopPositionRole,
@@ -39,14 +40,6 @@ async function ensureTargetWorldbook(worldbookName: string): Promise<string> {
   }
 
   return target;
-}
-
-function renameEntry(entryName: string, tags: string[], projectName: string): string {
-  if (tags.includes('系统')) {
-    return entryName.startsWith('命定系统-') ? entryName : `命定系统-${entryName}`;
-  }
-  const type = tags.includes('角色') ? '角色' : tags.includes('事件') ? '事件' : '扩展';
-  return entryName.startsWith('[DLC]') ? entryName : `[DLC][${type}][${projectName}]${entryName}`;
 }
 
 function arrayField(entry: Record<string, any>, rawPath: string, previewPath: string) {
@@ -137,9 +130,9 @@ async function applyPreparedProject(
 
   await updateWorldbookWith(worldbookName, worldbook => {
     prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
-      const name = renameEntry(
+      const name = formatCreativeWorkshopEntryName(
         entry.comment || entry.name || `条目${index + 1}`,
-        detail.project.tags || [],
+        detail.project,
         detail.project.name || '未命名项目',
       );
       const stableKey = `${projectId}:${entryKey}`;

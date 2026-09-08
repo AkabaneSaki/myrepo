@@ -149,7 +149,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   });
   const baseTag = getActivePublicBaseTag();
   if (baseTag && baseTag !== 'all') {
-    params.set('tag', baseTag);
+    params.set('projectType', baseTag);
   }
   const searchKeyword = String(state.searchKeyword || '').trim();
   if (searchKeyword) {

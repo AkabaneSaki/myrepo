@@ -169,6 +169,88 @@ try {
   await approve(metadataDraft.projectId);
   cleanupIds.delete(metadataDraft.projectId);
 
+  const invalidStructuredExtension = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Validation Structured Extension Missing Type',
+      description: 'taxonomy validation test',
+      projectType: '扩展',
+      customTags: [],
+      tags: ['扩展'],
+    },
+    expected: 400,
+  });
+  assert.match(String(invalidStructuredExtension?.error || ''), /规则|内容/);
+
+  const structuredCharacter = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Validation Structured Character',
+      description: 'taxonomy lifecycle test',
+      projectType: '角色',
+      facets: {
+        种族: ['人鱼'],
+        身份: ['圣女'],
+        个性: ['hnh'],
+        外貌特征: ['白发红瞳'],
+        组织: ['教会/神殿'],
+        势力: ['王国'],
+      },
+      customTags: ['纯爱', '慢热'],
+      tags: ['角色', '纯爱', '慢热'],
+    },
+  });
+  cleanupIds.add(structuredCharacter.projectId);
+  await api(`/api/projects/${structuredCharacter.projectId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: worldbook,
+  });
+
+  const structuredCharacterDraftDetail = await api(`/api/projects/${structuredCharacter.projectId}`, { token: creatorToken });
+  assert.equal(structuredCharacterDraftDetail.project.projectType, '角色');
+  assert.equal(structuredCharacterDraftDetail.project.extensionType, null);
+  assert.deepEqual(structuredCharacterDraftDetail.project.facets.种族, ['人鱼']);
+  assert.deepEqual(structuredCharacterDraftDetail.project.facets.个性, ['hnh']);
+  assert.deepEqual(structuredCharacterDraftDetail.project.customTags, ['纯爱', '慢热']);
+  assert.deepEqual(structuredCharacterDraftDetail.project.tags, ['角色', '纯爱', '慢热']);
+  await approve(structuredCharacter.projectId);
+
+  const structuredCharacterPublished = await api(`/api/projects/${structuredCharacter.projectId}`);
+  assert.equal(structuredCharacterPublished.project.projectType, '角色');
+  assert.deepEqual(structuredCharacterPublished.project.facets.势力, ['王国']);
+  assert.deepEqual(structuredCharacterPublished.project.customTags, ['纯爱', '慢热']);
+
+  const taxonomyDraft = await api(`/api/projects/${structuredCharacter.projectId}`, {
+    method: 'PUT',
+    token: creatorToken,
+    body: {
+      projectType: '扩展',
+      extensionType: '规则',
+      facets: {},
+      customTags: ['战斗'],
+      tags: ['扩展', '战斗'],
+    },
+  });
+  cleanupIds.add(taxonomyDraft.projectId);
+  const taxonomyDraftDetail = await api(`/api/projects/${taxonomyDraft.projectId}`, { token: creatorToken });
+  assert.equal(taxonomyDraftDetail.project.projectType, '扩展');
+  assert.equal(taxonomyDraftDetail.project.extensionType, '规则');
+  assert.deepEqual(taxonomyDraftDetail.project.facets, {});
+  assert.deepEqual(taxonomyDraftDetail.project.customTags, ['战斗']);
+  assert.deepEqual(taxonomyDraftDetail.project.tags, ['扩展', '战斗']);
+  await approve(taxonomyDraft.projectId);
+  cleanupIds.delete(taxonomyDraft.projectId);
+
+  const taxonomyPublished = await api(`/api/projects/${structuredCharacter.projectId}`);
+  assert.equal(taxonomyPublished.project.projectType, '扩展');
+  assert.equal(taxonomyPublished.project.extensionType, '规则');
+  assert.deepEqual(taxonomyPublished.project.facets, {});
+  assert.deepEqual(taxonomyPublished.project.customTags, ['战斗']);
+  assert.deepEqual(taxonomyPublished.project.tags, ['扩展', '战斗']);
+
   const roleRegexOnly = await createProject('Validation Regex Only');
   cleanupIds.add(roleRegexOnly.projectId);
   await api(`/api/projects/${roleRegexOnly.projectId}/upload-regex`, {

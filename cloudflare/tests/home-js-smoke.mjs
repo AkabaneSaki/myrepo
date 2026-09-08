@@ -129,7 +129,10 @@ assert.equal(advertisedImportMatch[1], clientVersionMatch[1], 'Advertised Worksh
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" multiple/);
 assert.doesNotMatch(fragments.homeModalsScript, /!payload\.name \|\| !fileInput\.files\[0\]/);
-assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.tags\[0\], hasWorldbook, hasRegex\)/);
+assert.match(fragments.homeModalsScript, /validateProjectTaxonomySelection\(payload\)/);
+assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.projectType, hasWorldbook, hasRegex\)/);
+assert.match(fragments.homeModalsScript, /id=\"extensionType\"/);
+assert.match(fragments.homeModalsScript, /data-facet-group/);
 assert.match(fragments.homeModalsScript, /preparedWorldbook = hasWorldbook \?/);
 assert.match(fragments.homeModalsScript, /async function beginProjectInstall/);
 assert.match(fragments.homeModalsScript, /if \(worldbookEntries\.length > 0\)/);
@@ -167,7 +170,9 @@ assert.doesNotMatch(fragments.homeModalsScript, /versionBump|Patch|Minor|Major/)
 assert.match(fragments.homeCardsRenderScript, /撤回更新/);
 assert.match(fragments.homeCardsRenderScript, /tag-system-ejs/);
 assert.match(fragments.homeCardsRenderScript, /tag-system-artwork/);
-assert.match(fragments.homeCardsRenderScript, /const tagsHtml = systemTagsHtml \+ creatorTagsHtml/);
+assert.match(fragments.homeCardsRenderScript, /const tagsHtml = systemTagsHtml/);
+assert.doesNotMatch(fragments.homeCardsRenderScript, /creatorTagsHtml/);
+assert.match(fragments.homeCardsRenderScript, /getProjectTypeDisplayLabel\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /delete-project-btn/);
 assert.match(fragments.homeCardsRenderScript, /editButtonHtml = isReviewDraftProject && isPendingProject/);
 assert.match(fragments.homeCardsRenderScript, /role=\"button\" tabindex=\"0\"/);
@@ -207,7 +212,7 @@ const cardRenderUi = Function(
   'escapeHtml',
   'getCoverImageSources',
   'getTypeClass',
-  'getBaseTag',
+  'getProjectTypeDisplayLabel',
   'getAuthorName',
   'getAuthorAvatar',
   'isProjectEditable',
@@ -217,6 +222,7 @@ const cardRenderUi = Function(
   'getProjectRejectReason',
   'formatDate',
   'getProjectPublishedAt',
+  'PROJECT_TAXONOMY',
   `${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
 )(
   () => ({ liked: false, count: 0 }),
@@ -237,6 +243,7 @@ const cardRenderUi = Function(
   () => '',
   value => String(value),
   () => '2026/9/6',
+  { systemSignals: { ejs: { label: 'EJS', card: true }, characterArtwork: { label: '👍🏻有角色立绘', card: true } } },
 );
 const legacyCardHtml = cardRenderUi.renderProjectCard({ id: 'legacy', name: 'Legacy', version: '1.2.3', versionLabel: null, tags: [], downloadsCount: 0 });
 assert.match(legacyCardHtml, /card-meta card-meta--version"><span>1\.2\.3<\/span> <span>2026\/9\/6<\/span>/);
@@ -368,8 +375,13 @@ assert.equal(legacyConflictCard.installDisabled, true);
 assert.equal(legacyConflictCard.installText, '旧版安装待识别');
 
 const projectFormUi = Function(
+  'PROJECT_TAXONOMY',
   `${fragments.homeUtilsScript}\n${fragments.homeModalsScript}; return { buildProjectFormHtml };`,
-)();
+)({
+  extensionTypes: ['规则', '内容'],
+  characterFacets: { 种族: ['人类'], 身份: ['法师'] },
+  maxCustomTags: 4,
+});
 const createProjectFormHtml = projectFormUi.buildProjectFormHtml('create');
 assert.match(createProjectFormHtml, /id="projectForm"/);
 assert.match(createProjectFormHtml, /id="fileInput"/);
@@ -417,14 +429,21 @@ const rawAppExpression = withoutImports.slice(start + marker.length).trim();
 const appExpression = rawAppExpression.endsWith(';') ? rawAppExpression.slice(0, -1) : rawAppExpression;
 const fragmentNames = Object.keys(fragments);
 const testProjectContentPolicy = {
-  系统: { required: ['worldbook'], anyOf: [] },
+  系统核心: { required: ['worldbook'], anyOf: [] },
   角色: { required: ['worldbook'], anyOf: [] },
   事件: { required: ['worldbook'], anyOf: [] },
   扩展: { required: [], anyOf: ['worldbook', 'regex'] },
 };
-const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', `return (${appExpression});`)(
+const testProjectTaxonomy = {
+  projectTypes: ['事件', '系统核心', '角色', '扩展'],
+  extensionTypes: ['规则', '内容'],
+  characterFacets: { 种族: ['人类'], 身份: ['法师'] },
+  maxCustomTags: 4,
+};
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
+  JSON.stringify(testProjectTaxonomy),
 );
 assert.equal(typeof homeScript, 'string');
 new Function(homeScript);

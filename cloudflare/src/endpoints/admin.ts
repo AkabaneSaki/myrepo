@@ -51,7 +51,13 @@ async function readDirectReviewContentText(
 
 async function validateReviewPayloads(
   c: AppContext,
-  project: { id: string; publishedProjectId?: string | null; tags?: string[] },
+  project: {
+    id: string;
+    publishedProjectId?: string | null;
+    projectType?: unknown;
+    project_type?: unknown;
+    tags?: string[];
+  },
 ): Promise<{ valid: true } | { valid: false; error: string }> {
   const presence = { worldbook: false, regex: false };
 
@@ -69,7 +75,7 @@ async function validateReviewPayloads(
     presence[kind] = true;
   }
 
-  const policyValidation = validateProjectContentPolicy(project.tags, presence);
+  const policyValidation = validateProjectContentPolicy(project, presence);
   if (policyValidation.valid === false) {
     return { valid: false, error: policyValidation.error };
   }
@@ -308,6 +314,10 @@ export class AdminReview extends OpenAPIRoute {
         description: project.description || '',
         version: approvedVersion || project.version,
         versionLabel: project.versionLabel ?? null,
+        projectType: project.projectType,
+        extensionType: project.extensionType,
+        facets: project.facets,
+        customTags: project.customTags,
         tags: project.tags,
         coverImage: publishedAssets.coverImage || project.coverImage || undefined,
         downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,

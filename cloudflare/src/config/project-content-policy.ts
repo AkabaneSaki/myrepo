@@ -1,7 +1,8 @@
 import type { ProjectEntryKind } from '../utils/project-content';
+import { PROJECT_TYPES, resolveProjectType, type ProjectType } from './project-taxonomy';
 
-export const PROJECT_BASE_TAGS = ['系统', '扩展', '角色', '事件'] as const;
-export type ProjectBaseTag = (typeof PROJECT_BASE_TAGS)[number];
+export const PROJECT_BASE_TAGS = PROJECT_TYPES;
+export type ProjectBaseTag = ProjectType;
 
 export type ProjectContentPresence = Record<ProjectEntryKind, boolean>;
 
@@ -16,33 +17,40 @@ type ProjectContentRule = {
  * Keep changeable gameplay rules here instead of scattering them across UI,
  * upload endpoints, and review logic. File-format validity (what counts as a
  * SillyTavern worldbook/regex JSON) belongs in utils/project-content.ts.
- *
- * Stored tag `系统` is the current "系统核心" category.
  */
-export const PROJECT_CONTENT_POLICY: Record<ProjectBaseTag, ProjectContentRule> = {
-  系统: { required: ['worldbook'], anyOf: [] },
+export const PROJECT_CONTENT_POLICY: Record<ProjectType, ProjectContentRule> = {
+  系统核心: { required: ['worldbook'], anyOf: [] },
   角色: { required: ['worldbook'], anyOf: [] },
   事件: { required: ['worldbook'], anyOf: [] },
   扩展: { required: [], anyOf: ['worldbook', 'regex'] },
 };
 
-export function resolveProjectBaseTag(tags: readonly string[] | null | undefined): ProjectBaseTag {
-  const matched = PROJECT_BASE_TAGS.filter(tag => tags?.includes(tag));
-  const strictMatch = matched.find(tag => tag !== '扩展');
-  // Match the existing UI fallback and fail closed: unknown/missing base tags
-  // inherit the stricter system policy rather than silently allowing regex-only.
-  return strictMatch ?? (matched.includes('扩展') ? '扩展' : '系统');
+type ProjectContentIdentity =
+  | readonly string[]
+  | {
+      projectType?: unknown;
+      project_type?: unknown;
+      tags?: readonly string[] | null;
+    }
+  | null
+  | undefined;
+
+export function resolveProjectBaseTag(input: ProjectContentIdentity): ProjectType {
+  if (Array.isArray(input)) return resolveProjectType(undefined, input);
+  if (!input || typeof input !== 'object') return '系统核心';
+  const identity = input as Exclude<ProjectContentIdentity, readonly string[] | null | undefined>;
+  return resolveProjectType(identity.projectType ?? identity.project_type, identity.tags);
 }
 
 export type ProjectContentPolicyValidation =
-  | { valid: true; baseTag: ProjectBaseTag }
-  | { valid: false; baseTag: ProjectBaseTag; error: string };
+  | { valid: true; baseTag: ProjectType }
+  | { valid: false; baseTag: ProjectType; error: string };
 
 export function validateProjectContentPolicy(
-  tags: readonly string[] | null | undefined,
+  input: ProjectContentIdentity,
   presence: ProjectContentPresence,
 ): ProjectContentPolicyValidation {
-  const baseTag = resolveProjectBaseTag(tags);
+  const baseTag = resolveProjectBaseTag(input);
   const rule = PROJECT_CONTENT_POLICY[baseTag];
 
   for (const kind of rule.required) {
