@@ -201,10 +201,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .toast { position:fixed; bottom:20px; right:20px; background:#1E293B; color:white; padding:12px 24px; border-radius:30px; box-shadow:0 8px 20px black; z-index:10000; border-left:4px solid #6366F1; }
 .admin-review-modal,.admin-review-detail-modal { max-width:1040px; }
 .admin-review-queue { display:flex; flex-direction:column; gap:14px; }
+.admin-review-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; border:1px solid rgba(148,163,184,.14); border-radius:14px; background:rgba(15,23,42,.42); }
+.admin-review-sort-control { display:inline-flex; align-items:center; gap:8px; color:rgba(226,232,240,.72); font-size:.8rem; }
+.admin-review-sort-control select { min-width:118px; padding:7px 30px 7px 10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; background:#111827; color:#E5E7EB; }
+.admin-review-type-filters { display:flex; flex-wrap:wrap; gap:6px; }
+.admin-review-filter-btn { border:1px solid rgba(148,163,184,.18); border-radius:999px; padding:6px 10px; background:rgba(30,41,59,.58); color:rgba(226,232,240,.72); font-size:.76rem; cursor:pointer; }
+.admin-review-filter-btn:hover { border-color:rgba(129,140,248,.42); color:#E0E7FF; }
+.admin-review-filter-btn.active { border-color:rgba(129,140,248,.58); background:rgba(99,102,241,.2); color:#EEF2FF; }
 .admin-review-queue-summary { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border:1px solid rgba(99,102,241,0.22); background:rgba(30,41,59,0.52); border-radius:14px; color:rgba(226,232,240,0.78); font-size:0.86rem; }
 .admin-review-queue-summary strong { color:#E0E7FF; font-size:1.05rem; }
 .admin-review-list { display:flex; flex-direction:column; gap:12px; }
-.admin-review-card { background:linear-gradient(145deg,rgba(30,41,59,0.92),rgba(15,23,42,0.88)); border:1px solid rgba(148,163,184,0.16); border-radius:16px; padding:16px; box-shadow:0 10px 26px rgba(0,0,0,0.14); transition:transform .18s ease,border-color .18s ease,background .18s ease; }
+.admin-review-card { background:linear-gradient(145deg,rgba(30,41,59,0.92),rgba(15,23,42,0.88)); border:1px solid rgba(148,163,184,0.16); border-radius:16px; padding:14px; box-shadow:0 10px 26px rgba(0,0,0,0.14); transition:transform .18s ease,border-color .18s ease,background .18s ease; cursor:pointer; }
+.admin-review-card:focus-visible { outline:2px solid rgba(129,140,248,.7); outline-offset:2px; }
+.admin-review-card-grid { display:grid; grid-template-columns:112px minmax(0,1fr); gap:14px; align-items:stretch; }
+.admin-review-thumb { min-height:82px; border-radius:12px; background-position:center; background-size:cover; background-repeat:no-repeat; border:1px solid rgba(148,163,184,.14); background-color:rgba(15,23,42,.7); }
+.admin-review-card-body { min-width:0; display:flex; flex-direction:column; }
+.admin-review-title-line { display:flex; align-items:center; gap:8px; min-width:0; }
+.admin-review-title-line .type-badge { flex:none; }
+.admin-review-title-line .admin-review-title { min-width:0; }
 .admin-review-card:hover { border-color:rgba(129,140,248,0.35); }
 .admin-review-card.is-skipped { animation:adminReviewSkip .45s ease; }
 @keyframes adminReviewSkip { 0% { transform:translateX(0); opacity:1; } 45% { transform:translateX(18px); opacity:.55; } 100% { transform:translateX(0); opacity:1; } }
@@ -216,8 +230,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-state { flex:none; padding:5px 9px; border-radius:999px; font-size:.72rem; color:#FDE68A; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.22); }
 .admin-review-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .admin-review-meta-item { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:5px 9px; border-radius:999px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.07); color:rgba(226,232,240,.7); font-size:.75rem; }
-.admin-review-desc-preview { margin:12px 0 14px; color:rgba(226,232,240,.82); line-height:1.55; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; white-space:pre-wrap; word-break:break-word; }
-.admin-review-card-actions { display:flex; justify-content:flex-end; gap:8px; }
+
+.admin-review-card-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 .admin-review-card-actions .btn { min-width:118px; justify-content:center; }
 .admin-review-detail-shell { display:flex; flex-direction:column; gap:16px; min-height:0; }
 .admin-review-summary { display:flex; flex-direction:column; gap:14px; padding:18px; border-radius:18px; border:1px solid rgba(148,163,184,.16); background:linear-gradient(145deg,rgba(30,41,59,.92),rgba(15,23,42,.88)); }
@@ -225,6 +239,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-summary-heading { min-width:0; flex:1; }
 .admin-review-summary-heading h3 { margin:0 0 5px; font-size:1.25rem; line-height:1.35; }
 .admin-review-summary-heading > div { color:rgba(226,232,240,.68); font-size:.82rem; }
+.admin-review-detail-times { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:6px; color:rgba(148,163,184,.78)!important; font-size:.76rem!important; }
 .admin-review-signals { display:flex; flex-wrap:wrap; gap:8px; }
 .admin-review-signal { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:.76rem; color:#CBD5E1; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); }
 .admin-review-signal--info { color:#C7D2FE; border-color:rgba(99,102,241,.34); background:rgba(99,102,241,.1); }
@@ -378,6 +393,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   @media (max-width: 640px) { .header-discover { width:100%; min-width:0; } .header-search { max-width:none; } .tag-filter { width:100%; } .modal-overlay { padding:calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); } .modal-content { max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius:18px; } .modal-header { padding:12px 12px 8px 18px; } .modal-header h2 { font-size:1.2rem; min-width:0; } .modal-body { padding:14px 18px calc(18px + env(safe-area-inset-bottom)); } .detail-cover { height:180px; } .detail-summary { padding:16px; } .detail-summary--split { grid-template-columns:1fr; } .detail-card-row { align-items:flex-start; } }
   @media (max-width: 960px) { .header-left { flex-wrap:wrap; } }
   @media (max-width: 640px) { .release-notice { max-width:100%; white-space:normal; text-align:left; } }
-  @media (max-width: 640px) { .admin-review-queue-summary { align-items:flex-start; flex-direction:column; } .admin-review-card-head { flex-wrap:wrap; } .admin-review-state { margin-left:58px; } .admin-review-meta-item { border-radius:10px; } .admin-review-card-actions { display:grid; grid-template-columns:1fr 1fr; } .admin-review-card-actions .btn { min-width:0; } .admin-review-summary-head { flex-wrap:wrap; } .admin-review-description-hint { display:none; } .admin-review-sticky-actions { display:grid; grid-template-columns:1fr 1fr; padding:10px; } .admin-review-sticky-actions .btn { min-width:0; } .admin-review-diff-summary-head { align-items:flex-start; flex-direction:column; } .admin-review-diff-entry > summary { grid-template-columns:auto minmax(0,1fr); } .admin-review-diff-fields { grid-column:1 / -1; text-align:left; } .admin-review-diff-code { max-height:60dvh; font-size:.7rem; } .admin-review-unchanged > summary { align-items:flex-start; flex-direction:column; } }
+  @media (max-width: 640px) { .admin-review-toolbar { align-items:stretch; flex-direction:column; } .admin-review-sort-control { justify-content:space-between; } .admin-review-sort-control select { flex:1; min-width:0; } .admin-review-queue-summary { align-items:flex-start; flex-direction:column; } .admin-review-card-grid { grid-template-columns:84px minmax(0,1fr); gap:10px; } .admin-review-thumb { min-height:72px; } .admin-review-card-head { flex-wrap:wrap; gap:8px; } .admin-review-title-line { flex-wrap:wrap; } .admin-review-state { margin-left:0; } .admin-review-meta-item { border-radius:10px; } .admin-review-card-actions { display:grid; grid-template-columns:1fr 1fr; } .admin-review-card-actions .btn { min-width:0; } .admin-review-summary-head { flex-wrap:wrap; } .admin-review-description-hint { display:none; } .admin-review-sticky-actions { display:grid; grid-template-columns:1fr 1fr; padding:10px; } .admin-review-sticky-actions .btn { min-width:0; } .admin-review-diff-summary-head { align-items:flex-start; flex-direction:column; } .admin-review-diff-entry > summary { grid-template-columns:auto minmax(0,1fr); } .admin-review-diff-fields { grid-column:1 / -1; text-align:left; } .admin-review-diff-code { max-height:60dvh; font-size:.7rem; } .admin-review-unchanged > summary { align-items:flex-start; flex-direction:column; } }
 
 `;

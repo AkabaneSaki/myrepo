@@ -97,6 +97,8 @@ export class AdminPendingList extends OpenAPIRoute {
       query: z.object({
         page: Num({ description: 'Page number', default: 0 }),
         pageSize: Num({ description: 'Page size', default: 20 }),
+        sort: z.enum(['oldest', 'latest']).default('oldest'),
+        projectType: z.enum(['事件', '系统核心', '角色', '扩展']).optional(),
       }),
     },
     responses: {
@@ -116,9 +118,9 @@ export class AdminPendingList extends OpenAPIRoute {
     }
 
     const data = await this.getValidatedData<typeof this.schema>();
-    const { page, pageSize } = data.query;
+    const { page, pageSize, sort, projectType } = data.query;
 
-    const result = await projectDb.getPendingList(c, page, pageSize, payload);
+    const result = await projectDb.getPendingList(c, page, pageSize, payload, { sort, projectType });
 
     // 统一作者显示字段，便于前端卡片/详情直接复用
     const projects = result.projects.map(p => ({

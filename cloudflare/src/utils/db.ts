@@ -657,16 +657,27 @@ export const projectDb = {
   /**
    * 获取待审核项目列表
    */
-  getPendingList: async (c: AppContext, page: number = 0, pageSize: number = 20, currentUser?: JWTPayload | null) => {
+  getPendingList: async (
+    c: AppContext,
+    page: number = 0,
+    pageSize: number = 20,
+    currentUser?: JWTPayload | null,
+    options: { sort?: 'oldest' | 'latest'; projectType?: ProjectType } = {},
+  ) => {
     const db = c.env.DB;
     const offset = page * pageSize;
+    const conditions = ["p.status = 'pending'"];
+    const filterValues: unknown[] = [];
+    if (options.projectType) {
+      conditions.push('p.project_type = ?');
+      filterValues.push(options.projectType);
+    }
+    const whereClause = conditions.join(' AND ');
+    const orderBy = options.sort === 'latest' ? 'p.created_at DESC' : 'p.created_at ASC';
 
     const countResult = await db
-      .prepare(
-        `
-			SELECT COUNT(*) as total FROM projects WHERE status = 'pending'
-		`,
-      )
+      .prepare(`SELECT COUNT(*) as total FROM projects p WHERE ${whereClause}`)
+      .bind(...filterValues)
       .first<{ total: number }>();
 
     const results = await db
@@ -676,12 +687,12 @@ export const projectDb = {
 			FROM projects p
 			LEFT JOIN users u ON p.author_id = u.id
 			LEFT JOIN projects published ON p.published_project_id = published.id
-			WHERE p.status = 'pending'
-			ORDER BY p.created_at ASC
+			WHERE ${whereClause}
+			ORDER BY ${orderBy}
 			LIMIT ? OFFSET ?
 		`,
       )
-      .bind(pageSize, offset)
+      .bind(...filterValues, pageSize, offset)
       .all<Record<string, unknown>>();
 
     return {

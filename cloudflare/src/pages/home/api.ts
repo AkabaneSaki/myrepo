@@ -452,8 +452,10 @@ async function uploadCoverFile(projectId, file) {
   }
 }
 
-async function fetchPendingProjects() {
-  return apiFetch('/api/admin/pending?page=0&pageSize=50');
+async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
+  const params = new URLSearchParams({ page: '0', pageSize: '50', sort });
+  if (projectType) params.set('projectType', projectType);
+  return apiFetch('/api/admin/pending?' + params.toString());
 }
 
 async function fetchAdminReviewDetail(projectId) {

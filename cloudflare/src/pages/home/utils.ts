@@ -56,6 +56,20 @@ function formatDate(value) {
   return date.toLocaleDateString('zh-CN');
 }
 
+function formatDateTime(value) {
+  if (!value) return '未知时间';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未知时间';
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 function parseWorkshopVersion(value) {
   if (typeof value !== 'string') return null;
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
