@@ -7,8 +7,12 @@ export type ExtensionType = (typeof EXTENSION_TYPES)[number];
 export const MAX_CUSTOM_TAGS = 4;
 
 export const SYSTEM_SIGNAL_DISPLAY_POLICY = {
-  ejs: { label: 'EJS', card: true, detail: true },
-  characterArtwork: { label: '👍🏻有角色立绘', card: true, detail: true },
+  ejs: { label: 'EJS', card: false, detail: true },
+  characterArtwork: { label: '有角色立绘', card: true, detail: true },
+} as const;
+
+export const TAXONOMY_DISPLAY_POLICY = {
+  cardCustomTags: true,
 } as const;
 
 export const CHARACTER_FACET_OPTIONS = {
@@ -105,6 +109,7 @@ export const PROJECT_TAXONOMY = {
   characterFacets: CHARACTER_FACET_OPTIONS,
   maxCustomTags: MAX_CUSTOM_TAGS,
   systemSignals: SYSTEM_SIGNAL_DISPLAY_POLICY,
+  display: TAXONOMY_DISPLAY_POLICY,
 } as const;
 
 const LEGACY_BASE_TAG_BY_PROJECT_TYPE: Record<ProjectType, string> = {

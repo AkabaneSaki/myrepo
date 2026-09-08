@@ -170,8 +170,10 @@ assert.doesNotMatch(fragments.homeModalsScript, /window\.prompt\("复制最新�
 assert.doesNotMatch(fragments.homeModalsScript, /versionBump|Patch|Minor|Major/);
 assert.match(fragments.homeCardsRenderScript, /撤回更新/);
 assert.match(fragments.homeCardsRenderScript, /tag-system-ejs/);
-assert.match(fragments.homeCardsRenderScript, /tag-system-artwork/);
-assert.match(fragments.homeCardsRenderScript, /const tagsHtml = systemTagsHtml/);
+assert.match(fragments.homeCardsRenderScript, /tag-system-artwork-icon/);
+assert.match(fragments.homeCardsRenderScript, /getProjectCustomTags\(project\)/);
+assert.match(fragments.homeCardsRenderScript, /cardCustomTags/);
+assert.match(fragments.homeCardsRenderScript, /fa-images/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /creatorTagsHtml/);
 assert.match(fragments.homeCardsRenderScript, /getProjectTypeDisplayLabel\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /delete-project-btn/);
@@ -223,6 +225,7 @@ const cardRenderUi = Function(
   'getProjectRejectReason',
   'formatDate',
   'getProjectPublishedAt',
+  'getProjectCustomTags',
   'PROJECT_TAXONOMY',
   `${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
 )(
@@ -244,7 +247,8 @@ const cardRenderUi = Function(
   () => '',
   value => String(value),
   () => '2026/9/6',
-  { systemSignals: { ejs: { label: 'EJS', card: true }, characterArtwork: { label: '👍🏻有角色立绘', card: true } } },
+  project => Array.isArray(project.customTags) ? project.customTags : [],
+  { systemSignals: { ejs: { label: 'EJS', card: false }, characterArtwork: { label: '有角色立绘', card: true } }, display: { cardCustomTags: true } },
 );
 const legacyCardHtml = cardRenderUi.renderProjectCard({ id: 'legacy', name: 'Legacy', version: '1.2.3', versionLabel: null, tags: [], downloadsCount: 0 });
 assert.match(legacyCardHtml, /card-meta card-meta--version"><span>1\.2\.3<\/span> <span>2026\/9\/6<\/span>/);

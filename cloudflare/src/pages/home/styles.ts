@@ -109,7 +109,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .project-tags,.detail-keyword-list { display:flex; flex-wrap:wrap; gap:8px; }
   .tag { background:rgba(255,255,255,0.08); padding:2px 10px; border-radius:30px; font-size:0.7rem; }
 .tag-system-ejs { color:#E9D5FF; background:rgba(147,51,234,.16); border:1px solid rgba(192,132,252,.42); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
-.tag-system-artwork { color:#BBF7D0; background:rgba(22,163,74,.14); border:1px solid rgba(74,222,128,.38); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
+.tag-system-artwork { color:#A5F3FC; background:rgba(8,145,178,.14); border:1px solid rgba(34,211,238,.34); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
+.tag-system-artwork-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none; border-radius:7px; color:#67E8F9; background:rgba(8,145,178,.12); border:1px solid rgba(34,211,238,.3); font-size:.7rem; box-shadow:inset 0 0 0 1px rgba(255,255,255,.025); }
+.tag-system-artwork-icon i { line-height:1; }
   .card-meta { font-size:0.75rem; opacity:0.7; }
   .card-meta--version { align-items:center; }
   .version-block { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
