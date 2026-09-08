@@ -227,9 +227,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-card-heading { min-width:0; flex:1; }
 .admin-review-title { font-size:1.08rem; font-weight:750; line-height:1.35; word-break:break-word; }
 .admin-review-author { margin-top:4px; font-size:.8rem; color:rgba(226,232,240,.68); display:flex; align-items:center; gap:6px; }
-.admin-review-state { flex:none; padding:5px 9px; border-radius:999px; font-size:.72rem; color:#FDE68A; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.22); }
-.admin-review-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-.admin-review-meta-item { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:5px 9px; border-radius:999px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.07); color:rgba(226,232,240,.7); font-size:.75rem; }
+
+
+
 
 .admin-review-card-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 .admin-review-card-actions .btn { min-width:118px; justify-content:center; }
@@ -239,7 +239,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-summary-heading { min-width:0; flex:1; }
 .admin-review-summary-heading h3 { margin:0 0 5px; font-size:1.25rem; line-height:1.35; }
 .admin-review-summary-heading > div { color:rgba(226,232,240,.68); font-size:.82rem; }
-.admin-review-detail-times { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:6px; color:rgba(148,163,184,.78)!important; font-size:.76rem!important; }
+
 .admin-review-signals { display:flex; flex-wrap:wrap; gap:8px; }
 .admin-review-signal { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:.76rem; color:#CBD5E1; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); }
 .admin-review-signal--info { color:#C7D2FE; border-color:rgba(99,102,241,.34); background:rgba(99,102,241,.1); }
@@ -257,6 +257,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-approve-btn:hover { background:rgba(22,163,74,.4); }
 .admin-review-reject-btn { color:#FECACA; border:1px solid rgba(248,113,113,.36); background:rgba(185,28,28,.22); }
 .admin-review-reject-btn:hover { background:rgba(185,28,28,.4); }
+.admin-log-card { display:flex; flex-direction:column; gap:10px; }
+.admin-log-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.admin-log-head time { flex:none; color:rgba(148,163,184,.82); font-size:.76rem; white-space:nowrap; }
+.admin-log-actor { display:flex; align-items:center; gap:7px; color:rgba(226,232,240,.7); font-size:.8rem; }
+.admin-log-reason { padding:9px 11px; border-radius:10px; border:1px solid rgba(248,113,113,.24); background:rgba(127,29,29,.12); color:#FECACA; line-height:1.45; }
+.admin-log-trace { border:1px solid rgba(148,163,184,.14); border-radius:11px; background:rgba(15,23,42,.5); overflow:hidden; }
+.admin-log-trace summary { padding:9px 11px; cursor:pointer; color:rgba(203,213,225,.76); font-size:.78rem; font-weight:650; }
+.admin-log-trace summary::-webkit-details-marker { display:none; }
+.admin-log-trace > div { display:grid; grid-template-columns:110px minmax(0,1fr); gap:10px; padding:7px 11px; border-top:1px solid rgba(148,163,184,.08); align-items:start; }
+.admin-log-trace > div > span { color:rgba(148,163,184,.78); font-size:.75rem; }
+.admin-log-trace code { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; color:#CBD5E1; font-size:.73rem; }
 .admin-review-diff-summary { padding:16px; border-radius:16px; border:1px solid rgba(99,102,241,.28); background:linear-gradient(145deg,rgba(49,46,129,.18),rgba(15,23,42,.78)); display:flex; flex-direction:column; gap:12px; }
 .admin-review-diff-summary-head { display:flex; justify-content:space-between; gap:12px; align-items:center; color:#CBD5E1; }
 .admin-review-diff-summary-head strong { font-size:1.35rem; color:#E0E7FF; }
@@ -393,6 +404,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   @media (max-width: 640px) { .header-discover { width:100%; min-width:0; } .header-search { max-width:none; } .tag-filter { width:100%; } .modal-overlay { padding:calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); } .modal-content { max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius:18px; } .modal-header { padding:12px 12px 8px 18px; } .modal-header h2 { font-size:1.2rem; min-width:0; } .modal-body { padding:14px 18px calc(18px + env(safe-area-inset-bottom)); } .detail-cover { height:180px; } .detail-summary { padding:16px; } .detail-summary--split { grid-template-columns:1fr; } .detail-card-row { align-items:flex-start; } }
   @media (max-width: 960px) { .header-left { flex-wrap:wrap; } }
   @media (max-width: 640px) { .release-notice { max-width:100%; white-space:normal; text-align:left; } }
-  @media (max-width: 640px) { .admin-review-toolbar { align-items:stretch; flex-direction:column; } .admin-review-sort-control { justify-content:space-between; } .admin-review-sort-control select { flex:1; min-width:0; } .admin-review-queue-summary { align-items:flex-start; flex-direction:column; } .admin-review-card-grid { grid-template-columns:84px minmax(0,1fr); gap:10px; } .admin-review-thumb { min-height:72px; } .admin-review-card-head { flex-wrap:wrap; gap:8px; } .admin-review-title-line { flex-wrap:wrap; } .admin-review-state { margin-left:0; } .admin-review-meta-item { border-radius:10px; } .admin-review-card-actions { display:grid; grid-template-columns:1fr 1fr; } .admin-review-card-actions .btn { min-width:0; } .admin-review-summary-head { flex-wrap:wrap; } .admin-review-description-hint { display:none; } .admin-review-sticky-actions { display:grid; grid-template-columns:1fr 1fr; padding:10px; } .admin-review-sticky-actions .btn { min-width:0; } .admin-review-diff-summary-head { align-items:flex-start; flex-direction:column; } .admin-review-diff-entry > summary { grid-template-columns:auto minmax(0,1fr); } .admin-review-diff-fields { grid-column:1 / -1; text-align:left; } .admin-review-diff-code { max-height:60dvh; font-size:.7rem; } .admin-review-unchanged > summary { align-items:flex-start; flex-direction:column; } }
+  @media (max-width: 640px) { .admin-review-toolbar { align-items:stretch; flex-direction:column; } .admin-review-sort-control { justify-content:space-between; } .admin-review-sort-control select { flex:1; min-width:0; } .admin-review-queue-summary { align-items:flex-start; flex-direction:column; } .admin-review-card-grid { grid-template-columns:84px minmax(0,1fr); gap:10px; } .admin-review-thumb { min-height:72px; } .admin-review-card-head { flex-wrap:wrap; gap:8px; } .admin-review-title-line { flex-wrap:wrap; } .admin-review-card-actions { display:grid; grid-template-columns:1fr 1fr; } .admin-review-card-actions .btn { min-width:0; } .admin-review-summary-head { flex-wrap:wrap; } .admin-review-description-hint { display:none; } .admin-review-sticky-actions { display:grid; grid-template-columns:1fr 1fr; padding:10px; } .admin-review-sticky-actions .btn { min-width:0; } .admin-review-sticky-actions [data-admin-review-back] { grid-column:1 / -1; } .admin-review-diff-summary-head { align-items:flex-start; flex-direction:column; } .admin-review-diff-entry > summary { grid-template-columns:auto minmax(0,1fr); } .admin-review-diff-fields { grid-column:1 / -1; text-align:left; } .admin-review-diff-code { max-height:60dvh; font-size:.7rem; } .admin-review-unchanged > summary { align-items:flex-start; flex-direction:column; } .admin-log-head { flex-direction:column; gap:5px; } .admin-log-head time { white-space:normal; } .admin-log-trace > div { grid-template-columns:1fr; gap:4px; } }
 
 `;

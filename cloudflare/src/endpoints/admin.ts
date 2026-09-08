@@ -361,6 +361,11 @@ export class AdminReview extends OpenAPIRoute {
         version: approvedVersion || project.version,
         previousVersion: publishedVersionBeforeApproval,
         versionLabel: project.versionLabel ?? null,
+        draftRevision: project.draftRevision,
+        reviewTarget: project.reviewTarget,
+        publishedProjectId: project.publishedProjectId || null,
+        projectCreatedAt: project.createdAt,
+        projectUpdatedAt: project.updatedAt,
       },
     });
 
