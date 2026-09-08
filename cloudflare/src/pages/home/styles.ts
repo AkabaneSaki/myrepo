@@ -151,6 +151,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .form-group { margin-bottom:16px; }
 .form-group label { display:block; margin-bottom:6px; font-weight:500; opacity:0.8; }
 .form-group input,.form-group textarea,.form-group select { width:100%; padding:10px 12px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:inherit; }
+#characterFacetsGroup > label { margin-bottom:10px; color:#E2E8F0; font-weight:700; opacity:1; }
+.taxonomy-facet-group { margin-top:8px; overflow:hidden; border:1px solid rgba(148,163,184,.16); border-radius:12px; background:rgba(15,23,42,.46); }
+.taxonomy-facet-group summary { display:flex; align-items:center; gap:8px; padding:10px 12px; list-style:none; cursor:pointer; user-select:none; color:#E2E8F0; font-weight:700; }
+.taxonomy-facet-group summary::-webkit-details-marker { display:none; }
+.taxonomy-facet-group summary::before { content:'›'; flex:none; color:#94A3B8; font-size:1.05rem; line-height:1; transition:transform .16s ease; }
+.taxonomy-facet-group[open] summary::before { transform:rotate(90deg); }
+.taxonomy-facet-group summary small { margin-left:auto; color:rgba(226,232,240,.44); font-size:.7rem; font-weight:500; }
+.taxonomy-chip-list { display:flex; flex-wrap:wrap; gap:8px; padding:0 12px 12px; }
+.form-group .taxonomy-chip { display:inline-flex; max-width:100%; margin:0; font-weight:600; opacity:1; cursor:pointer; }
+.form-group .taxonomy-chip input { position:absolute; width:1px; height:1px; margin:0; padding:0; opacity:0; pointer-events:none; }
+.taxonomy-chip span { display:inline-flex; align-items:center; min-height:32px; max-width:100%; padding:6px 10px; border:1px solid rgba(148,163,184,.2); border-radius:999px; background:rgba(30,41,59,.72); color:rgba(226,232,240,.74); font-size:.8rem; line-height:1.2; transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease; }
+.taxonomy-chip:hover span { border-color:rgba(129,140,248,.46); color:#E0E7FF; }
+.taxonomy-chip input:checked + span { border-color:rgba(129,140,248,.62); background:rgba(99,102,241,.22); color:#EEF2FF; box-shadow:0 0 0 1px rgba(129,140,248,.12) inset; }
+.taxonomy-chip input:checked + span::before { content:'✓'; margin-right:5px; color:#C7D2FE; font-size:.72rem; font-weight:800; }
+.taxonomy-chip:active span { transform:scale(.97); }
 .form-hint { margin-top:6px; font-size:.82rem; line-height:1.45; color:rgba(226,232,240,.62); }
 .file-drop { border:2px dashed rgba(255,255,255,0.2); border-radius:12px; padding:30px; text-align:center; cursor:pointer; transition:0.2s; }
 .file-drop:hover { border-color:#6366F1; background:rgba(99,102,241,0.1); }

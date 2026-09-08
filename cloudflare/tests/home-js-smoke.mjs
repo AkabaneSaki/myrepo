@@ -133,6 +133,7 @@ assert.match(fragments.homeModalsScript, /validateProjectTaxonomySelection\(payl
 assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.projectType, hasWorldbook, hasRegex\)/);
 assert.match(fragments.homeModalsScript, /id=\"extensionType\"/);
 assert.match(fragments.homeModalsScript, /data-facet-group/);
+assert.match(fragments.homeModalsScript, /taxonomy-chip/);
 assert.match(fragments.homeModalsScript, /preparedWorldbook = hasWorldbook \?/);
 assert.match(fragments.homeModalsScript, /async function beginProjectInstall/);
 assert.match(fragments.homeModalsScript, /if \(worldbookEntries\.length > 0\)/);
