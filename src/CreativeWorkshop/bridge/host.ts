@@ -70,6 +70,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthTimeoutId: number | null = null;
   let oauthClosePollId: number | null = null;
   let oauthPopupOpenedAt = 0;
+  const projectMutationInFlight = new Set<string>();
 
   console.info('[CreativeWorkshopBridgeHost] created', {
     targetOrigin,
@@ -242,6 +243,26 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
+    const isProjectMutation =
+      actionType === 'bridge:install-project' ||
+      actionType === 'bridge:uninstall-project' ||
+      actionType === 'bridge:confirm-project-update';
+
+    if (isProjectMutation && actionProjectId) {
+      if (projectMutationInFlight.has(actionProjectId)) {
+        await post(
+          'bridge:error',
+          {
+            message: '此项目已有安装、更新或卸载操作正在进行，请等待完成',
+            projectId: actionProjectId,
+            action: actionType,
+          },
+          event.data.requestId,
+        );
+        return;
+      }
+      projectMutationInFlight.add(actionProjectId);
+    }
 
     try {
       switch (event.data.type) {
@@ -425,6 +446,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         },
         event.data.requestId,
       );
+    } finally {
+      if (isProjectMutation && actionProjectId) {
+        projectMutationInFlight.delete(actionProjectId);
+      }
     }
   }
 

@@ -22,7 +22,11 @@ function getCurrentWorldbookName(): string {
 }
 
 async function getInstalledWorldbookName(projectId: string, legacyProjectName?: string): Promise<string> {
-  return (await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName)) || getCurrentWorldbookName();
+  const worldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
+  if (!worldbookName) {
+    throw new Error('无法确认此项目的已安装世界书，已中止操作以避免重复安装');
+  }
+  return worldbookName;
 }
 
 async function ensureTargetWorldbook(worldbookName: string): Promise<string> {
@@ -136,10 +140,15 @@ async function applyPreparedProject(
   detail: Record<string, any>,
   prepared: PreparedEntry[],
   worldbookName: string,
+  option: { replaceExistingProject?: boolean; legacyProjectName?: string } = {},
 ) {
-  if (prepared.length === 0) return;
+  if (prepared.length === 0 && !option.replaceExistingProject) return;
 
   await updateWorldbookWith(worldbookName, worldbook => {
+    if (option.replaceExistingProject) {
+      _.remove(worldbook, entry => isCreativeWorkshopProjectEntry(entry, projectId, option.legacyProjectName));
+    }
+
     prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
       const name = renameEntry(
         entry.comment || entry.name || `条目${index + 1}`,
@@ -148,14 +157,21 @@ async function applyPreparedProject(
       );
       const stableKey = `${projectId}:${entryKey}`;
       const legacyKey = `${projectId}:${index}`;
-      const existingIndex = worldbook.findIndex(item => {
+      const matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
         const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
-        return (
+        if (
           _.get(item, 'extra.cw_entry_key') === stableKey ||
           _.get(item, 'extra.cw_entry_key') === legacyKey ||
           (itemProjectId === projectId && item.name === name)
-        );
-      });
+        ) {
+          indexes.push(itemIndex);
+        }
+        return indexes;
+      }, []);
+      const existingIndex = matchingIndexes[0] ?? -1;
+      for (let duplicateIndex = matchingIndexes.length - 1; duplicateIndex >= 1; duplicateIndex -= 1) {
+        worldbook.splice(matchingIndexes[duplicateIndex], 1);
+      }
       const payload = {
         name,
         enabled: _.isBoolean(entry.enabled) ? entry.enabled : !entry.disable,
@@ -237,9 +253,14 @@ async function deleteProjectEntriesFromWorldbook(projectId: string, worldbookNam
   return result.deleted_entries;
 }
 
-async function assertNoProjectEntriesInRelevantWorldbooks(projectId: string, legacyProjectName?: string) {
+async function assertNoProjectEntriesInRelevantWorldbooks(
+  projectId: string,
+  legacyProjectName?: string,
+  ignoreWorldbookName?: string,
+) {
   const existingNames = new Set(getWorldbookNames());
   for (const worldbookName of getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName)) {
+    if (worldbookName === ignoreWorldbookName) continue;
     if (!existingNames.has(worldbookName)) continue;
     const entries = await getWorldbook(worldbookName);
     if (entries.some(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName))) {
@@ -299,9 +320,21 @@ export async function updateCreativeWorkshopProject(
 ) {
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
   const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
-  await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
-  await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-  await applyPreparedProject(projectId, detail, prepared, worldbookName);
+  const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))
+    .filter(name => name !== worldbookName);
+  for (const otherWorldbookName of otherWorldbooks) {
+    await deleteProjectEntriesFromWorldbook(projectId, otherWorldbookName, legacyProjectName);
+  }
+  await applyPreparedProject(projectId, detail, prepared, worldbookName, {
+    replaceExistingProject: true,
+    legacyProjectName,
+  });
+  const persisted = await getWorldbook(worldbookName);
+  const persistedProjectEntries = persisted.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName));
+  if (persistedProjectEntries.length !== prepared.length) {
+    throw new Error(`世界书「${worldbookName}」更新后条目数量异常，请重试`);
+  }
+  await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName, worldbookName);
   if (legacyProjectName && legacyProjectName !== projectId) {
     deleteCreativeWorkshopInstallRecord(legacyProjectName);
   }
