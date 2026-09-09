@@ -298,6 +298,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
     if (cached) {
         return cached;
     }
+    let receivedVersionMismatch = false;
     try {
         const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
         const response = await fetch(`${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`, {
@@ -311,6 +312,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
             throw new Error('云端项目详情数据异常');
         }
         if (expectedVersion && data.project.version !== expectedVersion) {
+            receivedVersionMismatch = true;
             throw new Error(`云端项目版本不一致：期望 ${expectedVersion}，实际 ${data.project.version || '未知'}，已中止安装以避免使用旧缓存`);
         }
         const normalized = {
@@ -322,6 +324,8 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         return normalized;
     }
     catch (error) {
+        if (receivedVersionMismatch)
+            throw error;
         const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
         if (fallback && (!expectedVersion || _.get(fallback, 'project.version') === expectedVersion)) {
             console.warn('[CreativeWorkshop] 使用缓存的项目详情', { projectId, expectedVersion, error });
@@ -815,22 +819,27 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName, 
     if (prepared.length === 0 && !option.replaceExistingProject)
         return;
     await updateWorldbookWith(worldbookName, worldbook => {
-        if (option.replaceExistingProject) {
-            _.remove(worldbook, entry => isCreativeWorkshopProjectEntry(entry, projectId, option.legacyProjectName));
-        }
+        const desiredProjectEntryKeys = new Set();
         prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
             const name = renameEntry(entry.comment || entry.name || `条目${index + 1}`, detail.project.tags || [], detail.project.name || '未命名项目');
             const stableKey = `${projectId}:${entryKey}`;
             const legacyKey = `${projectId}:${index}`;
-            const matchingIndexes = worldbook.reduce((indexes, item, itemIndex) => {
-                const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
-                if (_.get(item, 'extra.cw_entry_key') === stableKey ||
-                    _.get(item, 'extra.cw_entry_key') === legacyKey ||
-                    (itemProjectId === projectId && item.name === name)) {
+            desiredProjectEntryKeys.add(stableKey);
+            let matchingIndexes = worldbook.reduce((indexes, item, itemIndex) => {
+                const existingKey = _.get(item, 'extra.cw_entry_key');
+                if (existingKey === stableKey || existingKey === legacyKey)
                     indexes.push(itemIndex);
-                }
                 return indexes;
             }, []);
+            if (matchingIndexes.length === 0) {
+                matchingIndexes = worldbook.reduce((indexes, item, itemIndex) => {
+                    const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
+                    if (!_.get(item, 'extra.cw_entry_key') && itemProjectId === projectId && item.name === name) {
+                        indexes.push(itemIndex);
+                    }
+                    return indexes;
+                }, []);
+            }
             const existingIndex = matchingIndexes[0] ?? -1;
             for (let duplicateIndex = matchingIndexes.length - 1; duplicateIndex >= 1; duplicateIndex -= 1) {
                 worldbook.splice(matchingIndexes[duplicateIndex], 1);
@@ -883,6 +892,14 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName, 
                 worldbook.push(payload);
             }
         });
+        if (option.replaceExistingProject) {
+            _.remove(worldbook, entry => {
+                if (!isCreativeWorkshopProjectEntry(entry, projectId, option.legacyProjectName))
+                    return false;
+                const entryKey = _.get(entry, 'extra.cw_entry_key');
+                return !_.isString(entryKey) || !desiredProjectEntryKeys.has(entryKey);
+            });
+        }
         return worldbook;
     });
 }

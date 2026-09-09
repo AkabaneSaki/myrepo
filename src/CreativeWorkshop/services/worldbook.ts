@@ -145,9 +145,7 @@ async function applyPreparedProject(
   if (prepared.length === 0 && !option.replaceExistingProject) return;
 
   await updateWorldbookWith(worldbookName, worldbook => {
-    if (option.replaceExistingProject) {
-      _.remove(worldbook, entry => isCreativeWorkshopProjectEntry(entry, projectId, option.legacyProjectName));
-    }
+    const desiredProjectEntryKeys = new Set<string>();
 
     prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
       const name = renameEntry(
@@ -157,17 +155,21 @@ async function applyPreparedProject(
       );
       const stableKey = `${projectId}:${entryKey}`;
       const legacyKey = `${projectId}:${index}`;
-      const matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
-        const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
-        if (
-          _.get(item, 'extra.cw_entry_key') === stableKey ||
-          _.get(item, 'extra.cw_entry_key') === legacyKey ||
-          (itemProjectId === projectId && item.name === name)
-        ) {
-          indexes.push(itemIndex);
-        }
+      desiredProjectEntryKeys.add(stableKey);
+      let matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
+        const existingKey = _.get(item, 'extra.cw_entry_key');
+        if (existingKey === stableKey || existingKey === legacyKey) indexes.push(itemIndex);
         return indexes;
       }, []);
+      if (matchingIndexes.length === 0) {
+        matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
+          const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
+          if (!_.get(item, 'extra.cw_entry_key') && itemProjectId === projectId && item.name === name) {
+            indexes.push(itemIndex);
+          }
+          return indexes;
+        }, []);
+      }
       const existingIndex = matchingIndexes[0] ?? -1;
       for (let duplicateIndex = matchingIndexes.length - 1; duplicateIndex >= 1; duplicateIndex -= 1) {
         worldbook.splice(matchingIndexes[duplicateIndex], 1);
@@ -220,6 +222,13 @@ async function applyPreparedProject(
         worldbook.push(payload as unknown as WorldbookEntry);
       }
     });
+    if (option.replaceExistingProject) {
+      _.remove(worldbook, entry => {
+        if (!isCreativeWorkshopProjectEntry(entry, projectId, option.legacyProjectName)) return false;
+        const entryKey = _.get(entry, 'extra.cw_entry_key');
+        return !_.isString(entryKey) || !desiredProjectEntryKeys.has(entryKey);
+      });
+    }
     return worldbook;
   });
 }

@@ -213,6 +213,7 @@ export async function fetchCreativeWorkshopProjectDetail(
     return cached;
   }
 
+  let receivedVersionMismatch = false;
   try {
     const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
     const response = await fetch(`${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`, {
@@ -227,6 +228,7 @@ export async function fetchCreativeWorkshopProjectDetail(
       throw new Error('云端项目详情数据异常');
     }
     if (expectedVersion && data.project.version !== expectedVersion) {
+      receivedVersionMismatch = true;
       throw new Error(
         `云端项目版本不一致：期望 ${expectedVersion}，实际 ${data.project.version || '未知'}，已中止安装以避免使用旧缓存`,
       );
@@ -241,6 +243,7 @@ export async function fetchCreativeWorkshopProjectDetail(
     setCachedProjectDetail(projectId, normalized);
     return normalized;
   } catch (error) {
+    if (receivedVersionMismatch) throw error;
     const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
     if (fallback && (!expectedVersion || _.get(fallback, 'project.version') === expectedVersion)) {
       console.warn('[CreativeWorkshop] 使用缓存的项目详情', { projectId, expectedVersion, error });
