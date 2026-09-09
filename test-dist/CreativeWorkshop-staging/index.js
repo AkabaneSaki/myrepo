@@ -177,6 +177,14 @@ function pruneCreativeWorkshopCacheStore(cache) {
     cache.worldbookSources = _.pickBy(cache.worldbookSources || {}, entry => now - entry.cachedAt <= WORLDBOOK_SOURCE_CACHE_TTL_MS * 3);
     return cache;
 }
+function invalidateCreativeWorkshopProjectCache(projectId) {
+    const cache = getCreativeWorkshopCacheStore();
+    if (cache.projectDetails)
+        delete cache.projectDetails[projectId];
+    if (cache.worldbookSources)
+        delete cache.worldbookSources[projectId];
+    writeCreativeWorkshopCacheStore(cache);
+}
 function getCachedProjectDetail(projectId, expectedVersion) {
     const cache = getCreativeWorkshopCacheStore();
     const entry = cache.projectDetails?.[projectId];
@@ -947,6 +955,7 @@ async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredW
     return deletedEntries;
 }
 async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion) {
+    invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
     const worldbookName = requestedWorldbookName
         ? await ensureTargetWorldbook(requestedWorldbookName)
@@ -962,6 +971,7 @@ async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
     return deletedEntries;
 }
 async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName) {
+    invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
     const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
     const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))

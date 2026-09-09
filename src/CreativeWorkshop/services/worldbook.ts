@@ -4,7 +4,11 @@ import {
   resolveCreativeWorkshopInstallWorldbook,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
-import { fetchCreativeWorkshopProjectDetail, fetchCreativeWorkshopProjectWorldbookSource } from './project-fetch';
+import {
+  fetchCreativeWorkshopProjectDetail,
+  fetchCreativeWorkshopProjectWorldbookSource,
+  invalidateCreativeWorkshopProjectCache,
+} from './project-fetch';
 import {
   getCreativeWorkshopFiniteNumber,
   getCreativeWorkshopPositionRole,
@@ -304,6 +308,7 @@ export async function installCreativeWorkshopProject(
   requestedWorldbookName?: string,
   expectedVersion?: string,
 ) {
+  invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
   const worldbookName = requestedWorldbookName
     ? await ensureTargetWorldbook(requestedWorldbookName)
@@ -327,6 +332,7 @@ export async function updateCreativeWorkshopProject(
   expectedVersion?: string,
   legacyProjectName?: string,
 ) {
+  invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
   const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
   const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))

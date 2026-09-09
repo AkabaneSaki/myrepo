@@ -60,6 +60,13 @@ function pruneCreativeWorkshopCacheStore(cache: CreativeWorkshopCacheStore): Cre
   return cache;
 }
 
+export function invalidateCreativeWorkshopProjectCache(projectId: string) {
+  const cache = getCreativeWorkshopCacheStore();
+  if (cache.projectDetails) delete cache.projectDetails[projectId];
+  if (cache.worldbookSources) delete cache.worldbookSources[projectId];
+  writeCreativeWorkshopCacheStore(cache);
+}
+
 function getCachedProjectDetail(projectId: string, expectedVersion?: string): CreativeWorkshopProjectDetail | null {
   const cache = getCreativeWorkshopCacheStore();
   const entry = cache.projectDetails?.[projectId];
