@@ -1,5 +1,21 @@
 import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from '../version';
 
+const INSTALL_DIAGNOSTIC_EVENTS = new Set([
+  'script-mounted',
+  'install-state:scan:start',
+  'install-state:worldbook',
+  'install-state:project',
+  'install-state:scan:complete',
+  'install-state:worldbook-read-error',
+  'install-request',
+  'install-request-blocked',
+  'install-entry-match',
+  'install:prepared',
+  'install:complete',
+  'install-request-finished',
+  'install-request-error',
+]);
+
 function stringifyDiagnosticPayload(payload: unknown) {
   try {
     return JSON.stringify(payload, (_key, value) => {
@@ -36,9 +52,11 @@ function formatDiagnosticLine(event: string, payload?: unknown) {
 }
 
 export function creativeWorkshopDiag(event: string, payload?: unknown) {
+  if (!INSTALL_DIAGNOSTIC_EVENTS.has(event)) return;
   console.info(formatDiagnosticLine(event, payload));
 }
 
 export function creativeWorkshopDiagError(event: string, payload?: unknown) {
+  if (!INSTALL_DIAGNOSTIC_EVENTS.has(event)) return;
   console.error(formatDiagnosticLine(event, payload));
 }

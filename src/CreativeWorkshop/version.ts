@@ -1,2 +1,2 @@
 export const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.0.15';
-export const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-2';
+export const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-3';

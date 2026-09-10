@@ -1,4 +1,4 @@
-import { creativeWorkshopDiag } from './diagnostic-log';
+import { creativeWorkshopDiag, creativeWorkshopDiagError } from './diagnostic-log';
 import { getCreativeWorkshopInstallRecords, getCreativeWorkshopRelevantWorldbookNames } from './install-registry';
 import { getCreativeWorkshopRegexId } from './regex-name';
 
@@ -33,7 +33,10 @@ async function readWorldbookEntries(worldbookName: string) {
   try {
     return await getWorldbook(worldbookName);
   } catch (error) {
-    console.warn('[CreativeWorkshop] 无法读取安装目标世界书', { worldbookName, error });
+    creativeWorkshopDiagError('install-state:worldbook-read-error', {
+      worldbookName,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return [] as WorldbookEntry[];
   }
 }
@@ -54,20 +57,25 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
     })),
   );
 
-  worldbooks.forEach(({ worldbookName, entries }) => creativeWorkshopDiag('install-state:worldbook', ({
-    worldbookName,
-    totalEntries: entries.length,
-    workshopEntries: entries
+  worldbooks.forEach(({ worldbookName, entries }) => {
+    const workshopEntries = entries
       .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
-      .map(summarizeInstalledEntry),
-    suspiciousLegacyEntries: entries
+      .map(summarizeInstalledEntry);
+    const suspiciousLegacyEntries = entries
       .filter(entry => {
         const name = String(_.get(entry, 'name', ''));
         const hasWorkshopIdentity = _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'));
         return !hasWorkshopIdentity && (name.startsWith('[DLC]') || name.startsWith('命定系统-'));
       })
-      .map(summarizeInstalledEntry),
-  })));
+      .map(summarizeInstalledEntry);
+    if (workshopEntries.length === 0 && suspiciousLegacyEntries.length === 0) return;
+    creativeWorkshopDiag('install-state:worldbook', {
+      worldbookName,
+      totalEntries: entries.length,
+      workshopEntryCount: workshopEntries.length,
+      suspiciousLegacyEntries,
+    });
+  });
 
   const entryRows = worldbooks.flatMap(({ worldbookName, entries }) =>
     entries
@@ -125,5 +133,9 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
     regexCount: project.regexCount,
     worldbookName: project.worldbookName,
   })));
+  creativeWorkshopDiag('install-state:scan:complete', {
+    detectedProjectCount: projects.length,
+    detectedProjectIds: projects.map(project => project.projectId),
+  });
   return projects;
 }

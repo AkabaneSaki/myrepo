@@ -93,6 +93,8 @@ function summarizeBridgePayload(type: string, payload: unknown) {
   };
 }
 
+const legacyDebugLog = (..._args: unknown[]) => {};
+
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
@@ -104,7 +106,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthPopupOpenedAt = 0;
   const projectMutationInFlight = new Set<string>();
 
-  console.info('[CreativeWorkshopBridgeHost] created', {
+  legacyDebugLog('[CreativeWorkshopBridgeHost] created', {
     clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
     diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
     targetOrigin,
@@ -113,7 +115,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   });
 
   function cleanupOAuthPopupReference() {
-    console.info('[CreativeWorkshopBridgeHost] cleanupOAuthPopupReference', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] cleanupOAuthPopupReference', {
       hasPopup: Boolean(oauthPopup),
       popupClosed: oauthPopup?.closed ?? null,
     });
@@ -124,7 +126,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   function clearOAuthTimers() {
-    console.info('[CreativeWorkshopBridgeHost] clearOAuthTimers', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] clearOAuthTimers', {
       hasTimeout: oauthTimeoutId !== null,
       hasClosePoll: oauthClosePollId !== null,
     });
@@ -139,7 +141,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
-    console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
       payload: summarizeBridgePayload('bridge:oauth:result', payload),
     });
@@ -151,7 +153,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   async function failPendingOAuth(message: string) {
-    console.warn('[CreativeWorkshopBridgeHost] failPendingOAuth', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] failPendingOAuth', {
       message,
       pendingOauthRequestId,
       pendingOauthState,
@@ -170,7 +172,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   function startOAuthMonitors() {
     clearOAuthTimers();
     oauthPopupOpenedAt = Date.now();
-    console.info('[CreativeWorkshopBridgeHost] startOAuthMonitors', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] startOAuthMonitors', {
       pendingOauthRequestId,
       pendingOauthState,
       popupClosed: oauthPopup?.closed ?? null,
@@ -180,12 +182,12 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     }, OAUTH_TIMEOUT_MS);
     oauthClosePollId = hostWindow.setInterval(() => {
       if (!oauthPopup) {
-        console.warn('[CreativeWorkshopBridgeHost] oauthClosePoll:no-popup-reference');
+        legacyDebugLog('[CreativeWorkshopBridgeHost] oauthClosePoll:no-popup-reference');
         return;
       }
 
       if (Date.now() - oauthPopupOpenedAt < OAUTH_POPUP_CLOSE_GUARD_MS) {
-        console.info('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
           elapsedMs: Date.now() - oauthPopupOpenedAt,
           guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
         });
@@ -193,7 +195,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       }
 
       if (oauthPopup.closed) {
-        console.info('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
           state: pendingOauthState,
           guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
         });
@@ -203,7 +205,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   async function handleOAuthCallback(event: MessageEvent) {
-    console.info('[CreativeWorkshopBridgeHost] handleOAuthCallback:received', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] handleOAuthCallback:received', {
       pendingOauthRequestId,
       pendingOauthState,
       eventOrigin: event.origin,
@@ -252,7 +254,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   async function post(type: string, payload?: Record<string, unknown>, requestId?: string) {
-    console.info('[CreativeWorkshopBridgeHost] post', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
       payload: summarizeBridgePayload(type, payload),
@@ -262,7 +264,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   }
 
   async function handleMessage(event: MessageEvent) {
-    console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
       type: _.get(event.data, 'type'),
@@ -286,16 +288,28 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       actionType === 'bridge:uninstall-project' ||
       actionType === 'bridge:confirm-project-update';
 
-    creativeWorkshopDiag('bridge-action:start', {
-      diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-      type: actionType,
-      requestId: event.data.requestId,
-      projectId: actionProjectId,
-      legacyProjectName: actionLegacyProjectName,
-    });
+    if (actionType === 'bridge:install-project') {
+      creativeWorkshopDiag('install-request', {
+        requestId: event.data.requestId,
+        projectId: actionProjectId,
+        legacyProjectName: actionLegacyProjectName,
+        projectVersion: _.get(event.data, 'payload.projectVersion', null),
+        worldbookName: _.get(event.data, 'payload.worldbookName', null),
+        worldbookEntryKeyCount: Array.isArray(_.get(event.data, 'payload.worldbookEntryKeys'))
+          ? _.get(event.data, 'payload.worldbookEntryKeys').length
+          : null,
+      });
+    }
 
     if (isProjectMutation && actionProjectId) {
       if (projectMutationInFlight.has(actionProjectId)) {
+        if (actionType === 'bridge:install-project') {
+          creativeWorkshopDiag('install-request-blocked', {
+            requestId: event.data.requestId,
+            projectId: actionProjectId,
+            reason: 'mutation-in-flight',
+          });
+        }
         await post(
           'bridge:error',
           {
@@ -439,7 +453,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             await failPendingOAuth('新的登录请求已开始，旧的授权流程已取消');
           }
 
-          console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
+          legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
             authUrl: safeUrlForLog(authUrl),
             state,
             requestId: event.data.requestId,
@@ -456,7 +470,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           );
 
           if (!popup) {
-            console.error('[CreativeWorkshopBridgeHost] bridge:oauth:start popup blocked');
+            legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start popup blocked');
             await post(
               'bridge:oauth:result',
               {
@@ -473,7 +487,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           oauthPopupOpenedAt = Date.now();
           pendingOauthRequestId = event.data.requestId;
           pendingOauthState = _.isString(state) ? state : undefined;
-          console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start popup opened', {
+          legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start popup opened', {
             popupClosed: popup.closed,
             pendingOauthRequestId,
             pendingOauthState,
@@ -482,23 +496,23 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           break;
         }
       }
-      creativeWorkshopDiag('bridge-action:complete', {
-        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-        type: actionType,
-        requestId: event.data.requestId,
-        projectId: actionProjectId,
-        durationMs: Date.now() - actionStartedAt,
-      });
+      if (actionType === 'bridge:install-project') {
+        creativeWorkshopDiag('install-request-finished', {
+          requestId: event.data.requestId,
+          projectId: actionProjectId,
+          durationMs: Date.now() - actionStartedAt,
+        });
+      }
     } catch (error) {
-      creativeWorkshopDiagError('bridge-action:error', {
-        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-        type: actionType,
-        requestId: event.data.requestId,
-        projectId: actionProjectId,
-        legacyProjectName: actionLegacyProjectName,
-        durationMs: Date.now() - actionStartedAt,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      if (actionType === 'bridge:install-project') {
+        creativeWorkshopDiagError('install-request-error', {
+          requestId: event.data.requestId,
+          projectId: actionProjectId,
+          legacyProjectName: actionLegacyProjectName,
+          durationMs: Date.now() - actionStartedAt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       await post(
         'bridge:error',
         {
@@ -521,7 +535,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   return {
     destroy() {
       if (pendingOauthRequestId || pendingOauthState) {
-        console.warn('[CreativeWorkshopBridgeHost] OAuth 监听在授权完成前被销毁', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] OAuth 监听在授权完成前被销毁', {
           requestId: pendingOauthRequestId,
           state: pendingOauthState,
           popupClosed: oauthPopup?.closed ?? null,
@@ -536,7 +550,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           })(),
         });
       }
-      console.info('[CreativeWorkshopBridgeHost] destroy');
+      legacyDebugLog('[CreativeWorkshopBridgeHost] destroy');
       clearOAuthTimers();
       cleanupOAuthPopupReference();
       pendingOauthRequestId = undefined;

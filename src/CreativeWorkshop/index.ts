@@ -2,7 +2,6 @@ import { createScriptIdIframe, teleportStyle } from '@util/script';
 import { createCreativeWorkshopBridgeHost } from './bridge/host';
 import { getCreativeWorkshopOrigin, getCreativeWorkshopUrl } from './services/config';
 import { creativeWorkshopDiag } from './services/diagnostic-log';
-import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from './version';
 
 const AGREEMENT_STORAGE_KEY = 'creative_workshop_agreement_accepted';
 
@@ -188,20 +187,10 @@ function openCreativeWorkshop() {
   const hostDocument = hostWindow.document;
   const host$ = (hostWindow as Window & { $: JQueryStatic }).$;
 
-  console.info('[CreativeWorkshop] openCreativeWorkshop:start', {
-    clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
-    diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-    creativeWorkshopUrl,
-    hostOrigin: hostWindow.location.origin,
-    currentOrigin: window.location.origin,
-    parentEqualsWindow: window.parent === window,
-  });
+
 
   const existing = host$('#creative-workshop-overlay');
   if (existing.length) {
-    console.warn('[CreativeWorkshop] openCreativeWorkshop:remove-existing-overlay', {
-      count: existing.length,
-    });
     existing.remove();
   }
 
@@ -307,18 +296,8 @@ function openCreativeWorkshop() {
   $frameShell.append($frame, $closeButton);
   $overlay.append($frameShell).appendTo(hostDocument.body);
 
-  console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
-    iframeCount: $overlay.find('iframe').length,
-    bodyChildCount: hostDocument.body.children.length,
-  });
 
   const close = () => {
-    console.warn('[CreativeWorkshop] openCreativeWorkshop:close', {
-      hasBridge: Boolean(bridge),
-      hasNavigated,
-      overlayExists: hostDocument.body.contains($overlay[0]),
-      activeElementTag: hostDocument.activeElement?.tagName,
-    });
     bridge?.destroy();
     host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
     host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
@@ -334,10 +313,6 @@ function openCreativeWorkshop() {
   });
 
   $overlay.on('click', event => {
-    console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-click', {
-      targetIsOverlay: event.target === $overlay[0],
-      targetTag: (event.target as HTMLElement | null)?.tagName,
-    });
     if (event.target === $overlay[0]) {
       close();
     }
@@ -349,18 +324,6 @@ function openCreativeWorkshop() {
   $frame.on('load', () => {
     const iframe = $frame[0];
 
-    console.info('[CreativeWorkshop] openCreativeWorkshop:iframe-load', {
-      hasBridge: Boolean(bridge),
-      hasNavigated,
-      iframeSrc: iframe.getAttribute('src'),
-      iframeHref: (() => {
-        try {
-          return iframe.contentWindow?.location.href ?? null;
-        } catch {
-          return '[cross-origin]';
-        }
-      })(),
-    });
 
     if (!bridge) {
       bridge = createCreativeWorkshopBridgeHost({
@@ -368,16 +331,10 @@ function openCreativeWorkshop() {
         targetOrigin: getCreativeWorkshopOrigin(),
         onClose: close,
       });
-      console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
-        targetOrigin: getCreativeWorkshopOrigin(),
-      });
     }
 
     if (!hasNavigated) {
       hasNavigated = true;
-      console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
-        creativeWorkshopUrl,
-      });
       iframe.contentWindow?.location.replace(creativeWorkshopUrl);
     }
   });
@@ -385,16 +342,9 @@ function openCreativeWorkshop() {
 
 $(() => {
   creativeWorkshopDiag('script-mounted');
-  console.info('[CreativeWorkshop] script-mounted', {
-    clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
-    diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-  });
   replaceScriptButtons([{ name: '命定创意工坊', visible: true }]);
 
   eventOn(getButtonEvent('命定创意工坊'), () => {
-    console.info('[CreativeWorkshop] workshop-button-clicked', {
-      acceptedAgreement: hasAcceptedAgreement(),
-    });
     if (hasAcceptedAgreement()) {
       openCreativeWorkshop();
     } else {
@@ -402,7 +352,4 @@ $(() => {
     }
   });
 
-  $(window).on('pagehide', () => {
-    console.warn('[CreativeWorkshop] script-pagehide');
-  });
 });

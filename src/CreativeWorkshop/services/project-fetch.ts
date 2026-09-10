@@ -242,7 +242,7 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
     if (_.isString(projectId) && projectId) {
       const fallback = getAnyCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
       if (fallback) {
-        console.warn('[CreativeWorkshop] 使用缓存的世界书源文件', { projectId, error });
+
         return fallback;
       }
     }
@@ -321,7 +321,7 @@ export async function fetchCreativeWorkshopProjectDetail(
     if (receivedVersionMismatch) throw error;
     const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
     if (fallback && (!expectedVersion || _.get(fallback, 'project.version') === expectedVersion)) {
-      console.warn('[CreativeWorkshop] 使用缓存的项目详情', { projectId, expectedVersion, error });
+
       return fallback;
     }
     throw error;

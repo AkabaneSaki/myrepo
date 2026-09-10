@@ -7,7 +7,7 @@
 
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -69,10 +69,25 @@ function getCurrentCreativeWorkshopContext() {
 
 ;// ./src/CreativeWorkshop/version.ts
 const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.0.15';
-const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-2';
+const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-3';
 
 ;// ./src/CreativeWorkshop/services/diagnostic-log.ts
 
+const INSTALL_DIAGNOSTIC_EVENTS = new Set([
+    'script-mounted',
+    'install-state:scan:start',
+    'install-state:worldbook',
+    'install-state:project',
+    'install-state:scan:complete',
+    'install-state:worldbook-read-error',
+    'install-request',
+    'install-request-blocked',
+    'install-entry-match',
+    'install:prepared',
+    'install:complete',
+    'install-request-finished',
+    'install-request-error',
+]);
 function stringifyDiagnosticPayload(payload) {
     try {
         return JSON.stringify(payload, (_key, value) => {
@@ -107,9 +122,13 @@ function formatDiagnosticLine(event, payload) {
     return `[CreativeWorkshop][diag] ${event} ${stringifyDiagnosticPayload(body)}`;
 }
 function creativeWorkshopDiag(event, payload) {
+    if (!INSTALL_DIAGNOSTIC_EVENTS.has(event))
+        return;
     console.info(formatDiagnosticLine(event, payload));
 }
 function creativeWorkshopDiagError(event, payload) {
+    if (!INSTALL_DIAGNOSTIC_EVENTS.has(event))
+        return;
     console.error(formatDiagnosticLine(event, payload));
 }
 
@@ -377,7 +396,6 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
         if (_.isString(projectId) && projectId) {
             const fallback = getAnyCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
             if (fallback) {
-                console.warn('[CreativeWorkshop] 使用缓存的世界书源文件', { projectId, error });
                 return fallback;
             }
         }
@@ -448,7 +466,6 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
             throw error;
         const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
         if (fallback && (!expectedVersion || _.get(fallback, 'project.version') === expectedVersion)) {
-            console.warn('[CreativeWorkshop] 使用缓存的项目详情', { projectId, expectedVersion, error });
             return fallback;
         }
         throw error;
@@ -613,7 +630,10 @@ async function readWorldbookEntries(worldbookName) {
         return await getWorldbook(worldbookName);
     }
     catch (error) {
-        console.warn('[CreativeWorkshop] 无法读取安装目标世界书', { worldbookName, error });
+        creativeWorkshopDiagError('install-state:worldbook-read-error', {
+            worldbookName,
+            error: error instanceof Error ? error.message : String(error),
+        });
         return [];
     }
 }
@@ -628,20 +648,26 @@ async function listInstalledCreativeWorkshopProjects() {
         worldbookName,
         entries: await readWorldbookEntries(worldbookName),
     })));
-    worldbooks.forEach(({ worldbookName, entries }) => creativeWorkshopDiag('install-state:worldbook', ({
-        worldbookName,
-        totalEntries: entries.length,
-        workshopEntries: entries
+    worldbooks.forEach(({ worldbookName, entries }) => {
+        const workshopEntries = entries
             .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
-            .map(summarizeInstalledEntry),
-        suspiciousLegacyEntries: entries
+            .map(summarizeInstalledEntry);
+        const suspiciousLegacyEntries = entries
             .filter(entry => {
             const name = String(_.get(entry, 'name', ''));
             const hasWorkshopIdentity = _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'));
             return !hasWorkshopIdentity && (name.startsWith('[DLC]') || name.startsWith('命定系统-'));
         })
-            .map(summarizeInstalledEntry),
-    })));
+            .map(summarizeInstalledEntry);
+        if (workshopEntries.length === 0 && suspiciousLegacyEntries.length === 0)
+            return;
+        creativeWorkshopDiag('install-state:worldbook', {
+            worldbookName,
+            totalEntries: entries.length,
+            workshopEntryCount: workshopEntries.length,
+            suspiciousLegacyEntries,
+        });
+    });
     const entryRows = worldbooks.flatMap(({ worldbookName, entries }) => entries
         .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
         .map(entry => ({ worldbookName, entry })));
@@ -685,6 +711,10 @@ async function listInstalledCreativeWorkshopProjects() {
         regexCount: project.regexCount,
         worldbookName: project.worldbookName,
     })));
+    creativeWorkshopDiag('install-state:scan:complete', {
+        detectedProjectCount: projects.length,
+        detectedProjectIds: projects.map(project => project.projectId),
+    });
     return projects;
 }
 
@@ -912,6 +942,16 @@ function renameEntry(entryName, tags, projectName) {
     const type = tags.includes('角色') ? '角色' : tags.includes('事件') ? '事件' : '扩展';
     return entryName.startsWith('[DLC]') ? entryName : `[DLC][${type}][${projectName}]${entryName}`;
 }
+function summarizeInstallCandidate(entry) {
+    return {
+        uid: _.get(entry, 'uid', null),
+        name: _.get(entry, 'name', ''),
+        cwProjectId: _.get(entry, 'extra.cw_project_id', null),
+        legacyProjectName: _.get(entry, 'extra.fate_project_name', null),
+        cwEntryKey: _.get(entry, 'extra.cw_entry_key', null),
+        localVersion: _.get(entry, 'extra.cw_project_version', null),
+    };
+}
 function arrayField(entry, rawPath, previewPath) {
     const rawValue = _.get(entry, rawPath);
     if (Array.isArray(rawValue))
@@ -986,12 +1026,16 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName, 
             const stableKey = `${projectId}:${entryKey}`;
             const legacyKey = `${projectId}:${index}`;
             desiredProjectEntryKeys.add(stableKey);
+            const sameNameCandidates = worldbook
+                .filter(item => item.name === name)
+                .map(summarizeInstallCandidate);
             let matchingIndexes = worldbook.reduce((indexes, item, itemIndex) => {
                 const existingKey = _.get(item, 'extra.cw_entry_key');
                 if (existingKey === stableKey || existingKey === legacyKey)
                     indexes.push(itemIndex);
                 return indexes;
             }, []);
+            let matchMethod = matchingIndexes.length > 0 ? 'entry-key' : 'none';
             if (matchingIndexes.length === 0) {
                 matchingIndexes = worldbook.reduce((indexes, item, itemIndex) => {
                     const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
@@ -1000,7 +1044,20 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName, 
                     }
                     return indexes;
                 }, []);
+                if (matchingIndexes.length > 0)
+                    matchMethod = 'project-id+name';
             }
+            creativeWorkshopDiag('install-entry-match', {
+                projectId,
+                worldbookName,
+                name,
+                stableKey,
+                legacyKey,
+                matchMethod,
+                matchCount: matchingIndexes.length,
+                action: matchingIndexes.length === 0 ? 'CREATE_NEW' : matchingIndexes.length === 1 ? 'REUSE' : 'DEDUP_REUSE',
+                sameNameCandidates,
+            });
             const existingIndex = matchingIndexes[0] ?? -1;
             for (let duplicateIndex = matchingIndexes.length - 1; duplicateIndex >= 1; duplicateIndex -= 1) {
                 worldbook.splice(matchingIndexes[duplicateIndex], 1);
@@ -1137,7 +1194,6 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
         resolvedWorldbookName: worldbookName,
         selectedEntryKeyCount: selectedEntryKeys?.length ?? null,
         preparedEntryCount: prepared.length,
-        preparedEntryKeys: prepared.map(item => item.entryKey),
     });
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
@@ -1276,6 +1332,7 @@ function summarizeBridgePayload(type, payload) {
         hasUser: _.isObject(_.get(payload, 'user')),
     };
 }
+const legacyDebugLog = (..._args) => { };
 function createCreativeWorkshopBridgeHost(option) {
     const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
     const oauthOrigin = getCreativeWorkshopOrigin();
@@ -1286,7 +1343,7 @@ function createCreativeWorkshopBridgeHost(option) {
     let oauthClosePollId = null;
     let oauthPopupOpenedAt = 0;
     const projectMutationInFlight = new Set();
-    console.info('[CreativeWorkshopBridgeHost] created', {
+    legacyDebugLog('[CreativeWorkshopBridgeHost] created', {
         clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
         diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
         targetOrigin,
@@ -1294,7 +1351,7 @@ function createCreativeWorkshopBridgeHost(option) {
         iframeSrc: iframe.getAttribute('src'),
     });
     function cleanupOAuthPopupReference() {
-        console.info('[CreativeWorkshopBridgeHost] cleanupOAuthPopupReference', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] cleanupOAuthPopupReference', {
             hasPopup: Boolean(oauthPopup),
             popupClosed: oauthPopup?.closed ?? null,
         });
@@ -1304,7 +1361,7 @@ function createCreativeWorkshopBridgeHost(option) {
         oauthPopup = null;
     }
     function clearOAuthTimers() {
-        console.info('[CreativeWorkshopBridgeHost] clearOAuthTimers', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] clearOAuthTimers', {
             hasTimeout: oauthTimeoutId !== null,
             hasClosePoll: oauthClosePollId !== null,
         });
@@ -1318,7 +1375,7 @@ function createCreativeWorkshopBridgeHost(option) {
         }
     }
     async function resolveOAuthResult(payload, requestId = pendingOauthRequestId) {
-        console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
             requestId,
             payload: summarizeBridgePayload('bridge:oauth:result', payload),
         });
@@ -1329,7 +1386,7 @@ function createCreativeWorkshopBridgeHost(option) {
         pendingOauthState = undefined;
     }
     async function failPendingOAuth(message) {
-        console.warn('[CreativeWorkshopBridgeHost] failPendingOAuth', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] failPendingOAuth', {
             message,
             pendingOauthRequestId,
             pendingOauthState,
@@ -1345,7 +1402,7 @@ function createCreativeWorkshopBridgeHost(option) {
     function startOAuthMonitors() {
         clearOAuthTimers();
         oauthPopupOpenedAt = Date.now();
-        console.info('[CreativeWorkshopBridgeHost] startOAuthMonitors', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] startOAuthMonitors', {
             pendingOauthRequestId,
             pendingOauthState,
             popupClosed: oauthPopup?.closed ?? null,
@@ -1355,18 +1412,18 @@ function createCreativeWorkshopBridgeHost(option) {
         }, OAUTH_TIMEOUT_MS);
         oauthClosePollId = hostWindow.setInterval(() => {
             if (!oauthPopup) {
-                console.warn('[CreativeWorkshopBridgeHost] oauthClosePoll:no-popup-reference');
+                legacyDebugLog('[CreativeWorkshopBridgeHost] oauthClosePoll:no-popup-reference');
                 return;
             }
             if (Date.now() - oauthPopupOpenedAt < OAUTH_POPUP_CLOSE_GUARD_MS) {
-                console.info('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
+                legacyDebugLog('[CreativeWorkshopBridgeHost] oauthClosePoll:within-guard-window', {
                     elapsedMs: Date.now() - oauthPopupOpenedAt,
                     guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
                 });
                 return;
             }
             if (oauthPopup.closed) {
-                console.info('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
+                legacyDebugLog('[CreativeWorkshopBridgeHost] popup reported closed before oauth resolved', {
                     state: pendingOauthState,
                     guardMs: OAUTH_POPUP_CLOSE_GUARD_MS,
                 });
@@ -1375,7 +1432,7 @@ function createCreativeWorkshopBridgeHost(option) {
         }, 500);
     }
     async function handleOAuthCallback(event) {
-        console.info('[CreativeWorkshopBridgeHost] handleOAuthCallback:received', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] handleOAuthCallback:received', {
             pendingOauthRequestId,
             pendingOauthState,
             eventOrigin: event.origin,
@@ -1422,7 +1479,7 @@ function createCreativeWorkshopBridgeHost(option) {
         });
     }
     async function post(type, payload, requestId) {
-        console.info('[CreativeWorkshopBridgeHost] post', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] post', {
             type,
             requestId,
             payload: summarizeBridgePayload(type, payload),
@@ -1431,7 +1488,7 @@ function createCreativeWorkshopBridgeHost(option) {
         iframe.contentWindow?.postMessage(createBridgeMessage(type, payload, requestId), targetOrigin);
     }
     async function handleMessage(event) {
-        console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
+        legacyDebugLog('[CreativeWorkshopBridgeHost] handleMessage:received', {
             eventOrigin: event.origin,
             sourceMatchesIframe: event.source === iframe.contentWindow,
             type: _.get(event.data, 'type'),
@@ -1455,15 +1512,27 @@ function createCreativeWorkshopBridgeHost(option) {
         const isProjectMutation = actionType === 'bridge:install-project' ||
             actionType === 'bridge:uninstall-project' ||
             actionType === 'bridge:confirm-project-update';
-        creativeWorkshopDiag('bridge-action:start', {
-            diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-            type: actionType,
-            requestId: event.data.requestId,
-            projectId: actionProjectId,
-            legacyProjectName: actionLegacyProjectName,
-        });
+        if (actionType === 'bridge:install-project') {
+            creativeWorkshopDiag('install-request', {
+                requestId: event.data.requestId,
+                projectId: actionProjectId,
+                legacyProjectName: actionLegacyProjectName,
+                projectVersion: _.get(event.data, 'payload.projectVersion', null),
+                worldbookName: _.get(event.data, 'payload.worldbookName', null),
+                worldbookEntryKeyCount: Array.isArray(_.get(event.data, 'payload.worldbookEntryKeys'))
+                    ? _.get(event.data, 'payload.worldbookEntryKeys').length
+                    : null,
+            });
+        }
         if (isProjectMutation && actionProjectId) {
             if (projectMutationInFlight.has(actionProjectId)) {
+                if (actionType === 'bridge:install-project') {
+                    creativeWorkshopDiag('install-request-blocked', {
+                        requestId: event.data.requestId,
+                        projectId: actionProjectId,
+                        reason: 'mutation-in-flight',
+                    });
+                }
                 await post('bridge:error', {
                     message: '此项目已有安装、更新或卸载操作正在进行，请等待完成',
                     projectId: actionProjectId,
@@ -1559,7 +1628,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     if (pendingOauthRequestId) {
                         await failPendingOAuth('新的登录请求已开始，旧的授权流程已取消');
                     }
-                    console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
+                    legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
                         authUrl: safeUrlForLog(authUrl),
                         state,
                         requestId: event.data.requestId,
@@ -1570,7 +1639,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     const top = Math.max(0, Math.round((hostWindow.screen.height - height) / 2));
                     const popup = hostWindow.open(authUrl, OAUTH_POPUP_NAME, `width=${width},height=${height},left=${left},top=${top}`);
                     if (!popup) {
-                        console.error('[CreativeWorkshopBridgeHost] bridge:oauth:start popup blocked');
+                        legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start popup blocked');
                         await post('bridge:oauth:result', {
                             success: false,
                             message: '请允许浏览器弹窗后重试登录',
@@ -1582,7 +1651,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     oauthPopupOpenedAt = Date.now();
                     pendingOauthRequestId = event.data.requestId;
                     pendingOauthState = _.isString(state) ? state : undefined;
-                    console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start popup opened', {
+                    legacyDebugLog('[CreativeWorkshopBridgeHost] bridge:oauth:start popup opened', {
                         popupClosed: popup.closed,
                         pendingOauthRequestId,
                         pendingOauthState,
@@ -1591,24 +1660,24 @@ function createCreativeWorkshopBridgeHost(option) {
                     break;
                 }
             }
-            creativeWorkshopDiag('bridge-action:complete', {
-                diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-                type: actionType,
-                requestId: event.data.requestId,
-                projectId: actionProjectId,
-                durationMs: Date.now() - actionStartedAt,
-            });
+            if (actionType === 'bridge:install-project') {
+                creativeWorkshopDiag('install-request-finished', {
+                    requestId: event.data.requestId,
+                    projectId: actionProjectId,
+                    durationMs: Date.now() - actionStartedAt,
+                });
+            }
         }
         catch (error) {
-            creativeWorkshopDiagError('bridge-action:error', {
-                diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-                type: actionType,
-                requestId: event.data.requestId,
-                projectId: actionProjectId,
-                legacyProjectName: actionLegacyProjectName,
-                durationMs: Date.now() - actionStartedAt,
-                error: error instanceof Error ? error.message : String(error),
-            });
+            if (actionType === 'bridge:install-project') {
+                creativeWorkshopDiagError('install-request-error', {
+                    requestId: event.data.requestId,
+                    projectId: actionProjectId,
+                    legacyProjectName: actionLegacyProjectName,
+                    durationMs: Date.now() - actionStartedAt,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
             await post('bridge:error', {
                 message: error instanceof Error ? error.message : String(error),
                 projectId: actionProjectId,
@@ -1626,7 +1695,7 @@ function createCreativeWorkshopBridgeHost(option) {
     return {
         destroy() {
             if (pendingOauthRequestId || pendingOauthState) {
-                console.warn('[CreativeWorkshopBridgeHost] OAuth 监听在授权完成前被销毁', {
+                legacyDebugLog('[CreativeWorkshopBridgeHost] OAuth 监听在授权完成前被销毁', {
                     requestId: pendingOauthRequestId,
                     state: pendingOauthState,
                     popupClosed: oauthPopup?.closed ?? null,
@@ -1642,7 +1711,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     })(),
                 });
             }
-            console.info('[CreativeWorkshopBridgeHost] destroy');
+            legacyDebugLog('[CreativeWorkshopBridgeHost] destroy');
             clearOAuthTimers();
             cleanupOAuthPopupReference();
             pendingOauthRequestId = undefined;
@@ -1654,7 +1723,6 @@ function createCreativeWorkshopBridgeHost(option) {
 }
 
 ;// ./src/CreativeWorkshop/index.ts
-
 
 
 
@@ -1824,19 +1892,8 @@ function openCreativeWorkshop() {
     const hostWindow = window.parent !== window ? window.parent : window;
     const hostDocument = hostWindow.document;
     const host$ = hostWindow.$;
-    console.info('[CreativeWorkshop] openCreativeWorkshop:start', {
-        clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
-        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-        creativeWorkshopUrl,
-        hostOrigin: hostWindow.location.origin,
-        currentOrigin: window.location.origin,
-        parentEqualsWindow: window.parent === window,
-    });
     const existing = host$('#creative-workshop-overlay');
     if (existing.length) {
-        console.warn('[CreativeWorkshop] openCreativeWorkshop:remove-existing-overlay', {
-            count: existing.length,
-        });
         existing.remove();
     }
     const { destroy } = teleportStyle(hostDocument.head);
@@ -1929,17 +1986,7 @@ function openCreativeWorkshop() {
     hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
     $frameShell.append($frame, $closeButton);
     $overlay.append($frameShell).appendTo(hostDocument.body);
-    console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
-        iframeCount: $overlay.find('iframe').length,
-        bodyChildCount: hostDocument.body.children.length,
-    });
     const close = () => {
-        console.warn('[CreativeWorkshop] openCreativeWorkshop:close', {
-            hasBridge: Boolean(bridge),
-            hasNavigated,
-            overlayExists: hostDocument.body.contains($overlay[0]),
-            activeElementTag: hostDocument.activeElement?.tagName,
-        });
         bridge?.destroy();
         host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
         host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
@@ -1953,10 +2000,6 @@ function openCreativeWorkshop() {
         close();
     });
     $overlay.on('click', event => {
-        console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-click', {
-            targetIsOverlay: event.target === $overlay[0],
-            targetTag: event.target?.tagName,
-        });
         if (event.target === $overlay[0]) {
             close();
         }
@@ -1965,58 +2008,29 @@ function openCreativeWorkshop() {
     let hasNavigated = false;
     $frame.on('load', () => {
         const iframe = $frame[0];
-        console.info('[CreativeWorkshop] openCreativeWorkshop:iframe-load', {
-            hasBridge: Boolean(bridge),
-            hasNavigated,
-            iframeSrc: iframe.getAttribute('src'),
-            iframeHref: (() => {
-                try {
-                    return iframe.contentWindow?.location.href ?? null;
-                }
-                catch {
-                    return '[cross-origin]';
-                }
-            })(),
-        });
         if (!bridge) {
             bridge = createCreativeWorkshopBridgeHost({
                 iframe,
                 targetOrigin: getCreativeWorkshopOrigin(),
                 onClose: close,
             });
-            console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
-                targetOrigin: getCreativeWorkshopOrigin(),
-            });
         }
         if (!hasNavigated) {
             hasNavigated = true;
-            console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
-                creativeWorkshopUrl,
-            });
             iframe.contentWindow?.location.replace(creativeWorkshopUrl);
         }
     });
 }
 $(() => {
     creativeWorkshopDiag('script-mounted');
-    console.info('[CreativeWorkshop] script-mounted', {
-        clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
-        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
-    });
     replaceScriptButtons([{ name: '命定创意工坊', visible: true }]);
     eventOn(getButtonEvent('命定创意工坊'), () => {
-        console.info('[CreativeWorkshop] workshop-button-clicked', {
-            acceptedAgreement: hasAcceptedAgreement(),
-        });
         if (hasAcceptedAgreement()) {
             openCreativeWorkshop();
         }
         else {
             showAgreementPopup();
         }
-    });
-    $(window).on('pagehide', () => {
-        console.warn('[CreativeWorkshop] script-pagehide');
     });
 });
 

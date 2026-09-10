@@ -62,6 +62,17 @@ function renameEntry(entryName: string, tags: string[], projectName: string): st
   return entryName.startsWith('[DLC]') ? entryName : `[DLC][${type}][${projectName}]${entryName}`;
 }
 
+function summarizeInstallCandidate(entry: WorldbookEntry) {
+  return {
+    uid: _.get(entry, 'uid', null),
+    name: _.get(entry, 'name', ''),
+    cwProjectId: _.get(entry, 'extra.cw_project_id', null),
+    legacyProjectName: _.get(entry, 'extra.fate_project_name', null),
+    cwEntryKey: _.get(entry, 'extra.cw_entry_key', null),
+    localVersion: _.get(entry, 'extra.cw_project_version', null),
+  };
+}
+
 function arrayField(entry: Record<string, any>, rawPath: string, previewPath: string) {
   const rawValue = _.get(entry, rawPath);
   if (Array.isArray(rawValue)) return rawValue;
@@ -161,11 +172,15 @@ async function applyPreparedProject(
       const stableKey = `${projectId}:${entryKey}`;
       const legacyKey = `${projectId}:${index}`;
       desiredProjectEntryKeys.add(stableKey);
+      const sameNameCandidates = worldbook
+        .filter(item => item.name === name)
+        .map(summarizeInstallCandidate);
       let matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
         const existingKey = _.get(item, 'extra.cw_entry_key');
         if (existingKey === stableKey || existingKey === legacyKey) indexes.push(itemIndex);
         return indexes;
       }, []);
+      let matchMethod = matchingIndexes.length > 0 ? 'entry-key' : 'none';
       if (matchingIndexes.length === 0) {
         matchingIndexes = worldbook.reduce<number[]>((indexes, item, itemIndex) => {
           const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
@@ -174,7 +189,19 @@ async function applyPreparedProject(
           }
           return indexes;
         }, []);
+        if (matchingIndexes.length > 0) matchMethod = 'project-id+name';
       }
+      creativeWorkshopDiag('install-entry-match', {
+        projectId,
+        worldbookName,
+        name,
+        stableKey,
+        legacyKey,
+        matchMethod,
+        matchCount: matchingIndexes.length,
+        action: matchingIndexes.length === 0 ? 'CREATE_NEW' : matchingIndexes.length === 1 ? 'REUSE' : 'DEDUP_REUSE',
+        sameNameCandidates,
+      });
       const existingIndex = matchingIndexes[0] ?? -1;
       for (let duplicateIndex = matchingIndexes.length - 1; duplicateIndex >= 1; duplicateIndex -= 1) {
         worldbook.splice(matchingIndexes[duplicateIndex], 1);
@@ -338,7 +365,6 @@ export async function installCreativeWorkshopProject(
     resolvedWorldbookName: worldbookName,
     selectedEntryKeyCount: selectedEntryKeys?.length ?? null,
     preparedEntryCount: prepared.length,
-    preparedEntryKeys: prepared.map(item => item.entryKey),
   });
   await applyPreparedProject(projectId, detail, prepared, worldbookName);
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
