@@ -71,6 +71,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthClosePollId: number | null = null;
   let oauthPopupOpenedAt = 0;
   let initialInstalledProjectScanInFlight: ReturnType<typeof scanInstalledCreativeWorkshopProjects> | null = null;
+  const projectMutationInFlight = new Set<string>();
 
   async function getInitialInstalledProjectScan() {
     if (initialInstalledProjectScanInFlight) return initialInstalledProjectScanInFlight;
@@ -269,6 +270,26 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
+    const isProjectMutation =
+      actionType === 'bridge:install-project' ||
+      actionType === 'bridge:uninstall-project' ||
+      actionType === 'bridge:confirm-project-update';
+
+    if (isProjectMutation && actionProjectId) {
+      if (projectMutationInFlight.has(actionProjectId)) {
+        await post(
+          'bridge:error',
+          {
+            message: '此项目已有安装、更新或卸载操作正在进行，请等待完成',
+            projectId: actionProjectId,
+            action: actionType,
+          },
+          event.data.requestId,
+        );
+        return;
+      }
+      projectMutationInFlight.add(actionProjectId);
+    }
 
     try {
       switch (event.data.type) {
@@ -330,9 +351,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const remainingProjects = await listInstalledCreativeWorkshopProjects();
           const stillInstalled = remainingProjects.some(project =>
             project.projectId === String(event.data.payload?.projectId) ||
-            Boolean(actionLegacyProjectName && (
-              project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName
-            )),
+            Boolean(
+              actionLegacyProjectName &&
+                (project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName),
+            ),
           );
           if (stillInstalled) {
             throw new Error('卸载未完全完成：仍检测到旧工坊安装条目，请重试或手动检查世界书/正则');
@@ -455,6 +477,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         },
         event.data.requestId,
       );
+    } finally {
+      if (isProjectMutation && actionProjectId) {
+        projectMutationInFlight.delete(actionProjectId);
+      }
     }
   }
 
