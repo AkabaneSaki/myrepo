@@ -64,6 +64,7 @@ function getCurrentCreativeWorkshopContext() {
 
 ;// ./src/CreativeWorkshop/version.ts
 const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.0.15';
+const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-1';
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
@@ -155,6 +156,17 @@ function deleteCreativeWorkshopInstallRecord(projectId) {
 const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 const WORLDBOOK_SOURCE_CACHE_TTL_MS = 30 * 60 * 1000;
+function safeRequestUrlForLog(value) {
+    if (!_.isString(value) || !value)
+        return null;
+    try {
+        const url = new URL(value);
+        return `${url.origin}${url.pathname}`;
+    }
+    catch {
+        return value.split('?')[0];
+    }
+}
 function getCreativeWorkshopCacheStore() {
     const variables = getVariables({ type: 'script', script_id: getScriptId() });
     const cache = _.get(variables, CREATIVE_WORKSHOP_CACHE_KEY);
@@ -268,12 +280,33 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
     if (_.isString(projectId) && projectId) {
         const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
         if (cached) {
+            console.info('[CreativeWorkshop][diag] http:worldbook-source:cache-hit', {
+                projectId,
+                projectVersion,
+                url: safeRequestUrlForLog(downloadUrl),
+                entryCount: cached.length,
+            });
             return cached;
         }
     }
+    const sourceRequestStartedAt = Date.now();
+    console.info('[CreativeWorkshop][diag] http:worldbook-source:request', {
+        projectId,
+        projectVersion,
+        url: safeRequestUrlForLog(downloadUrl),
+        cache: 'no-store',
+    });
     try {
         const response = await fetch(downloadUrl, {
             cache: 'no-store',
+        });
+        console.info('[CreativeWorkshop][diag] http:worldbook-source:response', {
+            projectId,
+            projectVersion,
+            url: safeRequestUrlForLog(downloadUrl),
+            status: response.status,
+            ok: response.ok,
+            durationMs: Date.now() - sourceRequestStartedAt,
         });
         if (!response.ok) {
             throw new Error(`获取世界书原始配置失败: ${response.status}`);
@@ -286,6 +319,13 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
         return normalized;
     }
     catch (error) {
+        console.error('[CreativeWorkshop][diag] http:worldbook-source:error', {
+            projectId,
+            projectVersion,
+            url: safeRequestUrlForLog(downloadUrl),
+            durationMs: Date.now() - sourceRequestStartedAt,
+            error: error instanceof Error ? error.message : String(error),
+        });
         if (_.isString(projectId) && projectId) {
             const fallback = getAnyCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
             if (fallback) {
@@ -299,13 +339,35 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
 async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
     const cached = getCachedProjectDetail(projectId, expectedVersion);
     if (cached) {
+        console.info('[CreativeWorkshop][diag] http:project-detail:cache-hit', {
+            projectId,
+            expectedVersion,
+            cachedVersion: _.get(cached, 'project.version', null),
+        });
         return cached;
     }
     let receivedVersionMismatch = false;
+    let requestUrl = null;
+    const detailRequestStartedAt = Date.now();
     try {
         const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
-        const response = await fetch(`${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`, {
+        requestUrl = `${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`;
+        console.info('[CreativeWorkshop][diag] http:project-detail:request', {
+            projectId,
+            expectedVersion,
+            url: safeRequestUrlForLog(requestUrl),
             cache: expectedVersion ? 'no-store' : 'no-cache',
+        });
+        const response = await fetch(requestUrl, {
+            cache: expectedVersion ? 'no-store' : 'no-cache',
+        });
+        console.info('[CreativeWorkshop][diag] http:project-detail:response', {
+            projectId,
+            expectedVersion,
+            url: safeRequestUrlForLog(requestUrl),
+            status: response.status,
+            ok: response.ok,
+            durationMs: Date.now() - detailRequestStartedAt,
         });
         if (!response.ok) {
             throw new Error(`获取云端项目详情失败: ${response.status}`);
@@ -327,6 +389,13 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         return normalized;
     }
     catch (error) {
+        console.error('[CreativeWorkshop][diag] http:project-detail:error', {
+            projectId,
+            expectedVersion,
+            url: requestUrl ? safeRequestUrlForLog(requestUrl) : null,
+            durationMs: Date.now() - detailRequestStartedAt,
+            error: error instanceof Error ? error.message : String(error),
+        });
         if (receivedVersionMismatch)
             throw error;
         const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
@@ -479,6 +548,17 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
 
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function summarizeInstalledEntry(entry) {
+    return {
+        uid: _.get(entry, 'uid', null),
+        name: _.get(entry, 'name', ''),
+        cwProjectId: _.get(entry, 'extra.cw_project_id', null),
+        legacyProjectName: _.get(entry, 'extra.fate_project_name', null),
+        cwEntryKey: _.get(entry, 'extra.cw_entry_key', null),
+        localVersion: _.get(entry, 'extra.cw_project_version', null),
+        enabled: _.get(entry, 'enabled', null),
+    };
+}
 async function readWorldbookEntries(worldbookName) {
     try {
         return await getWorldbook(worldbookName);
@@ -491,9 +571,27 @@ async function readWorldbookEntries(worldbookName) {
 async function listInstalledCreativeWorkshopProjects() {
     const registry = getCreativeWorkshopInstallRecords();
     const worldbookNames = getCreativeWorkshopRelevantWorldbookNames();
+    console.info('[CreativeWorkshop][diag] install-state:scan:start', {
+        registryProjectIds: Object.keys(registry),
+        worldbookNames,
+    });
     const worldbooks = await Promise.all(worldbookNames.map(async (worldbookName) => ({
         worldbookName,
         entries: await readWorldbookEntries(worldbookName),
+    })));
+    console.info('[CreativeWorkshop][diag] install-state:worldbooks', worldbooks.map(({ worldbookName, entries }) => ({
+        worldbookName,
+        totalEntries: entries.length,
+        workshopEntries: entries
+            .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
+            .map(summarizeInstalledEntry),
+        suspiciousLegacyEntries: entries
+            .filter(entry => {
+            const name = String(_.get(entry, 'name', ''));
+            const hasWorkshopIdentity = _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'));
+            return !hasWorkshopIdentity && (name.startsWith('[DLC]') || name.startsWith('命定系统-'));
+        })
+            .map(summarizeInstalledEntry),
     })));
     const entryRows = worldbooks.flatMap(({ worldbookName, entries }) => entries
         .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
@@ -501,7 +599,7 @@ async function listInstalledCreativeWorkshopProjects() {
     const groupedEntries = _.groupBy(entryRows, row => String(_.get(row.entry, 'extra.cw_project_id') || _.get(row.entry, 'extra.fate_project_name')));
     const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
     const groupedRegexes = _.groupBy(regexes.filter(regex => getCreativeWorkshopRegexId(regex).startsWith('creative_workshop:')), regex => getCreativeWorkshopRegexId(regex).split(':')[1] || '');
-    return _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes)])
+    const projects = _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes)])
         .filter(Boolean)
         .map(projectId => {
         const projectRows = groupedEntries[projectId] || [];
@@ -529,6 +627,16 @@ async function listInstalledCreativeWorkshopProjects() {
             worldbookName: registry[projectId]?.worldbookName || projectRows[0]?.worldbookName || null,
         };
     });
+    console.info('[CreativeWorkshop][diag] install-state:scan:result', projects.map(project => ({
+        projectId: project.projectId,
+        name: project.name,
+        legacyProjectName: project.legacyProjectName,
+        localVersion: project.localVersion,
+        entryCount: project.entryCount,
+        regexCount: project.regexCount,
+        worldbookName: project.worldbookName,
+    })));
+    return projects;
 }
 
 ;// ./src/CreativeWorkshop/services/regex.ts
@@ -915,7 +1023,16 @@ async function deleteProjectEntriesFromWorldbook(projectId, worldbookName, legac
     if (!getWorldbookNames().includes(worldbookName))
         return [];
     const before = await getWorldbook(worldbookName);
-    if (!before.some(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName))) {
+    const matchingBefore = before.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName));
+    console.info('[CreativeWorkshop][diag] worldbook:delete:scan', {
+        projectId,
+        legacyProjectName,
+        worldbookName,
+        totalEntriesBefore: before.length,
+        matchingEntriesBefore: matchingBefore.length,
+        matchingEntryKeys: matchingBefore.map(entry => _.get(entry, 'extra.cw_entry_key', null)),
+    });
+    if (matchingBefore.length === 0) {
         return [];
     }
     const result = await deleteWorldbookEntries(worldbookName, entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName), { render: 'immediate' });
@@ -923,6 +1040,14 @@ async function deleteProjectEntriesFromWorldbook(projectId, worldbookName, legac
         result.worldbook.some(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName))) {
         throw new Error(`世界书「${worldbookName}」中的工坊条目未成功删除`);
     }
+    console.info('[CreativeWorkshop][diag] worldbook:delete:complete', {
+        projectId,
+        legacyProjectName,
+        worldbookName,
+        deletedCount: result.deleted_entries.length,
+        totalEntriesAfter: result.worldbook.length,
+        matchingEntriesAfter: result.worldbook.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName)).length,
+    });
     return result.deleted_entries;
 }
 async function assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName, ignoreWorldbookName) {
@@ -955,14 +1080,39 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
     const worldbookName = requestedWorldbookName
         ? await ensureTargetWorldbook(requestedWorldbookName)
         : getCurrentWorldbookName();
+    console.info('[CreativeWorkshop][diag] install:prepared', {
+        projectId,
+        projectVersion: _.get(detail, 'project.version', null),
+        requestedWorldbookName: requestedWorldbookName || null,
+        resolvedWorldbookName: worldbookName,
+        selectedEntryKeyCount: selectedEntryKeys?.length ?? null,
+        preparedEntryCount: prepared.length,
+        preparedEntryKeys: prepared.map(item => item.entryKey),
+    });
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
+    console.info('[CreativeWorkshop][diag] install:complete', {
+        projectId,
+        worldbookName,
+        preparedEntryCount: prepared.length,
+    });
     return detail;
 }
 async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
     const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
+    console.info('[CreativeWorkshop][diag] uninstall:start', {
+        projectId,
+        legacyProjectName,
+        resolvedWorldbookName: worldbookName,
+    });
     const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
     await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+    console.info('[CreativeWorkshop][diag] uninstall:complete', {
+        projectId,
+        legacyProjectName,
+        resolvedWorldbookName: worldbookName,
+        deletedEntryCount: deletedEntries.length,
+    });
     return deletedEntries;
 }
 async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName) {
@@ -971,6 +1121,15 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
     const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
     const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))
         .filter(name => name !== worldbookName);
+    console.info('[CreativeWorkshop][diag] update:prepared', {
+        projectId,
+        legacyProjectName,
+        expectedVersion: expectedVersion || null,
+        actualVersion: _.get(detail, 'project.version', null),
+        resolvedWorldbookName: worldbookName,
+        preparedEntryCount: prepared.length,
+        cleanupWorldbooks: otherWorldbooks,
+    });
     for (const otherWorldbookName of otherWorldbooks) {
         await deleteProjectEntriesFromWorldbook(projectId, otherWorldbookName, legacyProjectName);
     }
@@ -988,6 +1147,12 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
         deleteCreativeWorkshopInstallRecord(legacyProjectName);
     }
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
+    console.info('[CreativeWorkshop][diag] update:complete', {
+        projectId,
+        legacyProjectName,
+        worldbookName,
+        persistedEntryCount: persistedProjectEntries.length,
+    });
     return detail;
 }
 
@@ -1028,6 +1193,38 @@ function isOAuthCallbackMessage(value) {
             _.get(value, 'type') === 'oauth-ready') &&
         _.get(value, 'source') === OAUTH_CALLBACK_SOURCE);
 }
+function safeUrlForLog(value) {
+    if (!_.isString(value) || !value)
+        return null;
+    try {
+        const url = new URL(value);
+        return `${url.origin}${url.pathname}`;
+    }
+    catch {
+        return '[invalid-url]';
+    }
+}
+function summarizeBridgePayload(type, payload) {
+    if (!_.isObject(payload))
+        return {};
+    return {
+        projectId: _.isString(_.get(payload, 'projectId')) ? String(_.get(payload, 'projectId')) : undefined,
+        legacyProjectName: _.isString(_.get(payload, 'legacyProjectName')) ? String(_.get(payload, 'legacyProjectName')) : undefined,
+        projectVersion: _.isString(_.get(payload, 'projectVersion')) ? String(_.get(payload, 'projectVersion')) : undefined,
+        worldbookName: _.isString(_.get(payload, 'worldbookName')) ? String(_.get(payload, 'worldbookName')) : undefined,
+        worldbookEntryKeyCount: Array.isArray(_.get(payload, 'worldbookEntryKeys')) ? _.get(payload, 'worldbookEntryKeys').length : undefined,
+        regexEntryKeyCount: Array.isArray(_.get(payload, 'regexEntryKeys')) ? _.get(payload, 'regexEntryKeys').length : undefined,
+        projectsCount: Array.isArray(_.get(payload, 'projects')) ? _.get(payload, 'projects').length : undefined,
+        connected: _.isBoolean(_.get(payload, 'connected')) ? _.get(payload, 'connected') : undefined,
+        clientVersion: _.isString(_.get(payload, 'clientVersion')) ? String(_.get(payload, 'clientVersion')) : undefined,
+        success: _.isBoolean(_.get(payload, 'success')) ? _.get(payload, 'success') : undefined,
+        message: _.isString(_.get(payload, 'message')) ? String(_.get(payload, 'message')) : undefined,
+        state: _.isString(_.get(payload, 'state')) ? String(_.get(payload, 'state')) : undefined,
+        authUrl: type === 'bridge:oauth:start' ? safeUrlForLog(_.get(payload, 'authUrl')) : undefined,
+        hasToken: _.isString(_.get(payload, 'token')) && Boolean(_.get(payload, 'token')),
+        hasUser: _.isObject(_.get(payload, 'user')),
+    };
+}
 function createCreativeWorkshopBridgeHost(option) {
     const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
     const oauthOrigin = getCreativeWorkshopOrigin();
@@ -1039,6 +1236,8 @@ function createCreativeWorkshopBridgeHost(option) {
     let oauthPopupOpenedAt = 0;
     const projectMutationInFlight = new Set();
     console.info('[CreativeWorkshopBridgeHost] created', {
+        clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
         targetOrigin,
         oauthOrigin,
         iframeSrc: iframe.getAttribute('src'),
@@ -1070,7 +1269,7 @@ function createCreativeWorkshopBridgeHost(option) {
     async function resolveOAuthResult(payload, requestId = pendingOauthRequestId) {
         console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
             requestId,
-            payload,
+            payload: summarizeBridgePayload('bridge:oauth:result', payload),
         });
         await post('bridge:oauth:result', payload, requestId);
         clearOAuthTimers();
@@ -1130,7 +1329,8 @@ function createCreativeWorkshopBridgeHost(option) {
             pendingOauthState,
             eventOrigin: event.origin,
             sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-            data: event.data,
+            callbackType: _.get(event.data, 'type'),
+            payload: summarizeBridgePayload('bridge:oauth:callback', event.data),
         });
         if (!pendingOauthRequestId)
             return;
@@ -1174,7 +1374,7 @@ function createCreativeWorkshopBridgeHost(option) {
         console.info('[CreativeWorkshopBridgeHost] post', {
             type,
             requestId,
-            payload,
+            payload: summarizeBridgePayload(type, payload),
             targetOrigin,
         });
         iframe.contentWindow?.postMessage(createBridgeMessage(type, payload, requestId), targetOrigin);
@@ -1183,7 +1383,9 @@ function createCreativeWorkshopBridgeHost(option) {
         console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
             eventOrigin: event.origin,
             sourceMatchesIframe: event.source === iframe.contentWindow,
-            data: event.data,
+            type: _.get(event.data, 'type'),
+            requestId: _.get(event.data, 'requestId'),
+            payload: summarizeBridgePayload(String(_.get(event.data, 'type') || ''), _.get(event.data, 'payload')),
         });
         if (event.source !== iframe.contentWindow)
             return;
@@ -1192,6 +1394,7 @@ function createCreativeWorkshopBridgeHost(option) {
         if (!isCreativeWorkshopBridgeMessage(event.data))
             return;
         const actionType = event.data.type;
+        const actionStartedAt = Date.now();
         const actionLegacyProjectName = _.isString(_.get(event.data, 'payload.legacyProjectName'))
             ? String(event.data.payload?.legacyProjectName)
             : undefined;
@@ -1201,6 +1404,13 @@ function createCreativeWorkshopBridgeHost(option) {
         const isProjectMutation = actionType === 'bridge:install-project' ||
             actionType === 'bridge:uninstall-project' ||
             actionType === 'bridge:confirm-project-update';
+        console.info('[CreativeWorkshop][diag] bridge-action:start', {
+            diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+            type: actionType,
+            requestId: event.data.requestId,
+            projectId: actionProjectId,
+            legacyProjectName: actionLegacyProjectName,
+        });
         if (isProjectMutation && actionProjectId) {
             if (projectMutationInFlight.has(actionProjectId)) {
                 await post('bridge:error', {
@@ -1299,7 +1509,7 @@ function createCreativeWorkshopBridgeHost(option) {
                         await failPendingOAuth('新的登录请求已开始，旧的授权流程已取消');
                     }
                     console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
-                        authUrl,
+                        authUrl: safeUrlForLog(authUrl),
                         state,
                         requestId: event.data.requestId,
                     });
@@ -1330,8 +1540,24 @@ function createCreativeWorkshopBridgeHost(option) {
                     break;
                 }
             }
+            console.info('[CreativeWorkshop][diag] bridge-action:complete', {
+                diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+                type: actionType,
+                requestId: event.data.requestId,
+                projectId: actionProjectId,
+                durationMs: Date.now() - actionStartedAt,
+            });
         }
         catch (error) {
+            console.error('[CreativeWorkshop][diag] bridge-action:error', {
+                diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+                type: actionType,
+                requestId: event.data.requestId,
+                projectId: actionProjectId,
+                legacyProjectName: actionLegacyProjectName,
+                durationMs: Date.now() - actionStartedAt,
+                error: error instanceof Error ? error.message : String(error),
+            });
             await post('bridge:error', {
                 message: error instanceof Error ? error.message : String(error),
                 projectId: actionProjectId,
@@ -1377,6 +1603,7 @@ function createCreativeWorkshopBridgeHost(option) {
 }
 
 ;// ./src/CreativeWorkshop/index.ts
+
 
 
 
@@ -1546,6 +1773,8 @@ function openCreativeWorkshop() {
     const hostDocument = hostWindow.document;
     const host$ = hostWindow.$;
     console.info('[CreativeWorkshop] openCreativeWorkshop:start', {
+        clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
         creativeWorkshopUrl,
         hostOrigin: hostWindow.location.origin,
         currentOrigin: window.location.origin,
@@ -1717,7 +1946,10 @@ function openCreativeWorkshop() {
     });
 }
 $(() => {
-    console.info('[CreativeWorkshop] script-mounted');
+    console.info('[CreativeWorkshop] script-mounted', {
+        clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+    });
     replaceScriptButtons([{ name: '命定创意工坊', visible: true }]);
     eventOn(getButtonEvent('命定创意工坊'), () => {
         console.info('[CreativeWorkshop] workshop-button-clicked', {
