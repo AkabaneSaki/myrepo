@@ -1,4 +1,5 @@
 import { getCreativeWorkshopUrl } from './config';
+import { creativeWorkshopDiag, creativeWorkshopDiagError } from './diagnostic-log';
 
 const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -191,7 +192,7 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
   if (_.isString(projectId) && projectId) {
     const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
     if (cached) {
-      console.info('[CreativeWorkshop][diag] http:worldbook-source:cache-hit', {
+      creativeWorkshopDiag('http:worldbook-source:cache-hit', {
         projectId,
         projectVersion,
         url: safeRequestUrlForLog(downloadUrl),
@@ -202,7 +203,7 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
   }
 
   const sourceRequestStartedAt = Date.now();
-  console.info('[CreativeWorkshop][diag] http:worldbook-source:request', {
+  creativeWorkshopDiag('http:worldbook-source:request', {
     projectId,
     projectVersion,
     url: safeRequestUrlForLog(downloadUrl),
@@ -212,7 +213,7 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
     const response = await fetch(downloadUrl, {
       cache: 'no-store',
     });
-    console.info('[CreativeWorkshop][diag] http:worldbook-source:response', {
+    creativeWorkshopDiag('http:worldbook-source:response', {
       projectId,
       projectVersion,
       url: safeRequestUrlForLog(downloadUrl),
@@ -231,7 +232,7 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
     }
     return normalized;
   } catch (error) {
-    console.error('[CreativeWorkshop][diag] http:worldbook-source:error', {
+    creativeWorkshopDiagError('http:worldbook-source:error', {
       projectId,
       projectVersion,
       url: safeRequestUrlForLog(downloadUrl),
@@ -255,7 +256,7 @@ export async function fetchCreativeWorkshopProjectDetail(
 ): Promise<CreativeWorkshopProjectDetail> {
   const cached = getCachedProjectDetail(projectId, expectedVersion);
   if (cached) {
-    console.info('[CreativeWorkshop][diag] http:project-detail:cache-hit', {
+    creativeWorkshopDiag('http:project-detail:cache-hit', {
       projectId,
       expectedVersion,
       cachedVersion: _.get(cached, 'project.version', null),
@@ -269,7 +270,7 @@ export async function fetchCreativeWorkshopProjectDetail(
   try {
     const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
     requestUrl = `${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`;
-    console.info('[CreativeWorkshop][diag] http:project-detail:request', {
+    creativeWorkshopDiag('http:project-detail:request', {
       projectId,
       expectedVersion,
       url: safeRequestUrlForLog(requestUrl),
@@ -278,7 +279,7 @@ export async function fetchCreativeWorkshopProjectDetail(
     const response = await fetch(requestUrl, {
       cache: expectedVersion ? 'no-store' : 'no-cache',
     });
-    console.info('[CreativeWorkshop][diag] http:project-detail:response', {
+    creativeWorkshopDiag('http:project-detail:response', {
       projectId,
       expectedVersion,
       url: safeRequestUrlForLog(requestUrl),
@@ -310,7 +311,7 @@ export async function fetchCreativeWorkshopProjectDetail(
     setCachedProjectDetail(projectId, normalized);
     return normalized;
   } catch (error) {
-    console.error('[CreativeWorkshop][diag] http:project-detail:error', {
+    creativeWorkshopDiagError('http:project-detail:error', {
       projectId,
       expectedVersion,
       url: requestUrl ? safeRequestUrlForLog(requestUrl) : null,

@@ -1,6 +1,7 @@
 import { createScriptIdIframe, teleportStyle } from '@util/script';
 import { createCreativeWorkshopBridgeHost } from './bridge/host';
 import { getCreativeWorkshopOrigin, getCreativeWorkshopUrl } from './services/config';
+import { creativeWorkshopDiag } from './services/diagnostic-log';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from './version';
 
 const AGREEMENT_STORAGE_KEY = 'creative_workshop_agreement_accepted';
@@ -383,6 +384,7 @@ function openCreativeWorkshop() {
 }
 
 $(() => {
+  creativeWorkshopDiag('script-mounted');
   console.info('[CreativeWorkshop] script-mounted', {
     clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
     diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,

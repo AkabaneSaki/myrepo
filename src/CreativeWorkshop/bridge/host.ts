@@ -1,6 +1,7 @@
 import { getCreativeWorkshopOrigin } from '../services/config';
 import { getCurrentCreativeWorkshopContext } from '../services/context';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from '../version';
+import { creativeWorkshopDiag, creativeWorkshopDiagError } from '../services/diagnostic-log';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
@@ -285,7 +286,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       actionType === 'bridge:uninstall-project' ||
       actionType === 'bridge:confirm-project-update';
 
-    console.info('[CreativeWorkshop][diag] bridge-action:start', {
+    creativeWorkshopDiag('bridge-action:start', {
       diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
       type: actionType,
       requestId: event.data.requestId,
@@ -481,7 +482,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           break;
         }
       }
-      console.info('[CreativeWorkshop][diag] bridge-action:complete', {
+      creativeWorkshopDiag('bridge-action:complete', {
         diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
         type: actionType,
         requestId: event.data.requestId,
@@ -489,7 +490,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         durationMs: Date.now() - actionStartedAt,
       });
     } catch (error) {
-      console.error('[CreativeWorkshop][diag] bridge-action:error', {
+      creativeWorkshopDiagError('bridge-action:error', {
         diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
         type: actionType,
         requestId: event.data.requestId,

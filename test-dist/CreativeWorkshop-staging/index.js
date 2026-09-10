@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 179:
+/***/ 947:
 /***/ (() => {
 
 
@@ -69,7 +69,49 @@ function getCurrentCreativeWorkshopContext() {
 
 ;// ./src/CreativeWorkshop/version.ts
 const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.0.15';
-const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-1';
+const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-2';
+
+;// ./src/CreativeWorkshop/services/diagnostic-log.ts
+
+function stringifyDiagnosticPayload(payload) {
+    try {
+        return JSON.stringify(payload, (_key, value) => {
+            if (value instanceof Error) {
+                return { name: value.name, message: value.message };
+            }
+            if (typeof value === 'bigint')
+                return String(value);
+            return value;
+        });
+    }
+    catch (error) {
+        return JSON.stringify({
+            clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+            diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+            serializationError: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
+function formatDiagnosticLine(event, payload) {
+    const body = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? {
+            ...payload,
+            clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+            diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+        }
+        : {
+            clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+            diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+            data: payload ?? null,
+        };
+    return `[CreativeWorkshop][diag] ${event} ${stringifyDiagnosticPayload(body)}`;
+}
+function creativeWorkshopDiag(event, payload) {
+    console.info(formatDiagnosticLine(event, payload));
+}
+function creativeWorkshopDiagError(event, payload) {
+    console.error(formatDiagnosticLine(event, payload));
+}
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
@@ -157,6 +199,7 @@ function deleteCreativeWorkshopInstallRecord(projectId) {
 }
 
 ;// ./src/CreativeWorkshop/services/project-fetch.ts
+
 
 const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -285,7 +328,7 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
     if (_.isString(projectId) && projectId) {
         const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
         if (cached) {
-            console.info('[CreativeWorkshop][diag] http:worldbook-source:cache-hit', {
+            creativeWorkshopDiag('http:worldbook-source:cache-hit', {
                 projectId,
                 projectVersion,
                 url: safeRequestUrlForLog(downloadUrl),
@@ -295,7 +338,7 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
         }
     }
     const sourceRequestStartedAt = Date.now();
-    console.info('[CreativeWorkshop][diag] http:worldbook-source:request', {
+    creativeWorkshopDiag('http:worldbook-source:request', {
         projectId,
         projectVersion,
         url: safeRequestUrlForLog(downloadUrl),
@@ -305,7 +348,7 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
         const response = await fetch(downloadUrl, {
             cache: 'no-store',
         });
-        console.info('[CreativeWorkshop][diag] http:worldbook-source:response', {
+        creativeWorkshopDiag('http:worldbook-source:response', {
             projectId,
             projectVersion,
             url: safeRequestUrlForLog(downloadUrl),
@@ -324,7 +367,7 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
         return normalized;
     }
     catch (error) {
-        console.error('[CreativeWorkshop][diag] http:worldbook-source:error', {
+        creativeWorkshopDiagError('http:worldbook-source:error', {
             projectId,
             projectVersion,
             url: safeRequestUrlForLog(downloadUrl),
@@ -344,7 +387,7 @@ async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail) {
 async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
     const cached = getCachedProjectDetail(projectId, expectedVersion);
     if (cached) {
-        console.info('[CreativeWorkshop][diag] http:project-detail:cache-hit', {
+        creativeWorkshopDiag('http:project-detail:cache-hit', {
             projectId,
             expectedVersion,
             cachedVersion: _.get(cached, 'project.version', null),
@@ -357,7 +400,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
     try {
         const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
         requestUrl = `${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`;
-        console.info('[CreativeWorkshop][diag] http:project-detail:request', {
+        creativeWorkshopDiag('http:project-detail:request', {
             projectId,
             expectedVersion,
             url: safeRequestUrlForLog(requestUrl),
@@ -366,7 +409,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         const response = await fetch(requestUrl, {
             cache: expectedVersion ? 'no-store' : 'no-cache',
         });
-        console.info('[CreativeWorkshop][diag] http:project-detail:response', {
+        creativeWorkshopDiag('http:project-detail:response', {
             projectId,
             expectedVersion,
             url: safeRequestUrlForLog(requestUrl),
@@ -394,7 +437,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         return normalized;
     }
     catch (error) {
-        console.error('[CreativeWorkshop][diag] http:project-detail:error', {
+        creativeWorkshopDiagError('http:project-detail:error', {
             projectId,
             expectedVersion,
             url: requestUrl ? safeRequestUrlForLog(requestUrl) : null,
@@ -552,6 +595,7 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
 ;// ./src/CreativeWorkshop/services/install-state.ts
 
 
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function summarizeInstalledEntry(entry) {
     return {
@@ -576,7 +620,7 @@ async function readWorldbookEntries(worldbookName) {
 async function listInstalledCreativeWorkshopProjects() {
     const registry = getCreativeWorkshopInstallRecords();
     const worldbookNames = getCreativeWorkshopRelevantWorldbookNames();
-    console.info('[CreativeWorkshop][diag] install-state:scan:start', {
+    creativeWorkshopDiag('install-state:scan:start', {
         registryProjectIds: Object.keys(registry),
         worldbookNames,
     });
@@ -584,7 +628,7 @@ async function listInstalledCreativeWorkshopProjects() {
         worldbookName,
         entries: await readWorldbookEntries(worldbookName),
     })));
-    console.info('[CreativeWorkshop][diag] install-state:worldbooks', worldbooks.map(({ worldbookName, entries }) => ({
+    worldbooks.forEach(({ worldbookName, entries }) => creativeWorkshopDiag('install-state:worldbook', ({
         worldbookName,
         totalEntries: entries.length,
         workshopEntries: entries
@@ -632,7 +676,7 @@ async function listInstalledCreativeWorkshopProjects() {
             worldbookName: registry[projectId]?.worldbookName || projectRows[0]?.worldbookName || null,
         };
     });
-    console.info('[CreativeWorkshop][diag] install-state:scan:result', projects.map(project => ({
+    projects.forEach(project => creativeWorkshopDiag('install-state:project', ({
         projectId: project.projectId,
         name: project.name,
         legacyProjectName: project.legacyProjectName,
@@ -827,6 +871,7 @@ function getCreativeWorkshopFiniteNumber(entry, rawPath, previewPath, defaultVal
 }
 
 ;// ./src/CreativeWorkshop/services/worldbook.ts
+
 
 
 
@@ -1029,7 +1074,7 @@ async function deleteProjectEntriesFromWorldbook(projectId, worldbookName, legac
         return [];
     const before = await getWorldbook(worldbookName);
     const matchingBefore = before.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName));
-    console.info('[CreativeWorkshop][diag] worldbook:delete:scan', {
+    creativeWorkshopDiag('worldbook:delete:scan', {
         projectId,
         legacyProjectName,
         worldbookName,
@@ -1045,7 +1090,7 @@ async function deleteProjectEntriesFromWorldbook(projectId, worldbookName, legac
         result.worldbook.some(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName))) {
         throw new Error(`世界书「${worldbookName}」中的工坊条目未成功删除`);
     }
-    console.info('[CreativeWorkshop][diag] worldbook:delete:complete', {
+    creativeWorkshopDiag('worldbook:delete:complete', {
         projectId,
         legacyProjectName,
         worldbookName,
@@ -1085,7 +1130,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
     const worldbookName = requestedWorldbookName
         ? await ensureTargetWorldbook(requestedWorldbookName)
         : getCurrentWorldbookName();
-    console.info('[CreativeWorkshop][diag] install:prepared', {
+    creativeWorkshopDiag('install:prepared', {
         projectId,
         projectVersion: _.get(detail, 'project.version', null),
         requestedWorldbookName: requestedWorldbookName || null,
@@ -1096,7 +1141,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
     });
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
-    console.info('[CreativeWorkshop][diag] install:complete', {
+    creativeWorkshopDiag('install:complete', {
         projectId,
         worldbookName,
         preparedEntryCount: prepared.length,
@@ -1105,14 +1150,14 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
 }
 async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
     const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
-    console.info('[CreativeWorkshop][diag] uninstall:start', {
+    creativeWorkshopDiag('uninstall:start', {
         projectId,
         legacyProjectName,
         resolvedWorldbookName: worldbookName,
     });
     const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
     await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-    console.info('[CreativeWorkshop][diag] uninstall:complete', {
+    creativeWorkshopDiag('uninstall:complete', {
         projectId,
         legacyProjectName,
         resolvedWorldbookName: worldbookName,
@@ -1126,7 +1171,7 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
     const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
     const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))
         .filter(name => name !== worldbookName);
-    console.info('[CreativeWorkshop][diag] update:prepared', {
+    creativeWorkshopDiag('update:prepared', {
         projectId,
         legacyProjectName,
         expectedVersion: expectedVersion || null,
@@ -1152,7 +1197,7 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
         deleteCreativeWorkshopInstallRecord(legacyProjectName);
     }
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
-    console.info('[CreativeWorkshop][diag] update:complete', {
+    creativeWorkshopDiag('update:complete', {
         projectId,
         legacyProjectName,
         worldbookName,
@@ -1178,6 +1223,7 @@ function createBridgeMessage(type, payload, requestId) {
 }
 
 ;// ./src/CreativeWorkshop/bridge/host.ts
+
 
 
 
@@ -1409,7 +1455,7 @@ function createCreativeWorkshopBridgeHost(option) {
         const isProjectMutation = actionType === 'bridge:install-project' ||
             actionType === 'bridge:uninstall-project' ||
             actionType === 'bridge:confirm-project-update';
-        console.info('[CreativeWorkshop][diag] bridge-action:start', {
+        creativeWorkshopDiag('bridge-action:start', {
             diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
             type: actionType,
             requestId: event.data.requestId,
@@ -1545,7 +1591,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     break;
                 }
             }
-            console.info('[CreativeWorkshop][diag] bridge-action:complete', {
+            creativeWorkshopDiag('bridge-action:complete', {
                 diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
                 type: actionType,
                 requestId: event.data.requestId,
@@ -1554,7 +1600,7 @@ function createCreativeWorkshopBridgeHost(option) {
             });
         }
         catch (error) {
-            console.error('[CreativeWorkshop][diag] bridge-action:error', {
+            creativeWorkshopDiagError('bridge-action:error', {
                 diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
                 type: actionType,
                 requestId: event.data.requestId,
@@ -1608,6 +1654,7 @@ function createCreativeWorkshopBridgeHost(option) {
 }
 
 ;// ./src/CreativeWorkshop/index.ts
+
 
 
 
@@ -1951,6 +1998,7 @@ function openCreativeWorkshop() {
     });
 }
 $(() => {
+    creativeWorkshopDiag('script-mounted');
     console.info('[CreativeWorkshop] script-mounted', {
         clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
         diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
@@ -2002,7 +2050,7 @@ $(() => {
 /******/ 	}
 /******/ 	
 /************************************************************************/
-/* harmony import */ var _index__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(179);
+/* harmony import */ var _index__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(947);
 globalThis.__CREATIVE_WORKSHOP_FORCED_URL__ =
     'https://workshop-test.uika.cc.cd';
 

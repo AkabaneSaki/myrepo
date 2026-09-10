@@ -4,6 +4,7 @@ import {
   resolveCreativeWorkshopInstallWorldbook,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
+import { creativeWorkshopDiag } from './diagnostic-log';
 import {
   fetchCreativeWorkshopProjectDetail,
   fetchCreativeWorkshopProjectWorldbookSource,
@@ -249,7 +250,7 @@ async function deleteProjectEntriesFromWorldbook(projectId: string, worldbookNam
   if (!getWorldbookNames().includes(worldbookName)) return [] as WorldbookEntry[];
   const before = await getWorldbook(worldbookName);
   const matchingBefore = before.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName));
-  console.info('[CreativeWorkshop][diag] worldbook:delete:scan', {
+  creativeWorkshopDiag('worldbook:delete:scan', {
     projectId,
     legacyProjectName,
     worldbookName,
@@ -272,7 +273,7 @@ async function deleteProjectEntriesFromWorldbook(projectId: string, worldbookNam
   ) {
     throw new Error(`世界书「${worldbookName}」中的工坊条目未成功删除`);
   }
-  console.info('[CreativeWorkshop][diag] worldbook:delete:complete', {
+  creativeWorkshopDiag('worldbook:delete:complete', {
     projectId,
     legacyProjectName,
     worldbookName,
@@ -330,7 +331,7 @@ export async function installCreativeWorkshopProject(
   const worldbookName = requestedWorldbookName
     ? await ensureTargetWorldbook(requestedWorldbookName)
     : getCurrentWorldbookName();
-  console.info('[CreativeWorkshop][diag] install:prepared', {
+  creativeWorkshopDiag('install:prepared', {
     projectId,
     projectVersion: _.get(detail, 'project.version', null),
     requestedWorldbookName: requestedWorldbookName || null,
@@ -341,7 +342,7 @@ export async function installCreativeWorkshopProject(
   });
   await applyPreparedProject(projectId, detail, prepared, worldbookName);
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
-  console.info('[CreativeWorkshop][diag] install:complete', {
+  creativeWorkshopDiag('install:complete', {
     projectId,
     worldbookName,
     preparedEntryCount: prepared.length,
@@ -351,7 +352,7 @@ export async function installCreativeWorkshopProject(
 
 export async function uninstallCreativeWorkshopProject(projectId: string, legacyProjectName?: string) {
   const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
-  console.info('[CreativeWorkshop][diag] uninstall:start', {
+  creativeWorkshopDiag('uninstall:start', {
     projectId,
     legacyProjectName,
     resolvedWorldbookName: worldbookName,
@@ -359,7 +360,7 @@ export async function uninstallCreativeWorkshopProject(projectId: string, legacy
   const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
   await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
 
-  console.info('[CreativeWorkshop][diag] uninstall:complete', {
+  creativeWorkshopDiag('uninstall:complete', {
     projectId,
     legacyProjectName,
     resolvedWorldbookName: worldbookName,
@@ -378,7 +379,7 @@ export async function updateCreativeWorkshopProject(
   const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
   const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))
     .filter(name => name !== worldbookName);
-  console.info('[CreativeWorkshop][diag] update:prepared', {
+  creativeWorkshopDiag('update:prepared', {
     projectId,
     legacyProjectName,
     expectedVersion: expectedVersion || null,
@@ -404,7 +405,7 @@ export async function updateCreativeWorkshopProject(
     deleteCreativeWorkshopInstallRecord(legacyProjectName);
   }
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
-  console.info('[CreativeWorkshop][diag] update:complete', {
+  creativeWorkshopDiag('update:complete', {
     projectId,
     legacyProjectName,
     worldbookName,

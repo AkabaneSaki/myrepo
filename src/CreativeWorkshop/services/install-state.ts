@@ -1,3 +1,4 @@
+import { creativeWorkshopDiag } from './diagnostic-log';
 import { getCreativeWorkshopInstallRecords, getCreativeWorkshopRelevantWorldbookNames } from './install-registry';
 import { getCreativeWorkshopRegexId } from './regex-name';
 
@@ -41,7 +42,7 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
   const registry = getCreativeWorkshopInstallRecords();
   const worldbookNames = getCreativeWorkshopRelevantWorldbookNames();
 
-  console.info('[CreativeWorkshop][diag] install-state:scan:start', {
+  creativeWorkshopDiag('install-state:scan:start', {
     registryProjectIds: Object.keys(registry),
     worldbookNames,
   });
@@ -53,7 +54,7 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
     })),
   );
 
-  console.info('[CreativeWorkshop][diag] install-state:worldbooks', worldbooks.map(({ worldbookName, entries }) => ({
+  worldbooks.forEach(({ worldbookName, entries }) => creativeWorkshopDiag('install-state:worldbook', ({
     worldbookName,
     totalEntries: entries.length,
     workshopEntries: entries
@@ -115,7 +116,7 @@ export async function listInstalledCreativeWorkshopProjects(): Promise<CreativeW
       } satisfies CreativeWorkshopInstalledProject;
     });
 
-  console.info('[CreativeWorkshop][diag] install-state:scan:result', projects.map(project => ({
+  projects.forEach(project => creativeWorkshopDiag('install-state:project', ({
     projectId: project.projectId,
     name: project.name,
     legacyProjectName: project.legacyProjectName,
