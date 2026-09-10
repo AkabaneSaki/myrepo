@@ -1,6 +1,6 @@
 import { getCreativeWorkshopOrigin } from '../services/config';
 import { getCurrentCreativeWorkshopContext } from '../services/context';
-import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
+import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
@@ -61,6 +61,37 @@ function isOAuthCallbackMessage(value: unknown): value is OAuthCallbackMessage {
   );
 }
 
+function safeUrlForLog(value: unknown) {
+  if (!_.isString(value) || !value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+function summarizeBridgePayload(type: string, payload: unknown) {
+  if (!_.isObject(payload)) return {};
+  return {
+    projectId: _.isString(_.get(payload, 'projectId')) ? String(_.get(payload, 'projectId')) : undefined,
+    legacyProjectName: _.isString(_.get(payload, 'legacyProjectName')) ? String(_.get(payload, 'legacyProjectName')) : undefined,
+    projectVersion: _.isString(_.get(payload, 'projectVersion')) ? String(_.get(payload, 'projectVersion')) : undefined,
+    worldbookName: _.isString(_.get(payload, 'worldbookName')) ? String(_.get(payload, 'worldbookName')) : undefined,
+    worldbookEntryKeyCount: Array.isArray(_.get(payload, 'worldbookEntryKeys')) ? _.get(payload, 'worldbookEntryKeys').length : undefined,
+    regexEntryKeyCount: Array.isArray(_.get(payload, 'regexEntryKeys')) ? _.get(payload, 'regexEntryKeys').length : undefined,
+    projectsCount: Array.isArray(_.get(payload, 'projects')) ? _.get(payload, 'projects').length : undefined,
+    connected: _.isBoolean(_.get(payload, 'connected')) ? _.get(payload, 'connected') : undefined,
+    clientVersion: _.isString(_.get(payload, 'clientVersion')) ? String(_.get(payload, 'clientVersion')) : undefined,
+    success: _.isBoolean(_.get(payload, 'success')) ? _.get(payload, 'success') : undefined,
+    message: _.isString(_.get(payload, 'message')) ? String(_.get(payload, 'message')) : undefined,
+    state: _.isString(_.get(payload, 'state')) ? String(_.get(payload, 'state')) : undefined,
+    authUrl: type === 'bridge:oauth:start' ? safeUrlForLog(_.get(payload, 'authUrl')) : undefined,
+    hasToken: _.isString(_.get(payload, 'token')) && Boolean(_.get(payload, 'token')),
+    hasUser: _.isObject(_.get(payload, 'user')),
+  };
+}
+
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
@@ -73,6 +104,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const projectMutationInFlight = new Set<string>();
 
   console.info('[CreativeWorkshopBridgeHost] created', {
+    clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+    diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
     targetOrigin,
     oauthOrigin,
     iframeSrc: iframe.getAttribute('src'),
@@ -107,7 +140,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
     console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
-      payload,
+      payload: summarizeBridgePayload('bridge:oauth:result', payload),
     });
     await post('bridge:oauth:result', payload, requestId);
     clearOAuthTimers();
@@ -174,7 +207,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       pendingOauthState,
       eventOrigin: event.origin,
       sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-      data: event.data,
+      callbackType: _.get(event.data, 'type'),
+      payload: summarizeBridgePayload('bridge:oauth:callback', event.data),
     });
     if (!pendingOauthRequestId) return;
     if (event.origin !== oauthOrigin) return;
@@ -220,7 +254,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
-      payload,
+      payload: summarizeBridgePayload(type, payload),
       targetOrigin,
     });
     iframe.contentWindow?.postMessage(createBridgeMessage(type as never, payload, requestId), targetOrigin);
@@ -230,13 +264,16 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
-      data: event.data,
+      type: _.get(event.data, 'type'),
+      requestId: _.get(event.data, 'requestId'),
+      payload: summarizeBridgePayload(String(_.get(event.data, 'type') || ''), _.get(event.data, 'payload')),
     });
     if (event.source !== iframe.contentWindow) return;
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
     if (!isCreativeWorkshopBridgeMessage(event.data)) return;
 
     const actionType = event.data.type;
+    const actionStartedAt = Date.now();
     const actionLegacyProjectName = _.isString(_.get(event.data, 'payload.legacyProjectName'))
       ? String(event.data.payload?.legacyProjectName)
       : undefined;
@@ -247,6 +284,14 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       actionType === 'bridge:install-project' ||
       actionType === 'bridge:uninstall-project' ||
       actionType === 'bridge:confirm-project-update';
+
+    console.info('[CreativeWorkshop][diag] bridge-action:start', {
+      diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+      type: actionType,
+      requestId: event.data.requestId,
+      projectId: actionProjectId,
+      legacyProjectName: actionLegacyProjectName,
+    });
 
     if (isProjectMutation && actionProjectId) {
       if (projectMutationInFlight.has(actionProjectId)) {
@@ -394,7 +439,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           }
 
           console.info('[CreativeWorkshopBridgeHost] bridge:oauth:start', {
-            authUrl,
+            authUrl: safeUrlForLog(authUrl),
             state,
             requestId: event.data.requestId,
           });
@@ -436,7 +481,23 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           break;
         }
       }
+      console.info('[CreativeWorkshop][diag] bridge-action:complete', {
+        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+        type: actionType,
+        requestId: event.data.requestId,
+        projectId: actionProjectId,
+        durationMs: Date.now() - actionStartedAt,
+      });
     } catch (error) {
+      console.error('[CreativeWorkshop][diag] bridge-action:error', {
+        diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+        type: actionType,
+        requestId: event.data.requestId,
+        projectId: actionProjectId,
+        legacyProjectName: actionLegacyProjectName,
+        durationMs: Date.now() - actionStartedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await post(
         'bridge:error',
         {

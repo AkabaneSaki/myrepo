@@ -1,6 +1,7 @@
 import { createScriptIdIframe, teleportStyle } from '@util/script';
 import { createCreativeWorkshopBridgeHost } from './bridge/host';
 import { getCreativeWorkshopOrigin, getCreativeWorkshopUrl } from './services/config';
+import { CREATIVE_WORKSHOP_CLIENT_VERSION, CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION } from './version';
 
 const AGREEMENT_STORAGE_KEY = 'creative_workshop_agreement_accepted';
 
@@ -187,6 +188,8 @@ function openCreativeWorkshop() {
   const host$ = (hostWindow as Window & { $: JQueryStatic }).$;
 
   console.info('[CreativeWorkshop] openCreativeWorkshop:start', {
+    clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+    diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
     creativeWorkshopUrl,
     hostOrigin: hostWindow.location.origin,
     currentOrigin: window.location.origin,
@@ -380,7 +383,10 @@ function openCreativeWorkshop() {
 }
 
 $(() => {
-  console.info('[CreativeWorkshop] script-mounted');
+  console.info('[CreativeWorkshop] script-mounted', {
+    clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION,
+    diagnosticRevision: CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION,
+  });
   replaceScriptButtons([{ name: '命定创意工坊', visible: true }]);
 
   eventOn(getButtonEvent('命定创意工坊'), () => {

@@ -4,6 +4,16 @@ const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 const WORLDBOOK_SOURCE_CACHE_TTL_MS = 30 * 60 * 1000;
 
+function safeRequestUrlForLog(value: unknown) {
+  if (!_.isString(value) || !value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value.split('?')[0];
+  }
+}
+
 export type CreativeWorkshopProjectDetail = {
   project: Record<string, any>;
   worldbookEntriesPreview: Record<string, any>[];
@@ -181,13 +191,34 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
   if (_.isString(projectId) && projectId) {
     const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
     if (cached) {
+      console.info('[CreativeWorkshop][diag] http:worldbook-source:cache-hit', {
+        projectId,
+        projectVersion,
+        url: safeRequestUrlForLog(downloadUrl),
+        entryCount: cached.length,
+      });
       return cached;
     }
   }
 
+  const sourceRequestStartedAt = Date.now();
+  console.info('[CreativeWorkshop][diag] http:worldbook-source:request', {
+    projectId,
+    projectVersion,
+    url: safeRequestUrlForLog(downloadUrl),
+    cache: 'no-store',
+  });
   try {
     const response = await fetch(downloadUrl, {
       cache: 'no-store',
+    });
+    console.info('[CreativeWorkshop][diag] http:worldbook-source:response', {
+      projectId,
+      projectVersion,
+      url: safeRequestUrlForLog(downloadUrl),
+      status: response.status,
+      ok: response.ok,
+      durationMs: Date.now() - sourceRequestStartedAt,
     });
     if (!response.ok) {
       throw new Error(`获取世界书原始配置失败: ${response.status}`);
@@ -200,6 +231,13 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
     }
     return normalized;
   } catch (error) {
+    console.error('[CreativeWorkshop][diag] http:worldbook-source:error', {
+      projectId,
+      projectVersion,
+      url: safeRequestUrlForLog(downloadUrl),
+      durationMs: Date.now() - sourceRequestStartedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (_.isString(projectId) && projectId) {
       const fallback = getAnyCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
       if (fallback) {
@@ -217,14 +255,36 @@ export async function fetchCreativeWorkshopProjectDetail(
 ): Promise<CreativeWorkshopProjectDetail> {
   const cached = getCachedProjectDetail(projectId, expectedVersion);
   if (cached) {
+    console.info('[CreativeWorkshop][diag] http:project-detail:cache-hit', {
+      projectId,
+      expectedVersion,
+      cachedVersion: _.get(cached, 'project.version', null),
+    });
     return cached;
   }
 
   let receivedVersionMismatch = false;
+  let requestUrl: string | null = null;
+  const detailRequestStartedAt = Date.now();
   try {
     const versionQuery = expectedVersion ? `?v=${encodeURIComponent(expectedVersion)}` : '';
-    const response = await fetch(`${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`, {
+    requestUrl = `${getCreativeWorkshopUrl()}/api/projects/${projectId}${versionQuery}`;
+    console.info('[CreativeWorkshop][diag] http:project-detail:request', {
+      projectId,
+      expectedVersion,
+      url: safeRequestUrlForLog(requestUrl),
       cache: expectedVersion ? 'no-store' : 'no-cache',
+    });
+    const response = await fetch(requestUrl, {
+      cache: expectedVersion ? 'no-store' : 'no-cache',
+    });
+    console.info('[CreativeWorkshop][diag] http:project-detail:response', {
+      projectId,
+      expectedVersion,
+      url: safeRequestUrlForLog(requestUrl),
+      status: response.status,
+      ok: response.ok,
+      durationMs: Date.now() - detailRequestStartedAt,
     });
     if (!response.ok) {
       throw new Error(`获取云端项目详情失败: ${response.status}`);
@@ -250,6 +310,13 @@ export async function fetchCreativeWorkshopProjectDetail(
     setCachedProjectDetail(projectId, normalized);
     return normalized;
   } catch (error) {
+    console.error('[CreativeWorkshop][diag] http:project-detail:error', {
+      projectId,
+      expectedVersion,
+      url: requestUrl ? safeRequestUrlForLog(requestUrl) : null,
+      durationMs: Date.now() - detailRequestStartedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (receivedVersionMismatch) throw error;
     const fallback = getCreativeWorkshopCacheStore().projectDetails?.[projectId]?.data;
     if (fallback && (!expectedVersion || _.get(fallback, 'project.version') === expectedVersion)) {

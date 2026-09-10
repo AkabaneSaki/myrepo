@@ -248,7 +248,16 @@ function isCreativeWorkshopProjectEntry(entry: WorldbookEntry, projectId: string
 async function deleteProjectEntriesFromWorldbook(projectId: string, worldbookName: string, legacyProjectName?: string) {
   if (!getWorldbookNames().includes(worldbookName)) return [] as WorldbookEntry[];
   const before = await getWorldbook(worldbookName);
-  if (!before.some(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName))) {
+  const matchingBefore = before.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName));
+  console.info('[CreativeWorkshop][diag] worldbook:delete:scan', {
+    projectId,
+    legacyProjectName,
+    worldbookName,
+    totalEntriesBefore: before.length,
+    matchingEntriesBefore: matchingBefore.length,
+    matchingEntryKeys: matchingBefore.map(entry => _.get(entry, 'extra.cw_entry_key', null)),
+  });
+  if (matchingBefore.length === 0) {
     return [] as WorldbookEntry[];
   }
 
@@ -263,6 +272,14 @@ async function deleteProjectEntriesFromWorldbook(projectId: string, worldbookNam
   ) {
     throw new Error(`世界书「${worldbookName}」中的工坊条目未成功删除`);
   }
+  console.info('[CreativeWorkshop][diag] worldbook:delete:complete', {
+    projectId,
+    legacyProjectName,
+    worldbookName,
+    deletedCount: result.deleted_entries.length,
+    totalEntriesAfter: result.worldbook.length,
+    matchingEntriesAfter: result.worldbook.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName)).length,
+  });
   return result.deleted_entries;
 }
 
@@ -313,17 +330,41 @@ export async function installCreativeWorkshopProject(
   const worldbookName = requestedWorldbookName
     ? await ensureTargetWorldbook(requestedWorldbookName)
     : getCurrentWorldbookName();
+  console.info('[CreativeWorkshop][diag] install:prepared', {
+    projectId,
+    projectVersion: _.get(detail, 'project.version', null),
+    requestedWorldbookName: requestedWorldbookName || null,
+    resolvedWorldbookName: worldbookName,
+    selectedEntryKeyCount: selectedEntryKeys?.length ?? null,
+    preparedEntryCount: prepared.length,
+    preparedEntryKeys: prepared.map(item => item.entryKey),
+  });
   await applyPreparedProject(projectId, detail, prepared, worldbookName);
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
+  console.info('[CreativeWorkshop][diag] install:complete', {
+    projectId,
+    worldbookName,
+    preparedEntryCount: prepared.length,
+  });
   return detail;
 }
 
 export async function uninstallCreativeWorkshopProject(projectId: string, legacyProjectName?: string) {
   const worldbookName = await getInstalledWorldbookName(projectId, legacyProjectName);
+  console.info('[CreativeWorkshop][diag] uninstall:start', {
+    projectId,
+    legacyProjectName,
+    resolvedWorldbookName: worldbookName,
+  });
   const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
   await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
 
-
+  console.info('[CreativeWorkshop][diag] uninstall:complete', {
+    projectId,
+    legacyProjectName,
+    resolvedWorldbookName: worldbookName,
+    deletedEntryCount: deletedEntries.length,
+  });
   return deletedEntries;
 }
 
@@ -337,6 +378,15 @@ export async function updateCreativeWorkshopProject(
   const worldbookName = await ensureTargetWorldbook(await getInstalledWorldbookName(projectId, legacyProjectName));
   const otherWorldbooks = _.uniq(getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName))
     .filter(name => name !== worldbookName);
+  console.info('[CreativeWorkshop][diag] update:prepared', {
+    projectId,
+    legacyProjectName,
+    expectedVersion: expectedVersion || null,
+    actualVersion: _.get(detail, 'project.version', null),
+    resolvedWorldbookName: worldbookName,
+    preparedEntryCount: prepared.length,
+    cleanupWorldbooks: otherWorldbooks,
+  });
   for (const otherWorldbookName of otherWorldbooks) {
     await deleteProjectEntriesFromWorldbook(projectId, otherWorldbookName, legacyProjectName);
   }
@@ -354,5 +404,11 @@ export async function updateCreativeWorkshopProject(
     deleteCreativeWorkshopInstallRecord(legacyProjectName);
   }
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
+  console.info('[CreativeWorkshop][diag] update:complete', {
+    projectId,
+    legacyProjectName,
+    worldbookName,
+    persistedEntryCount: persistedProjectEntries.length,
+  });
   return detail;
 }
