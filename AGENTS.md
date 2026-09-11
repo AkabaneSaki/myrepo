@@ -39,6 +39,36 @@ Git hosting and runtime infrastructure are separate concerns.
 - Do not copy, infer, or substitute production credentials/bindings from the user fork.
 - A branch being pushed to `origin` does not deploy or reconfigure production.
 
+## Deployment helper contract — mandatory
+
+A reusable fail-closed deployment helper already exists on the primary machine. **Use it before considering any raw Wrangler/PowerShell/Bash deployment path.**
+
+- Generic engine: `.ai-bridge/one-click-deploy/deploy-worker.ps1`
+- Target/source profiles: `.ai-bridge/one-click-deploy/profiles/*.json`
+- Compatibility shortcuts: `.ai-bridge/CHECK_STAGING.cmd`, `.ai-bridge/DEPLOY_STAGING.cmd`, `.ai-bridge/CHECK_PRODUCTION.cmd`, `.ai-bridge/DEPLOY_PRODUCTION.cmd`
+- Helper documentation: `.ai-bridge/one-click-deploy/README.md`
+
+Treat deployment as composable bricks, not one script per situation:
+
+- **target profile** chooses Cloudflare account, Worker, Wrangler config, D1/KV/R2 and auth policy;
+- **source selector** chooses an allowed Git remote + branch/tag;
+- `-SourceRepoRoot` may point at another clean worktree;
+- `-ConfigPath` may select another Wrangler config when the chosen profile permits that target;
+- `-CheckOnly` performs the same preflight without deploying.
+
+Examples of supported variation are multiple staging/preview Workers via additional profiles and temporary production deployment from an explicitly allowed owner `release/*` branch or release tag. A new target/source combination is **not** a reason to create a new deployment script.
+
+Agent rules:
+
+1. Before any Worker deployment, inspect/use the existing helper and an appropriate profile.
+2. If the scenario differs only by Worker/account/config/bindings/source branch/tag, add or adjust a profile/selector brick; do not copy the engine.
+3. If a genuinely generic capability is missing, extend `deploy-worker.ps1` once, preserving fail-closed checks, then use it.
+4. Do **not** fall back to ad-hoc `wrangler deploy`, raw Bash/PowerShell deployment chains, or a freshly invented deploy script merely because a profile/check failed.
+5. A failed helper check is a stop signal to fix the profile/source/credential/state mismatch. Do not weaken or bypass the check to make deployment pass.
+6. If Cotel exposes a dedicated deployment capability for this helper, prefer that capability over shell execution.
+
+The helper is local operational tooling under `.ai-bridge/`; long-lived deployment policy remains this `AGENTS.md` plus `docs/GIT-WORKFLOW.md`.
+
 ## Staging terminology contract
 
 Use these exact terms. Do not collapse them into the single word "staging":

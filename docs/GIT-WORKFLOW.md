@@ -270,7 +270,20 @@ production changed: no
 
 Where practical, verify the live site contains behavior/code unique to the deployed SHA rather than trusting the deploy log alone.
 
-### One-click staging helper on the primary machine
+### Composable deployment helper on the primary machine
+
+The primary machine has one fail-closed engine plus target/source profiles:
+
+```text
+C:\Project\myrepo-git\.ai-bridge\one-click-deploy\deploy-worker.ps1
+C:\Project\myrepo-git\.ai-bridge\one-click-deploy\profiles\*.json
+```
+
+Do not clone deployment logic for a second staging Worker, preview Worker, release branch, or release tag. Change/add the target profile and source selector instead. The helper supports `-SourceRepoRoot`, branch/tag selection, config override, and `-CheckOnly` while preserving the same Git/Cloudflare/D1/dry-run checks.
+
+The legacy convenience shortcuts below remain wrappers around that same engine.
+
+### One-click staging shortcut
 
 For routine Workshop staging deployments on the primary development machine, use the fail-closed helper instead of rebuilding the Wrangler command by hand:
 
@@ -319,7 +332,7 @@ Do not deploy production from:
 
 Production should normally run an exact commit already present in owner main.
 
-### One-click production helper on the primary machine
+### One-click production shortcut on the primary machine
 
 For routine Workshop production deployment after staging acceptance and owner-main promotion, use:
 
@@ -328,9 +341,16 @@ C:\Project\myrepo-git\.ai-bridge\CHECK_PRODUCTION.cmd
 C:\Project\myrepo-git\.ai-bridge\DEPLOY_PRODUCTION.cmd
 ```
 
-The production helper fails closed unless local deploy source is the refreshed exact `upstream/main` and the expected production Cloudflare account/Worker/D1/KV/R2 are verified. Deploy mode applies pending D1 migrations before the Worker dry-run/deploy; check-only mode does not mutate D1.
+These shortcuts wrap the same composable deploy engine. The default production source is refreshed `upstream/main`. When an explicitly authorized release exception is active, the same helper can select an owner `release/*` branch or owner release tag without creating another deploy script:
 
-Do not substitute a staging profile/account for production, and do not bypass the helper with ad-hoc Wrangler commands merely to save typing.
+```text
+DEPLOY_PRODUCTION.cmd -ReleaseBranch release/2.0.15
+DEPLOY_PRODUCTION.cmd -ReleaseTag 2.0.15
+```
+
+The production profile accepts only source selectors allowed by policy (currently `upstream/main`, `upstream/release/*`, or an owner semver release tag). The engine fetches and resolves that exact source, temporarily locks the checkout to the exact commit, verifies the expected production Cloudflare account/Worker/D1/KV/R2, checks/applies migrations, performs a Wrangler dry-run, deploys only after all checks pass, and restores the original checkout afterward. `CHECK_PRODUCTION.cmd` performs the same preflight without applying migrations or deploying.
+
+Do not substitute a staging profile/account for production, and do not bypass the helper with ad-hoc Wrangler/PowerShell/Bash commands merely because a profile or preflight check fails.
 
 ### Emergency production exception
 
