@@ -7,7 +7,7 @@
 
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -69,7 +69,7 @@ function getCurrentCreativeWorkshopContext() {
 
 ;// ./src/CreativeWorkshop/version.ts
 const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.0.15';
-const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-3';
+const CREATIVE_WORKSHOP_DIAGNOSTIC_REVISION = '2.0.15-install-diag-4';
 
 ;// ./src/CreativeWorkshop/services/diagnostic-log.ts
 
@@ -78,12 +78,15 @@ const INSTALL_DIAGNOSTIC_EVENTS = new Set([
     'install-state:scan:start',
     'install-state:worldbook',
     'install-state:project',
+    'install-state:registry-missing-identity',
     'install-state:scan:complete',
     'install-state:worldbook-read-error',
     'install-request',
     'install-request-blocked',
     'install-entry-match',
     'install:prepared',
+    'install-after-write',
+    'install-after-write-read-error',
     'install:complete',
     'install-request-finished',
     'install-request-error',
@@ -614,17 +617,6 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
 
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function summarizeInstalledEntry(entry) {
-    return {
-        uid: _.get(entry, 'uid', null),
-        name: _.get(entry, 'name', ''),
-        cwProjectId: _.get(entry, 'extra.cw_project_id', null),
-        legacyProjectName: _.get(entry, 'extra.fate_project_name', null),
-        cwEntryKey: _.get(entry, 'extra.cw_entry_key', null),
-        localVersion: _.get(entry, 'extra.cw_project_version', null),
-        enabled: _.get(entry, 'enabled', null),
-    };
-}
 async function readWorldbookEntries(worldbookName) {
     try {
         return await getWorldbook(worldbookName);
@@ -649,23 +641,19 @@ async function listInstalledCreativeWorkshopProjects() {
         entries: await readWorldbookEntries(worldbookName),
     })));
     worldbooks.forEach(({ worldbookName, entries }) => {
-        const workshopEntries = entries
-            .filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name')))
-            .map(summarizeInstalledEntry);
-        const suspiciousLegacyEntries = entries
-            .filter(entry => {
+        const workshopEntryCount = entries.filter(entry => _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'))).length;
+        const suspiciousIdentitylessCount = entries.filter(entry => {
             const name = String(_.get(entry, 'name', ''));
             const hasWorkshopIdentity = _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'));
             return !hasWorkshopIdentity && (name.startsWith('[DLC]') || name.startsWith('命定系统-'));
-        })
-            .map(summarizeInstalledEntry);
-        if (workshopEntries.length === 0 && suspiciousLegacyEntries.length === 0)
+        }).length;
+        if (workshopEntryCount === 0 && suspiciousIdentitylessCount === 0)
             return;
         creativeWorkshopDiag('install-state:worldbook', {
             worldbookName,
             totalEntries: entries.length,
-            workshopEntryCount: workshopEntries.length,
-            suspiciousLegacyEntries,
+            workshopEntryCount,
+            suspiciousIdentitylessCount,
         });
     });
     const entryRows = worldbooks.flatMap(({ worldbookName, entries }) => entries
@@ -701,6 +689,27 @@ async function listInstalledCreativeWorkshopProjects() {
             hasUpdate: false,
             worldbookName: registry[projectId]?.worldbookName || projectRows[0]?.worldbookName || null,
         };
+    });
+    const detectedProjectIds = new Set(projects.map(project => project.projectId));
+    Object.entries(registry).forEach(([projectId, record]) => {
+        if (detectedProjectIds.has(projectId))
+            return;
+        const recordedWorldbook = worldbooks.find(({ worldbookName }) => worldbookName === record.worldbookName);
+        const recordedEntries = recordedWorldbook?.entries || [];
+        const identityMatchCount = recordedEntries.filter(entry => _.get(entry, 'extra.cw_project_id') === projectId || _.get(entry, 'extra.fate_project_name') === projectId).length;
+        const identitylessDlcCount = recordedEntries.filter(entry => {
+            const name = String(_.get(entry, 'name', ''));
+            const hasWorkshopIdentity = _.isString(_.get(entry, 'extra.cw_project_id')) || _.isString(_.get(entry, 'extra.fate_project_name'));
+            return !hasWorkshopIdentity && (name.startsWith('[DLC]') || name.startsWith('命定系统-'));
+        }).length;
+        creativeWorkshopDiag('install-state:registry-missing-identity', {
+            projectId,
+            recordedWorldbookName: record.worldbookName,
+            recordedWorldbookWasScanned: Boolean(recordedWorldbook),
+            recordedWorldbookEntryCount: recordedWorldbook?.entries.length ?? null,
+            identityMatchCount,
+            identitylessDlcCount,
+        });
     });
     projects.forEach(project => creativeWorkshopDiag('install-state:project', ({
         projectId: project.projectId,
@@ -1121,6 +1130,59 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName, 
         return worldbook;
     });
 }
+async function logInstallAfterWrite(projectId, detail, prepared, worldbookName) {
+    try {
+        const persisted = await getWorldbook(worldbookName);
+        const expectedEntries = prepared.map(({ entry, index, entryKey }) => ({
+            name: renameEntry(entry.comment || entry.name || `条目${index + 1}`, detail.project.tags || [], detail.project.name || '未命名项目'),
+            stableKey: `${projectId}:${entryKey}`,
+        }));
+        const expectedKeys = new Set(expectedEntries.map(item => item.stableKey));
+        const verifiedEntries = persisted.filter(entry => {
+            const entryKey = _.get(entry, 'extra.cw_entry_key');
+            return (_.get(entry, 'extra.cw_project_id') === projectId &&
+                _.isString(entryKey) &&
+                expectedKeys.has(entryKey));
+        });
+        const verifiedKeys = new Set(verifiedEntries
+            .map(entry => _.get(entry, 'extra.cw_entry_key'))
+            .filter((entryKey) => _.isString(entryKey)));
+        const missingExpectedEntries = expectedEntries.filter(item => !verifiedKeys.has(item.stableKey));
+        const expectedNames = new Set(expectedEntries.map(item => item.name));
+        const identitylessSameNameCandidates = persisted
+            .filter(entry => {
+            const name = String(_.get(entry, 'name', ''));
+            if (!expectedNames.has(name))
+                return false;
+            return (!_.isString(_.get(entry, 'extra.cw_project_id')) &&
+                !_.isString(_.get(entry, 'extra.fate_project_name')) &&
+                !_.isString(_.get(entry, 'extra.cw_entry_key')));
+        })
+            .map(summarizeInstallCandidate);
+        const persistedProjectIdentityCount = persisted.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId)).length;
+        creativeWorkshopDiag('install-after-write', {
+            projectId,
+            worldbookName,
+            expectedEntryCount: expectedEntries.length,
+            persistedProjectIdentityCount,
+            verifiedExpectedIdentityCount: verifiedEntries.length,
+            missingExpectedIdentityCount: missingExpectedEntries.length,
+            identitylessSameNameCandidateCount: identitylessSameNameCandidates.length,
+            status: missingExpectedEntries.length === 0 ? 'EXPECTED_IDENTITIES_PRESENT' : 'EXPECTED_IDENTITIES_MISSING',
+            verifiedEntries: verifiedEntries.slice(0, 8).map(summarizeInstallCandidate),
+            missingExpectedEntries: missingExpectedEntries.slice(0, 8),
+            identitylessSameNameCandidates: identitylessSameNameCandidates.slice(0, 8),
+            truncated: verifiedEntries.length > 8 || missingExpectedEntries.length > 8 || identitylessSameNameCandidates.length > 8,
+        });
+    }
+    catch (error) {
+        creativeWorkshopDiagError('install-after-write-read-error', {
+            projectId,
+            worldbookName,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
 function isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName) {
     return (_.get(entry, 'extra.cw_project_id') === projectId ||
         _.get(entry, 'extra.fate_project_name') === projectId ||
@@ -1196,6 +1258,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
         preparedEntryCount: prepared.length,
     });
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
+    await logInstallAfterWrite(projectId, detail, prepared, worldbookName);
     setCreativeWorkshopInstallRecord(projectId, worldbookName);
     creativeWorkshopDiag('install:complete', {
         projectId,

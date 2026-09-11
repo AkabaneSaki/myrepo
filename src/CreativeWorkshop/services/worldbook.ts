@@ -4,7 +4,7 @@ import {
   resolveCreativeWorkshopInstallWorldbook,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
-import { creativeWorkshopDiag } from './diagnostic-log';
+import { creativeWorkshopDiag, creativeWorkshopDiagError } from './diagnostic-log';
 import {
   fetchCreativeWorkshopProjectDetail,
   fetchCreativeWorkshopProjectWorldbookSource,
@@ -265,6 +265,75 @@ async function applyPreparedProject(
   });
 }
 
+async function logInstallAfterWrite(
+  projectId: string,
+  detail: Record<string, any>,
+  prepared: PreparedEntry[],
+  worldbookName: string,
+) {
+  try {
+    const persisted = await getWorldbook(worldbookName);
+    const expectedEntries = prepared.map(({ entry, index, entryKey }) => ({
+      name: renameEntry(
+        entry.comment || entry.name || `条目${index + 1}`,
+        detail.project.tags || [],
+        detail.project.name || '未命名项目',
+      ),
+      stableKey: `${projectId}:${entryKey}`,
+    }));
+    const expectedKeys = new Set(expectedEntries.map(item => item.stableKey));
+    const verifiedEntries = persisted.filter(entry => {
+      const entryKey = _.get(entry, 'extra.cw_entry_key');
+      return (
+        _.get(entry, 'extra.cw_project_id') === projectId &&
+        _.isString(entryKey) &&
+        expectedKeys.has(entryKey)
+      );
+    });
+    const verifiedKeys = new Set(
+      verifiedEntries
+        .map(entry => _.get(entry, 'extra.cw_entry_key'))
+        .filter((entryKey): entryKey is string => _.isString(entryKey)),
+    );
+    const missingExpectedEntries = expectedEntries.filter(item => !verifiedKeys.has(item.stableKey));
+    const expectedNames = new Set(expectedEntries.map(item => item.name));
+    const identitylessSameNameCandidates = persisted
+      .filter(entry => {
+        const name = String(_.get(entry, 'name', ''));
+        if (!expectedNames.has(name)) return false;
+        return (
+          !_.isString(_.get(entry, 'extra.cw_project_id')) &&
+          !_.isString(_.get(entry, 'extra.fate_project_name')) &&
+          !_.isString(_.get(entry, 'extra.cw_entry_key'))
+        );
+      })
+      .map(summarizeInstallCandidate);
+    const persistedProjectIdentityCount = persisted.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId)).length;
+
+    creativeWorkshopDiag('install-after-write', {
+      projectId,
+      worldbookName,
+      expectedEntryCount: expectedEntries.length,
+      persistedProjectIdentityCount,
+      verifiedExpectedIdentityCount: verifiedEntries.length,
+      missingExpectedIdentityCount: missingExpectedEntries.length,
+      identitylessSameNameCandidateCount: identitylessSameNameCandidates.length,
+      status: missingExpectedEntries.length === 0 ? 'EXPECTED_IDENTITIES_PRESENT' : 'EXPECTED_IDENTITIES_MISSING',
+      verifiedEntries: verifiedEntries.slice(0, 8).map(summarizeInstallCandidate),
+      missingExpectedEntries: missingExpectedEntries.slice(0, 8),
+      identitylessSameNameCandidates: identitylessSameNameCandidates.slice(0, 8),
+      truncated:
+        verifiedEntries.length > 8 || missingExpectedEntries.length > 8 || identitylessSameNameCandidates.length > 8,
+    });
+  } catch (error) {
+    creativeWorkshopDiagError('install-after-write-read-error', {
+      projectId,
+      worldbookName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function isCreativeWorkshopProjectEntry(entry: WorldbookEntry, projectId: string, legacyProjectName?: string) {
   return (
     _.get(entry, 'extra.cw_project_id') === projectId ||
@@ -367,6 +436,7 @@ export async function installCreativeWorkshopProject(
     preparedEntryCount: prepared.length,
   });
   await applyPreparedProject(projectId, detail, prepared, worldbookName);
+  await logInstallAfterWrite(projectId, detail, prepared, worldbookName);
   setCreativeWorkshopInstallRecord(projectId, worldbookName);
   creativeWorkshopDiag('install:complete', {
     projectId,
