@@ -35,6 +35,11 @@ for (const [name, script] of Object.entries(fragments)) {
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /版本名称（可选）/);
+assert.match(fragments.homeModalsScript, /id=\"releaseUpdateCode\"/);
+assert.match(fragments.homeModalsScript, /codeField\.select\(\)/);
+assert.match(fragments.homeModalsScript, /document\.execCommand\("copy"\)/);
+assert.doesNotMatch(fragments.homeModalsScript, /function copyTextCompat\(text\)/);
+assert.doesNotMatch(fragments.homeModalsScript, /window\.prompt\("复制最新版 Creative Workshop 导入代码"/);
 assert.doesNotMatch(fragments.homeModalsScript, /versionBump|Patch|Minor|Major/);
 assert.match(fragments.homeCardsRenderScript, /撤回更新/);
 assert.match(fragments.homeCardsRenderScript, /delete-project-btn/);
