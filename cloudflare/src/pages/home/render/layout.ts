@@ -1,6 +1,6 @@
 export const homeLayoutRenderScript = [
-  'const WORKSHOP_RELEASE_VERSION = "2.0.13";',
-  'const WORKSHOP_RELEASE_IMPORT = "import \\\'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.13/test-dist/CreativeWorkshop/index.js\\\'";',
+  'const WORKSHOP_RELEASE_VERSION = "2.0.15";',
+  'const WORKSHOP_RELEASE_IMPORT = "import \\\'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.15/test-dist/CreativeWorkshop/index.js\\\'";',
   'function renderReleaseNotice() {',
   '  if (!shouldShowWorkshopReleaseNotice(WORKSHOP_RELEASE_VERSION)) return "";',
   '  return `<button class="release-notice" id="releaseNoticeBtn" type="button" title="点击复制最新版导入代码"><i class="fas fa-triangle-exclamation"></i><span>重大更新</span><strong>请更新至 v${WORKSHOP_RELEASE_VERSION}</strong></button>`;',
