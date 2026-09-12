@@ -21,6 +21,7 @@
 		"check:home-js": "node scripts/check-home-js.mjs",
 		"check:worldbook-normalize": "node scripts/check-worldbook-normalize.mjs",
 		"check:workshop-worldbook-reconcile": "node scripts/check-workshop-worldbook-reconcile.mjs",
+		"check:workshop-entry-name": "node tests/workshop-entry-name-v2.mjs",
 		"check:project-content": "node scripts/check-project-content.mjs",
 		"build:inspection-backfill": "node scripts/build-project-inspection-backfill.mjs",
 		"check:review-diff": "node tests/project-review-diff.mjs",
