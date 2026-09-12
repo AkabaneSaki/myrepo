@@ -37,6 +37,22 @@ export function getCreativeWorkshopInstallRecord(projectId: string): CreativeWor
   return getCreativeWorkshopInstallRecords()[projectId] || null;
 }
 
+export function getCreativeWorkshopBoundWorldbookNames(): string[] {
+  const charWorldbooks = getCharWorldbookNames('current');
+  let chatWorldbook: string | null = null;
+  try {
+    chatWorldbook = getChatWorldbookName('current');
+  } catch {
+    chatWorldbook = null;
+  }
+  return _.uniq([
+    charWorldbooks.primary,
+    ...(charWorldbooks.additional || []),
+    ...getGlobalWorldbookNames(),
+    chatWorldbook,
+  ]).filter((name): name is string => _.isString(name) && Boolean(name));
+}
+
 export function getCreativeWorkshopRelevantWorldbookNames(projectId?: string, legacyProjectName?: string): string[] {
   const charWorldbooks = getCharWorldbookNames('current');
   const registry = getCreativeWorkshopInstallRecords();

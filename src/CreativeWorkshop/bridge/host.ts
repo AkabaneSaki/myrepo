@@ -2,7 +2,7 @@ import { getCreativeWorkshopOrigin } from '../services/config';
 import { getCurrentCreativeWorkshopContext } from '../services/context';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
-import { listInstalledCreativeWorkshopProjects } from '../services/install-state';
+import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
 import {
   installCreativeWorkshopRegex,
@@ -70,6 +70,26 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthTimeoutId: number | null = null;
   let oauthClosePollId: number | null = null;
   let oauthPopupOpenedAt = 0;
+  let initialInstalledProjectScanInFlight: ReturnType<typeof scanInstalledCreativeWorkshopProjects> | null = null;
+
+  async function getInitialInstalledProjectScan() {
+    if (initialInstalledProjectScanInFlight) return initialInstalledProjectScanInFlight;
+    const scan = scanInstalledCreativeWorkshopProjects();
+    initialInstalledProjectScanInFlight = scan;
+    try {
+      return await scan;
+    } finally {
+      if (initialInstalledProjectScanInFlight === scan) initialInstalledProjectScanInFlight = null;
+    }
+  }
+
+  async function getCompleteInitialInstalledProjects() {
+    const scan = await getInitialInstalledProjectScan();
+    if (!scan.complete) {
+      throw new Error(`世界书尚未准备完成，未能读取：${scan.unreadableWorldbookNames.join('、')}`);
+    }
+    return scan.projects;
+  }
 
   console.info('[CreativeWorkshopBridgeHost] created', {
     targetOrigin,
@@ -261,7 +281,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
           await post(
             'bridge:installed-projects',
-            { projects: await listInstalledCreativeWorkshopProjects() },
+            { projects: await getCompleteInitialInstalledProjects() },
             event.data.requestId,
           );
           break;
@@ -271,7 +291,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         case 'bridge:list-installed-projects':
           await post(
             'bridge:installed-projects',
-            { projects: await listInstalledCreativeWorkshopProjects() },
+            { projects: await getCompleteInitialInstalledProjects() },
             event.data.requestId,
           );
           break;
