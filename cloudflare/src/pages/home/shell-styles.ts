@@ -137,13 +137,13 @@ export const homeShellStyles = String.raw`
     color:#d0cfcb;
   }
 
-  .sidebar-nav-btn.active {
+  .sidebar-nav.tag-filter .sidebar-nav-btn.tag-filter-btn.active {
     border-color:rgba(162,139,107,.17);
     background:rgba(162,139,107,.085);
     color:#d5c2a5;
   }
 
-  .sidebar-nav-btn.active::before {
+  .sidebar-nav.tag-filter .sidebar-nav-btn.tag-filter-btn.active::before {
     content:'';
     position:absolute;
     left:-1px;
@@ -154,7 +154,7 @@ export const homeShellStyles = String.raw`
     background:#a28b6b;
   }
 
-  .sidebar-nav-btn.active i { color:#b9a180; }
+  .sidebar-nav.tag-filter .sidebar-nav-btn.tag-filter-btn.active i { color:#b9a180; }
   .sidebar-nav-btn.is-disabled { opacity:.45; cursor:wait; }
 
   .sidebar-view-state {
