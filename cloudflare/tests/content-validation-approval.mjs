@@ -88,6 +88,9 @@ const worldbook = JSON.stringify({
 const regex = JSON.stringify([
   { id: 'regex-only', scriptName: 'Regex only', findRegex: 'foo', replaceString: 'bar' },
 ]);
+const updatedRegex = JSON.stringify([
+  { id: 'regex-only', scriptName: 'Regex only edited', findRegex: 'foo', replaceString: 'baz' },
+]);
 
 const oversizedUpload = 'x'.repeat(10 * 1024 * 1024 + 1);
 
@@ -285,6 +288,47 @@ try {
   const publishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
   assert.equal(publishedRegex.project.status, 'approved');
   assert.equal(publishedRegex.regexEntriesPreview.length, 1);
+
+  const regexEditDraft = await api(`/api/projects/${extensionRegexOnly.projectId}`, {
+    method: 'PUT',
+    token: creatorToken,
+    body: { description: 'regex-only edit lifecycle test' },
+  });
+  assert.ok(regexEditDraft.draftProjectId);
+  cleanupIds.add(regexEditDraft.draftProjectId);
+
+  const regexEditUpload = await api(`/api/projects/${regexEditDraft.draftProjectId}/upload-regex`, {
+    method: 'POST',
+    token: creatorToken,
+    body: updatedRegex,
+  });
+  assert.equal(regexEditUpload.projectId, regexEditDraft.draftProjectId);
+
+  const regexEditDraftDetail = await api(`/api/projects/${regexEditDraft.draftProjectId}`, { token: creatorToken });
+  assert.equal(regexEditDraftDetail.project.reviewTarget, 'draft');
+  assert.equal(regexEditDraftDetail.project.publishedProjectId, extensionRegexOnly.projectId);
+  assert.equal(regexEditDraftDetail.regexEntriesPreview.length, 1);
+  assert.equal(regexEditDraftDetail.regexEntriesPreview[0].id, 'regex-only');
+  assert.equal(regexEditDraftDetail.regexEntriesPreview[0].replaceString, 'baz');
+
+  await approve(regexEditDraft.draftProjectId);
+  cleanupIds.delete(regexEditDraft.draftProjectId);
+
+  const republishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  assert.equal(republishedRegex.project.status, 'approved');
+  assert.equal(republishedRegex.project.description, 'regex-only edit lifecycle test');
+  assert.equal(republishedRegex.regexEntriesPreview.length, 1);
+  assert.equal(republishedRegex.regexEntriesPreview[0].id, 'regex-only');
+  assert.equal(republishedRegex.regexEntriesPreview[0].scriptName, 'Regex only edited');
+  assert.equal(republishedRegex.regexEntriesPreview[0].replaceString, 'baz');
+
+  const regexDelete = await api(`/api/projects/${extensionRegexOnly.projectId}`, {
+    method: 'DELETE',
+    token: creatorToken,
+  });
+  assert.equal(regexDelete.success, true);
+  cleanupIds.delete(extensionRegexOnly.projectId);
+  await api(`/api/projects/${extensionRegexOnly.projectId}`, { token: creatorToken, expected: 404 });
 
   const typeMismatch = await createProject('Validation Type Mismatch');
   cleanupIds.add(typeMismatch.projectId);
