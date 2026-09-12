@@ -4,7 +4,11 @@ import {
   resolveCreativeWorkshopInstallWorldbook,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
-import { fetchCreativeWorkshopProjectDetail, fetchCreativeWorkshopProjectWorldbookSource } from './project-fetch';
+import {
+  fetchCreativeWorkshopProjectDetail,
+  fetchCreativeWorkshopProjectWorldbookSource,
+  invalidateCreativeWorkshopProjectCache,
+} from './project-fetch';
 import { CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, formatCreativeWorkshopEntryName } from './project-type';
 import {
   reconcileCreativeWorkshopWorldbookEntries,
@@ -261,6 +265,7 @@ export async function installCreativeWorkshopProject(
   requestedWorldbookName?: string,
   expectedVersion?: string,
 ) {
+  invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
   if (prepared.length === 0) return detail;
   const worldbookName = requestedWorldbookName
@@ -287,6 +292,7 @@ export async function updateCreativeWorkshopProject(
   expectedVersion?: string,
   legacyProjectName?: string,
 ) {
+  invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
   const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
   let worldbookName: string | null = installedWorldbookName;
@@ -297,6 +303,13 @@ export async function updateCreativeWorkshopProject(
       pruneMissing: true,
       legacyProjectName,
     });
+    const persisted = await getWorldbook(worldbookName);
+    const persistedProjectEntries = persisted.filter(entry =>
+      isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName),
+    );
+    if (persistedProjectEntries.length !== prepared.length) {
+      throw new Error(`世界书「${worldbookName}」更新后条目数量异常，请重试`);
+    }
   } else if (prepared.length > 0) {
     worldbookName = getCurrentWorldbookName();
     await applyPreparedProject(projectId, detail, prepared, worldbookName);
