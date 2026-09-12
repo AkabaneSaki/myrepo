@@ -1,6 +1,11 @@
 import { setCreativeWorkshopInstallRecord } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
-import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
+import {
+  getCreativeWorkshopManagedRegexId,
+  getCreativeWorkshopRegexEntryKey,
+  getCreativeWorkshopRegexId,
+  getReadableRegexName,
+} from './regex-name';
 
 export async function installCreativeWorkshopRegex(
   projectId: string,
@@ -14,7 +19,7 @@ export async function installCreativeWorkshopRegex(
     .map((entry, originalIndex) => ({
       entry,
       originalIndex,
-      entryKey: entry.entryKey || (entry.id !== undefined ? `id:${entry.id}` : `index:${originalIndex}`),
+      entryKey: getCreativeWorkshopRegexEntryKey(entry, originalIndex),
     }))
     .filter(({ entryKey }) => !selected || selected.has(entryKey));
 
@@ -32,7 +37,7 @@ export async function installCreativeWorkshopRegex(
       const appended = regexEntries.map(
         ({ entry, originalIndex, entryKey }) =>
           ({
-            id: `creative_workshop:${projectId}:${entryKey}`,
+            id: getCreativeWorkshopManagedRegexId(projectId, { ...entry, entryKey }, originalIndex),
             script_name: getReadableRegexName(detail.project.name || '未命名项目', entry, originalIndex),
             enabled: !entry.disabled,
             scope: 'character' as const,

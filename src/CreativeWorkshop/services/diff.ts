@@ -1,10 +1,11 @@
 import { resolveCreativeWorkshopInstallWorldbook } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 import { formatCreativeWorkshopEntryName } from './project-type';
-import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
+import { getCreativeWorkshopManagedRegexId, getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
+const DIFF_IDENTITY_VERSION = 2;
 
 type CreativeWorkshopDiffCache = Record<
   string,
@@ -140,13 +141,14 @@ export async function getCreativeWorkshopProjectDiff(
       replaceString: regex.replace_string,
     }));
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
-    id: `creative_workshop:${projectId}:${entry.id || index}`,
+    id: getCreativeWorkshopManagedRegexId(projectId, entry, index),
     scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
     findRegex: entry.findRegex || '',
     replaceString: entry.replaceString || '',
   }));
 
   const localSignature = JSON.stringify({
+    identityVersion: DIFF_IDENTITY_VERSION,
     localEntries,
     localRegexes,
   });
