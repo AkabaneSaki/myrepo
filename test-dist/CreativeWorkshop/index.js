@@ -687,6 +687,64 @@ async function updateCreativeWorkshopRegex(projectId, expectedVersion, legacyPro
     return installCreativeWorkshopRegex(projectId, undefined, expectedVersion, legacyProjectName);
 }
 
+;// ./src/CreativeWorkshop/services/worldbook-reconcile.ts
+function getEntryExtra(entry) {
+    const extra = entry.extra;
+    return extra && typeof extra === 'object' && !Array.isArray(extra) ? extra : {};
+}
+function isSameCreativeWorkshopProject(entry, projectId, projectName, legacyProjectName) {
+    const extra = getEntryExtra(entry);
+    const itemProjectId = extra.cw_project_id;
+    const legacyName = extra.fate_project_name;
+    return (itemProjectId === projectId ||
+        legacyName === projectId ||
+        Boolean(legacyProjectName && legacyName === legacyProjectName) ||
+        (!itemProjectId && legacyName === projectName));
+}
+function findExistingEntryIndex(worldbook, desired, projectId, options, alreadyMatched) {
+    return worldbook.findIndex((entry, index) => {
+        if (alreadyMatched.has(index))
+            return false;
+        const extra = getEntryExtra(entry);
+        const entryKey = extra.cw_entry_key;
+        if (entryKey === desired.stableKey || entryKey === desired.legacyKey)
+            return true;
+        if (entryKey)
+            return false;
+        if (!isSameCreativeWorkshopProject(entry, projectId, options.projectName, options.legacyProjectName))
+            return false;
+        return entry.name === desired.payload.name || entry.comment === desired.sourceName;
+    });
+}
+function reconcileCreativeWorkshopWorldbookEntries(worldbook, desiredEntries, projectId, options) {
+    const matchedExisting = new Set();
+    for (const desired of desiredEntries) {
+        const existingIndex = findExistingEntryIndex(worldbook, desired, projectId, options, matchedExisting);
+        if (existingIndex >= 0) {
+            const existing = worldbook[existingIndex];
+            const mergedExtra = { ...getEntryExtra(existing), ...getEntryExtra(desired.payload) };
+            worldbook[existingIndex] = { ...existing, ...desired.payload, extra: mergedExtra, uid: existing.uid };
+            matchedExisting.add(existingIndex);
+        }
+        else {
+            worldbook.push(desired.payload);
+        }
+    }
+    if (!options.pruneMissing)
+        return worldbook;
+    const desiredKeys = new Set(desiredEntries.map(entry => entry.stableKey));
+    const seenDesiredKeys = new Set();
+    return worldbook.filter(entry => {
+        if (!isSameCreativeWorkshopProject(entry, projectId, options.projectName, options.legacyProjectName))
+            return true;
+        const entryKey = getEntryExtra(entry).cw_entry_key;
+        if (typeof entryKey !== 'string' || !desiredKeys.has(entryKey) || seenDesiredKeys.has(entryKey))
+            return false;
+        seenDesiredKeys.add(entryKey);
+        return true;
+    });
+}
+
 ;// ./src/CreativeWorkshop/services/worldbook-normalize.ts
 function getCreativeWorkshopWorldbookEntryKey(entry, index) {
     if (_.isString(entry.entryKey) && entry.entryKey)
@@ -813,6 +871,7 @@ function getCreativeWorkshopFiniteNumber(entry, rawPath, previewPath, defaultVal
 
 
 
+
 function getCurrentWorldbookName() {
     const charWorldbooks = getCharWorldbookNames('current');
     if (!charWorldbooks.primary)
@@ -900,25 +959,16 @@ async function prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expe
     });
     return { detail, prepared };
 }
-async function applyPreparedProject(projectId, detail, prepared, worldbookName) {
-    if (prepared.length === 0)
+async function applyPreparedProject(projectId, detail, prepared, worldbookName, options = {}) {
+    if (prepared.length === 0 && !options.pruneMissing)
         return;
+    const projectName = detail.project.name || '未命名项目';
     await updateWorldbookWith(worldbookName, worldbook => {
-        prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
+        const desiredEntries = prepared.map(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
             const sourceName = entry.comment || entry.name || `条目${index + 1}`;
-            const projectName = detail.project.name || '未命名项目';
             const name = formatCreativeWorkshopEntryName(sourceName, detail.project, projectName);
             const stableKey = `${projectId}:${entryKey}`;
             const legacyKey = `${projectId}:${index}`;
-            const existingIndex = worldbook.findIndex(item => {
-                const itemEntryKey = _.get(item, 'extra.cw_entry_key');
-                const itemProjectId = _.get(item, 'extra.cw_project_id');
-                const legacyProjectName = _.get(item, 'extra.fate_project_name');
-                const isSameLegacyProject = !itemProjectId && legacyProjectName === projectName;
-                return (itemEntryKey === stableKey ||
-                    itemEntryKey === legacyKey ||
-                    (!itemEntryKey && (itemProjectId === projectId || isSameLegacyProject) && (item.name === name || item.comment === sourceName)));
-            });
             const payload = {
                 name,
                 enabled: _.isBoolean(entry.enabled) ? entry.enabled : !entry.disable,
@@ -952,23 +1002,21 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName) 
                 comment: entry.comment || entry.name || name,
                 outletName: _.isString(entry.outletName) ? entry.outletName : '',
                 extra: {
-                    ..._.get(worldbook[existingIndex], 'extra', {}),
                     cw_project_id: projectId,
-                    cw_project_name_display: detail.project.name || '未命名项目',
+                    cw_project_name_display: projectName,
                     cw_project_version: detail.project.version || null,
                     cw_remote_version: detail.project.version || null,
                     cw_entry_key: stableKey,
                     cw_name_format_version: CREATIVE_WORKSHOP_NAME_FORMAT_VERSION,
                 },
             };
-            if (existingIndex >= 0) {
-                worldbook[existingIndex] = { ...worldbook[existingIndex], ...payload, uid: worldbook[existingIndex].uid };
-            }
-            else {
-                worldbook.push(payload);
-            }
+            return { payload, stableKey, legacyKey, sourceName };
         });
-        return worldbook;
+        return reconcileCreativeWorkshopWorldbookEntries(worldbook, desiredEntries, projectId, {
+            projectName,
+            legacyProjectName: options.legacyProjectName,
+            pruneMissing: options.pruneMissing,
+        });
     });
 }
 function isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName) {
@@ -1001,11 +1049,11 @@ async function assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProje
         }
     }
 }
-async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredWorldbookName, legacyProjectName) {
+async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredWorldbookName, legacyProjectName, preserveWorldbookName) {
     const candidates = _.uniq([
         preferredWorldbookName,
         ...getCreativeWorkshopRelevantWorldbookNames(projectId, legacyProjectName),
-    ]).filter((name) => _.isString(name) && Boolean(name));
+    ]).filter((name) => _.isString(name) && Boolean(name) && (!preserveWorldbookName || name !== preserveWorldbookName));
     const deletedEntries = [];
     for (const worldbookName of candidates) {
         deletedEntries.push(...await deleteProjectEntriesFromWorldbook(projectId, worldbookName, legacyProjectName));
@@ -1040,13 +1088,14 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
     let worldbookName = installedWorldbookName;
     if (installedWorldbookName) {
         worldbookName = await ensureTargetWorldbook(installedWorldbookName);
-        await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
-        await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+        await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName, worldbookName);
+        await applyPreparedProject(projectId, detail, prepared, worldbookName, {
+            pruneMissing: true,
+            legacyProjectName,
+        });
     }
     else if (prepared.length > 0) {
         worldbookName = getCurrentWorldbookName();
-    }
-    if (prepared.length > 0 && worldbookName) {
         await applyPreparedProject(projectId, detail, prepared, worldbookName);
     }
     if (legacyProjectName && legacyProjectName !== projectId) {
