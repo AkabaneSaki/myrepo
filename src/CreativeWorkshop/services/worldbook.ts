@@ -5,7 +5,7 @@ import {
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail, fetchCreativeWorkshopProjectWorldbookSource } from './project-fetch';
-import { formatCreativeWorkshopEntryName } from './project-type';
+import { CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, formatCreativeWorkshopEntryName } from './project-type';
 import {
   getCreativeWorkshopFiniteNumber,
   getCreativeWorkshopPositionRole,
@@ -130,19 +130,20 @@ async function applyPreparedProject(
 
   await updateWorldbookWith(worldbookName, worldbook => {
     prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
-      const name = formatCreativeWorkshopEntryName(
-        entry.comment || entry.name || `条目${index + 1}`,
-        detail.project,
-        detail.project.name || '未命名项目',
-      );
+      const sourceName = entry.comment || entry.name || `条目${index + 1}`;
+      const projectName = detail.project.name || '未命名项目';
+      const name = formatCreativeWorkshopEntryName(sourceName, detail.project, projectName);
       const stableKey = `${projectId}:${entryKey}`;
       const legacyKey = `${projectId}:${index}`;
       const existingIndex = worldbook.findIndex(item => {
-        const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
+        const itemEntryKey = _.get(item, 'extra.cw_entry_key');
+        const itemProjectId = _.get(item, 'extra.cw_project_id');
+        const legacyProjectName = _.get(item, 'extra.fate_project_name');
+        const isSameLegacyProject = !itemProjectId && legacyProjectName === projectName;
         return (
-          _.get(item, 'extra.cw_entry_key') === stableKey ||
-          _.get(item, 'extra.cw_entry_key') === legacyKey ||
-          (itemProjectId === projectId && item.name === name)
+          itemEntryKey === stableKey ||
+          itemEntryKey === legacyKey ||
+          (!itemEntryKey && (itemProjectId === projectId || isSameLegacyProject) && (item.name === name || item.comment === sourceName))
         );
       });
       const payload = {
@@ -184,6 +185,7 @@ async function applyPreparedProject(
           cw_project_version: detail.project.version || null,
           cw_remote_version: detail.project.version || null,
           cw_entry_key: stableKey,
+          cw_name_format_version: CREATIVE_WORKSHOP_NAME_FORMAT_VERSION,
         },
       };
 

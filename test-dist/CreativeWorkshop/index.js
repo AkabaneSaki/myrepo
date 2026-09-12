@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -318,6 +318,105 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
     }
 }
 
+;// ./src/CreativeWorkshop/services/project-type.ts
+const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
+const CREATIVE_WORKSHOP_EXTENSION_TYPES = (/* unused pure expression or super */ null && (['规则', '内容']));
+const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 2;
+function normalizeProjectType(value) {
+    if (typeof value !== 'string')
+        return null;
+    const normalized = value.trim();
+    if (normalized === '系统')
+        return '系统核心';
+    return CREATIVE_WORKSHOP_PROJECT_TYPES.includes(normalized)
+        ? normalized
+        : null;
+}
+function normalizeExtensionType(value) {
+    if (typeof value !== 'string')
+        return null;
+    const normalized = value.trim();
+    return CREATIVE_WORKSHOP_EXTENSION_TYPES.includes(normalized)
+        ? normalized
+        : null;
+}
+function normalizeLegacyTags(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .filter((tag) => typeof tag === 'string')
+        .map(tag => tag.trim())
+        .filter(Boolean);
+}
+function resolveCreativeWorkshopProjectType(project) {
+    if (!project || typeof project !== 'object')
+        return '系统核心';
+    const explicitType = normalizeProjectType(project.projectType ?? project.project_type);
+    if (explicitType)
+        return explicitType;
+    const tags = normalizeLegacyTags(project.tags);
+    if (tags.includes('系统') || tags.includes('系统核心'))
+        return '系统核心';
+    if (tags.includes('角色'))
+        return '角色';
+    if (tags.includes('事件'))
+        return '事件';
+    if (tags.includes('扩展'))
+        return '扩展';
+    return '系统核心';
+}
+function resolveCreativeWorkshopExtensionType(project) {
+    if (!project || resolveCreativeWorkshopProjectType(project) !== '扩展')
+        return null;
+    return normalizeExtensionType(project.extensionType ?? project.extension_type);
+}
+function getCreativeWorkshopProjectTypeLabel(project) {
+    const projectType = resolveCreativeWorkshopProjectType(project);
+    if (projectType !== '扩展')
+        return projectType;
+    const extensionType = resolveCreativeWorkshopExtensionType(project);
+    return extensionType ? `${extensionType}扩展` : '扩展';
+}
+function getCreativeWorkshopDlcCategory(project) {
+    const projectType = resolveCreativeWorkshopProjectType(project);
+    return projectType === '系统核心' ? '命定系统' : projectType;
+}
+function readLeadingBracketSegment(value, offset) {
+    const match = value.slice(offset).match(/^\[([^\[\]]+)\]/);
+    if (!match)
+        return null;
+    return { value: match[1], end: offset + match[0].length };
+}
+function stripExistingDlcHeader(entryName) {
+    const dlc = readLeadingBracketSegment(entryName, 0);
+    if (!dlc || dlc.value !== 'DLC')
+        return entryName;
+    const category = readLeadingBracketSegment(entryName, dlc.end);
+    const packageName = category ? readLeadingBracketSegment(entryName, category.end) : null;
+    // A complete DLC header owns the first three segments. For a partial header,
+    // strip only [DLC] and preserve the remaining author text.
+    let contentStart = packageName ? packageName.end : dlc.end;
+    const sourceMarker = readLeadingBracketSegment(entryName, contentStart);
+    if (sourceMarker?.value === 'WS')
+        contentStart = sourceMarker.end;
+    return entryName.slice(contentStart);
+}
+function stripLegacyCorePrefix(entryName) {
+    if (entryName.startsWith('命定系统-'))
+        return entryName.slice('命定系统-'.length);
+    if (entryName.startsWith('[命定系统]'))
+        return entryName.slice('[命定系统]'.length);
+    return entryName;
+}
+function formatCreativeWorkshopEntryName(entryName, project, projectName) {
+    const projectType = resolveCreativeWorkshopProjectType(project);
+    let authorContent = stripExistingDlcHeader(entryName);
+    if (projectType === '系统核心')
+        authorContent = stripLegacyCorePrefix(authorContent);
+    const category = getCreativeWorkshopDlcCategory(project);
+    return `[DLC][${category}][${projectName}][WS]${authorContent}`;
+}
+
 ;// ./src/CreativeWorkshop/services/regex-name.ts
 function getReadableRegexName(projectName, entry, index) {
     const name = entry.scriptName || entry.script_name || entry.id || `正则${index + 1}`;
@@ -328,6 +427,7 @@ function getCreativeWorkshopRegexId(regex) {
 }
 
 ;// ./src/CreativeWorkshop/services/diff.ts
+
 
 
 
@@ -360,11 +460,13 @@ function normalizeWorldbookEntry(entry) {
         keysecondary: JSON.stringify(entry.strategy.keys_secondary?.keys || []),
     };
 }
-function normalizeRemoteEntry(entry, projectId, index) {
+function normalizeRemoteEntry(entry, projectId, index, project, projectName) {
     const comment = entry.comment || '无标题';
+    const rawEntryKey = _.get(entry, 'entryKey');
+    const entryKey = _.isString(rawEntryKey) && rawEntryKey ? `${projectId}:${rawEntryKey}` : `${projectId}:${index}`;
     return {
-        entryKey: `${projectId}:${index}`,
-        name: comment,
+        entryKey,
+        name: formatCreativeWorkshopEntryName(comment, project, projectName),
         comment,
         content: entry.content || '',
         key: JSON.stringify(Array.isArray(entry.key) ? entry.key : []),
@@ -394,7 +496,14 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
         _.get(entry, 'extra.fate_project_name') === projectId ||
         Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName))
         .map(normalizeWorldbookEntry);
-    const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) => normalizeRemoteEntry(entry, projectId, index));
+    const localEntryKeys = new Set(localEntries.map(entry => entry.entryKey));
+    const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) => {
+        const normalized = normalizeRemoteEntry(entry, projectId, index, detail.project, detail.project.name || legacyProjectName || '未命名项目');
+        const legacyEntryKey = `${projectId}:${index}`;
+        return !localEntryKeys.has(normalized.entryKey) && localEntryKeys.has(legacyEntryKey)
+            ? { ...normalized, entryKey: legacyEntryKey }
+            : normalized;
+    });
     const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
         .filter(regex => {
         const regexId = getCreativeWorkshopRegexId(regex);
@@ -576,73 +685,6 @@ async function uninstallCreativeWorkshopRegex(projectId, legacyProjectName) {
 async function updateCreativeWorkshopRegex(projectId, expectedVersion, legacyProjectName) {
     await uninstallCreativeWorkshopRegex(projectId, legacyProjectName);
     return installCreativeWorkshopRegex(projectId, undefined, expectedVersion, legacyProjectName);
-}
-
-;// ./src/CreativeWorkshop/services/project-type.ts
-const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
-const CREATIVE_WORKSHOP_EXTENSION_TYPES = ['规则', '内容'];
-function normalizeProjectType(value) {
-    if (typeof value !== 'string')
-        return null;
-    const normalized = value.trim();
-    if (normalized === '系统')
-        return '系统核心';
-    return CREATIVE_WORKSHOP_PROJECT_TYPES.includes(normalized)
-        ? normalized
-        : null;
-}
-function normalizeExtensionType(value) {
-    if (typeof value !== 'string')
-        return null;
-    const normalized = value.trim();
-    return CREATIVE_WORKSHOP_EXTENSION_TYPES.includes(normalized)
-        ? normalized
-        : null;
-}
-function normalizeLegacyTags(value) {
-    if (!Array.isArray(value))
-        return [];
-    return value
-        .filter((tag) => typeof tag === 'string')
-        .map(tag => tag.trim())
-        .filter(Boolean);
-}
-function resolveCreativeWorkshopProjectType(project) {
-    if (!project || typeof project !== 'object')
-        return '系统核心';
-    const explicitType = normalizeProjectType(project.projectType ?? project.project_type);
-    if (explicitType)
-        return explicitType;
-    const tags = normalizeLegacyTags(project.tags);
-    if (tags.includes('系统') || tags.includes('系统核心'))
-        return '系统核心';
-    if (tags.includes('角色'))
-        return '角色';
-    if (tags.includes('事件'))
-        return '事件';
-    if (tags.includes('扩展'))
-        return '扩展';
-    return '系统核心';
-}
-function resolveCreativeWorkshopExtensionType(project) {
-    if (!project || resolveCreativeWorkshopProjectType(project) !== '扩展')
-        return null;
-    return normalizeExtensionType(project.extensionType ?? project.extension_type);
-}
-function getCreativeWorkshopProjectTypeLabel(project) {
-    const projectType = resolveCreativeWorkshopProjectType(project);
-    if (projectType !== '扩展')
-        return projectType;
-    const extensionType = resolveCreativeWorkshopExtensionType(project);
-    return extensionType ? `${extensionType}扩展` : '扩展';
-}
-function formatCreativeWorkshopEntryName(entryName, project, projectName) {
-    const projectType = resolveCreativeWorkshopProjectType(project);
-    if (projectType === '系统核心') {
-        return entryName.startsWith('命定系统-') ? entryName : `命定系统-${entryName}`;
-    }
-    const typeLabel = getCreativeWorkshopProjectTypeLabel(project);
-    return entryName.startsWith('[DLC]') ? entryName : `[DLC][${typeLabel}][${projectName}]${entryName}`;
 }
 
 ;// ./src/CreativeWorkshop/services/worldbook-normalize.ts
@@ -863,14 +905,19 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName) 
         return;
     await updateWorldbookWith(worldbookName, worldbook => {
         prepared.forEach(({ entry, index, entryKey, positionType, positionRole, strategyType, secondaryLogic, depth, order, probability, scanDepth }) => {
-            const name = formatCreativeWorkshopEntryName(entry.comment || entry.name || `条目${index + 1}`, detail.project, detail.project.name || '未命名项目');
+            const sourceName = entry.comment || entry.name || `条目${index + 1}`;
+            const projectName = detail.project.name || '未命名项目';
+            const name = formatCreativeWorkshopEntryName(sourceName, detail.project, projectName);
             const stableKey = `${projectId}:${entryKey}`;
             const legacyKey = `${projectId}:${index}`;
             const existingIndex = worldbook.findIndex(item => {
-                const itemProjectId = _.get(item, 'extra.cw_project_id') ?? _.get(item, 'extra.fate_project_name');
-                return (_.get(item, 'extra.cw_entry_key') === stableKey ||
-                    _.get(item, 'extra.cw_entry_key') === legacyKey ||
-                    (itemProjectId === projectId && item.name === name));
+                const itemEntryKey = _.get(item, 'extra.cw_entry_key');
+                const itemProjectId = _.get(item, 'extra.cw_project_id');
+                const legacyProjectName = _.get(item, 'extra.fate_project_name');
+                const isSameLegacyProject = !itemProjectId && legacyProjectName === projectName;
+                return (itemEntryKey === stableKey ||
+                    itemEntryKey === legacyKey ||
+                    (!itemEntryKey && (itemProjectId === projectId || isSameLegacyProject) && (item.name === name || item.comment === sourceName)));
             });
             const payload = {
                 name,
@@ -911,6 +958,7 @@ async function applyPreparedProject(projectId, detail, prepared, worldbookName) 
                     cw_project_version: detail.project.version || null,
                     cw_remote_version: detail.project.version || null,
                     cw_entry_key: stableKey,
+                    cw_name_format_version: CREATIVE_WORKSHOP_NAME_FORMAT_VERSION,
                 },
             };
             if (existingIndex >= 0) {
