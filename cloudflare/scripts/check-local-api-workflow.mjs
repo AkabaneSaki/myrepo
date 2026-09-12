@@ -28,6 +28,7 @@ function createToken({ userId, username, isAdmin }) {
 }
 
 const creatorToken = createToken({ userId: 'cw_local_creator', username: 'Local Creator', isAdmin: false });
+const otherUserToken = createToken({ userId: 'cw_local_other', username: 'Local Other', isAdmin: false });
 const adminToken = createToken({ userId: 'cw_local_admin', username: 'Local Admin', isAdmin: true });
 
 async function api(path, { method = 'GET', token, body, expected = 200 } = {}) {
@@ -102,6 +103,7 @@ const regex = [
 let publishedId = null;
 let draftId = null;
 let pendingDeleteId = null;
+let rejectedId = null;
 
 async function cleanupProject(id) {
   if (!id) return;
@@ -113,6 +115,48 @@ async function cleanupProject(id) {
 }
 
 try {
+  const rejectCandidate = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Local API Reject Test',
+      description: 'Admin review reject and permission checks',
+      tags: ['系统'],
+    },
+  });
+  rejectedId = rejectCandidate.projectId;
+  assert.ok(rejectedId);
+  await api(`/api/projects/${rejectedId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: JSON.stringify(worldbook),
+  });
+  const rejectCandidateDetail = await api(`/api/projects/${rejectedId}`, { token: creatorToken });
+  const rejectRevision = rejectCandidateDetail.project.draftRevision;
+
+  await api(`/api/admin/review/${rejectedId}`, { token: creatorToken, expected: 403 });
+  await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: creatorToken,
+    body: { action: 'reject', rejectReason: 'creator must not review', expectedRevision: rejectRevision },
+    expected: 403,
+  });
+  const missingReason = await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'reject', expectedRevision: rejectRevision },
+    expected: 400,
+  });
+  assert.match(String(missingReason.error), /Reject reason required/i);
+  await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'reject', rejectReason: 'Please revise this test project', expectedRevision: rejectRevision },
+  });
+  const rejected = await api(`/api/projects/${rejectedId}`, { token: creatorToken });
+  assert.equal(rejected.project.status, 'rejected');
+  assert.equal(rejected.project.rejectReason, 'Please revise this test project');
+
   const removablePending = await api('/api/projects', {
     method: 'POST',
     token: creatorToken,
@@ -185,6 +229,25 @@ try {
   assert.equal(approved.project.versionLabel, '初版');
   assert.equal(approved.worldbookEntriesPreview.length, 3);
   assert.equal(approved.regexEntriesPreview.length, 2);
+
+  await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: otherUserToken,
+    body: { visibility: false },
+    expected: 403,
+  });
+  const hiddenByAdmin = await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: adminToken,
+    body: { visibility: false },
+  });
+  assert.equal(hiddenByAdmin.visibility, false);
+  const restoredByAdmin = await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: adminToken,
+    body: { visibility: true },
+  });
+  assert.equal(restoredByAdmin.visibility, true);
 
   const withdrawDraftUpdate = await api(`/api/projects/${publishedId}`, {
     method: 'PUT',
@@ -294,7 +357,7 @@ try {
   draftId = cascadeDraftUpdate.draftProjectId;
   assert.ok(draftId);
   await api(`/api/projects/${draftId}`, { token: creatorToken });
-  await api(`/api/projects/${publishedId}`, { method: 'DELETE', token: creatorToken });
+  await api(`/api/projects/${publishedId}`, { method: 'DELETE', token: adminToken });
   await api(`/api/projects/${publishedId}`, { token: creatorToken, expected: 404 });
   await api(`/api/projects/${draftId}`, { token: creatorToken, expected: 404 });
   draftId = null;
@@ -302,6 +365,7 @@ try {
 
   console.log('local API workflow OK');
 } finally {
+  await cleanupProject(rejectedId);
   await cleanupProject(pendingDeleteId);
   await cleanupProject(draftId);
   await cleanupProject(publishedId);
