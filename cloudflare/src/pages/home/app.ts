@@ -538,10 +538,10 @@ export const homeScript = String.raw`
           }
           state.sortRequestPending = true;
           const sortLabelMap = {
-            published: '发布时间',
-            updated: '更新日期',
-            likes: '点赞数',
-            downloads: '下载量',
+            discover: '发现',
+            published: '最新',
+            rating: '玩家好评',
+            downloads: '下载最多',
           };
           showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
           state.sortMode = nextSortMode;
@@ -595,7 +595,7 @@ export const homeScript = String.raw`
           return;
         }
         state.sortRequestPending = true;
-        const sortLabelMap = { published: '发布时间', updated: '更新日期', likes: '点赞数', downloads: '下载量' };
+        const sortLabelMap = { discover: '发现', published: '最新', rating: '玩家好评', downloads: '下载最多' };
         showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
         state.sortMode = nextSortMode;
         state.sortMenuOpen = false;

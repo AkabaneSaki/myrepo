@@ -7,6 +7,7 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
+import { invalidateCurrentDiscoveryRankingSnapshot } from '../utils/project-ranking-snapshots';
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -347,6 +348,10 @@ export class AdminReview extends OpenAPIRoute {
         visibility: project.visibility,
         latestApprovedAt: reviewedAt,
       });
+    }
+
+    if (action === 'approve') {
+      await invalidateCurrentDiscoveryRankingSnapshot(c);
     }
 
     await projectDb.logAdminAction(c, {

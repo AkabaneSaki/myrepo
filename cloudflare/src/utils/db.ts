@@ -12,6 +12,17 @@ import {
   type ProjectType,
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
+import {
+  DISCOVERY_FEATURED_COUNT,
+  rankDiscoveryProjects,
+  rankPlayerRatedProjects,
+  type ProjectRankingCandidate,
+} from './project-ranking';
+import {
+  getProjectRankingBucket,
+  getProjectRankingRetentionCutoffBucket,
+  pruneOldProjectRankingSnapshots,
+} from './project-ranking-snapshots';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
@@ -208,6 +219,96 @@ export const userDb = {
     return Boolean(result?.found);
   },
 };
+
+/**
+ * 项目排名快照
+ */
+type ProjectRankingSnapshotKind = 'discover' | 'rating';
+
+function parseSnapshotProjectIds(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(item => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function buildProjectRankingSnapshot(
+  c: AppContext,
+  kind: ProjectRankingSnapshotKind,
+  bucket: number,
+): Promise<string> {
+  await pruneOldProjectRankingSnapshots(c, bucket);
+
+  const candidatesResult = await c.env.DB.prepare(
+    `SELECT id, likes_count, downloads_count, latest_approved_at
+     FROM projects
+     WHERE status = 'approved' AND is_published = 1 AND visibility = 1`,
+  ).all<{
+    id: string;
+    likes_count: number | null;
+    downloads_count: number | null;
+    latest_approved_at: string | null;
+  }>();
+
+  const candidates: ProjectRankingCandidate[] = (candidatesResult.results || []).map(row => ({
+    id: String(row.id),
+    likesCount: Number(row.likes_count || 0),
+    downloadsCount: Number(row.downloads_count || 0),
+    latestApprovedAt: row.latest_approved_at,
+  }));
+
+  let ranked: ProjectRankingCandidate[];
+  if (kind === 'rating') {
+    ranked = rankPlayerRatedProjects(candidates);
+  } else {
+    const oldestRetainedBucket = getProjectRankingRetentionCutoffBucket(bucket);
+    const recentSnapshots = await c.env.DB.prepare(
+      `SELECT bucket, project_ids
+       FROM project_rank_snapshots
+       WHERE kind = 'discover' AND bucket < ? AND bucket >= ?
+       ORDER BY bucket DESC`,
+    )
+      .bind(bucket, oldestRetainedBucket)
+      .all<{ bucket: number; project_ids: string }>();
+    const recentlyFeaturedAgeById = new Map<string, number>();
+    for (const snapshot of recentSnapshots.results || []) {
+      const snapshotAge = bucket - Number(snapshot.bucket);
+      for (const projectId of parseSnapshotProjectIds(snapshot.project_ids).slice(0, DISCOVERY_FEATURED_COUNT)) {
+        if (!recentlyFeaturedAgeById.has(projectId)) recentlyFeaturedAgeById.set(projectId, snapshotAge);
+      }
+    }
+    ranked = rankDiscoveryProjects(candidates, recentlyFeaturedAgeById, Date.now());
+  }
+
+  const projectIdsJson = JSON.stringify(ranked.map(project => project.id));
+  await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO project_rank_snapshots (kind, bucket, project_ids, generated_at)
+     VALUES (?, ?, ?, ?)`,
+  )
+    .bind(kind, bucket, projectIdsJson, now())
+    .run();
+
+  const persisted = await c.env.DB.prepare(
+    `SELECT project_ids FROM project_rank_snapshots WHERE kind = ? AND bucket = ?`,
+  )
+    .bind(kind, bucket)
+    .first<{ project_ids: string }>();
+  return persisted?.project_ids || projectIdsJson;
+}
+
+async function getProjectRankingSnapshot(c: AppContext, kind: ProjectRankingSnapshotKind): Promise<string> {
+  const bucket = getProjectRankingBucket();
+  const existing = await c.env.DB.prepare(
+    `SELECT project_ids FROM project_rank_snapshots WHERE kind = ? AND bucket = ?`,
+  )
+    .bind(kind, bucket)
+    .first<{ project_ids: string }>();
+  if (existing?.project_ids) return existing.project_ids;
+  return buildProjectRankingSnapshot(c, kind, bucket);
+}
 
 /**
  * 项目相关数据库操作
@@ -518,7 +619,7 @@ export const projectDb = {
       tag?: string;
       tags?: string[];
       search?: string;
-      sort?: 'published' | 'updated' | 'likes' | 'subscribes' | 'downloads';
+      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads';
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
     },
@@ -573,6 +674,14 @@ export const projectDb = {
 
 
     const sortMode = options.sort || 'published';
+    const snapshotKind: ProjectRankingSnapshotKind | null =
+      options.approvedOnly !== false
+        ? sortMode === 'discover'
+          ? 'discover'
+          : sortMode === 'rating'
+            ? 'rating'
+            : null
+        : null;
     const orderBy = (() => {
       switch (sortMode) {
         case 'updated':
@@ -593,19 +702,39 @@ export const projectDb = {
     // 获取当前页，并多取 1 条用于判断是否还有下一批；无需额外 COUNT(*)。
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
-    const results = await db
-      .prepare(
-        `
-			SELECT p.*, u.global_name
-			FROM projects p
-			LEFT JOIN users u ON p.author_id = u.id
-			${listWhereClause}
-			ORDER BY ${orderBy}
-			LIMIT ? OFFSET ?
-		`,
-      )
-      .bind(...values, fetchLimit, offset)
-      .all<Record<string, unknown>>();
+    const snapshotProjectIds = snapshotKind ? await getProjectRankingSnapshot(c, snapshotKind) : null;
+    const results = snapshotProjectIds
+      ? await db
+          .prepare(
+            `
+              WITH ranked AS (
+                SELECT CAST(key AS INTEGER) AS rank_index, value AS project_id
+                FROM json_each(?)
+              )
+              SELECT p.*, u.global_name
+              FROM ranked r
+              JOIN projects p ON p.id = r.project_id
+              LEFT JOIN users u ON p.author_id = u.id
+              ${listWhereClause}
+              ORDER BY r.rank_index ASC
+              LIMIT ? OFFSET ?
+            `,
+          )
+          .bind(snapshotProjectIds, ...values, fetchLimit, offset)
+          .all<Record<string, unknown>>()
+      : await db
+          .prepare(
+            `
+              SELECT p.*, u.global_name
+              FROM projects p
+              LEFT JOIN users u ON p.author_id = u.id
+              ${listWhereClause}
+              ORDER BY ${orderBy}
+              LIMIT ? OFFSET ?
+            `,
+          )
+          .bind(...values, fetchLimit, offset)
+          .all<Record<string, unknown>>();
 
     const rows = results.results || [];
     const hasMore = rows.length > options.pageSize;

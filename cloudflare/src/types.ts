@@ -157,7 +157,7 @@ export const ProjectListQuery = z.object({
   projectType: ProjectCategory.optional().describe('项目基础分类筛选'),
   tag: z.string().optional().describe('旧标签筛选'),
   search: z.string().optional().describe('搜索关键词'),
-  sort: z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']).default('published').describe('排序方式'),
+  sort: z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']).default('discover').describe('排序方式'),
 });
 
 // 项目创建请求

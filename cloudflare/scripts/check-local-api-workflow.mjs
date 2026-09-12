@@ -104,6 +104,7 @@ let publishedId = null;
 let draftId = null;
 let pendingDeleteId = null;
 let rejectedId = null;
+let rankingFreshnessId = null;
 
 async function cleanupProject(id) {
   if (!id) return;
@@ -229,6 +230,39 @@ try {
   assert.equal(approved.project.versionLabel, '初版');
   assert.equal(approved.worldbookEntriesPreview.length, 3);
   assert.equal(approved.regexEntriesPreview.length, 2);
+
+  await api('/api/projects?page=0&pageSize=50&sort=discover');
+  const rankingFreshnessProject = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Ranking Freshness Probe',
+      description: 'Must become searchable immediately after approval invalidates discovery snapshot',
+      tags: ['角色'],
+    },
+  });
+  rankingFreshnessId = rankingFreshnessProject.projectId;
+  assert.ok(rankingFreshnessId);
+  await api(`/api/projects/${rankingFreshnessId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: JSON.stringify(worldbook),
+  });
+  const rankingFreshnessPending = await api(`/api/projects/${rankingFreshnessId}`, { token: creatorToken });
+  await api(`/api/admin/review/${rankingFreshnessId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'approve', expectedRevision: rankingFreshnessPending.project.draftRevision },
+  });
+  const rankingFreshnessSearch = await api(
+    '/api/projects?page=0&pageSize=50&sort=discover&search=Ranking%20Freshness%20Probe',
+  );
+  assert.ok(
+    rankingFreshnessSearch.projects.some(project => project.id === rankingFreshnessId),
+    'newly approved projects must be searchable immediately even when the current discovery bucket already had a snapshot',
+  );
+  await cleanupProject(rankingFreshnessId);
+  rankingFreshnessId = null;
 
   await api(`/api/projects/${publishedId}/visibility`, {
     method: 'PUT',
@@ -367,6 +401,7 @@ try {
 } finally {
   await cleanupProject(rejectedId);
   await cleanupProject(pendingDeleteId);
+  await cleanupProject(rankingFreshnessId);
   await cleanupProject(draftId);
   await cleanupProject(publishedId);
 }

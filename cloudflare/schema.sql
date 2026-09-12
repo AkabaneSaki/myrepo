@@ -72,6 +72,15 @@ CREATE INDEX IF NOT EXISTS idx_projects_author_status_reviewed
     ON projects(author_id, status, reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_guilds ON users(guilds);
 
+CREATE TABLE IF NOT EXISTS project_rank_snapshots (
+    kind TEXT NOT NULL CHECK (kind IN ('discover', 'rating')),
+    bucket INTEGER NOT NULL,
+    project_ids TEXT NOT NULL,
+    generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (kind, bucket)
+);
+
+
 CREATE TABLE IF NOT EXISTS project_likes (
     project_id TEXT NOT NULL,
     user_id TEXT NOT NULL,

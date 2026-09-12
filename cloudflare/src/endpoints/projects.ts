@@ -13,7 +13,7 @@ import { parseRegexEntriesPreview, parseWorldbookEntriesPreview, summarizeProjec
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
-const projectListSortSchema = z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']);
+const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024;
 const UPLOAD_SIZE_ERROR = '文件过大，最大 10MB';
@@ -85,7 +85,7 @@ export class ProjectList extends OpenAPIRoute {
         tag: Str({ required: false }).describe('Filter by tag'),
         tags: Str({ required: false }).describe('Filter by multiple tags (AND, comma-separated)'),
         search: Str({ required: false }).describe('Search keyword'),
-        sort: projectListSortSchema.default('published').describe('Sort mode'),
+        sort: projectListSortSchema.default('discover').describe('Sort mode'),
       }),
     },
     responses: {
