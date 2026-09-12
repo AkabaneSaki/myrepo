@@ -539,6 +539,13 @@ const testProjectTaxonomy = {
   characterFacets: { 种族: ['人类'], 身份: ['法师'] },
   maxCustomTags: 4,
 };
+const taxonomyLabelUi = Function(
+  'PROJECT_TAXONOMY',
+  `${fragments.homeUtilsScript}; return { getProjectTypeDisplayLabel };`,
+)(testProjectTaxonomy);
+assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: '规则' }), '扩展 · 规则');
+assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: null }), '扩展');
+
 const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
