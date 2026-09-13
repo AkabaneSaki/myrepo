@@ -18,6 +18,7 @@ async function evaluateStandalone(relativePath, exportName) {
   return Function(`return (${expression});`)();
 }
 
+const homeAppSource = await readFile(resolve('src/pages/home/app.ts'), 'utf8');
 const fragments = {
   homeStateScript: await evaluateStandalone('src/pages/home/state.ts', 'homeStateScript'),
   homeUtilsScript: await evaluateStandalone('src/pages/home/utils.ts', 'homeUtilsScript'),
@@ -221,6 +222,9 @@ assert.match(fragments.homeLayoutRenderScript, /mobileBaseTagFilter/);
 assert.match(fragments.homeLayoutRenderScript, /mobile-breadcrumb/);
 assert.match(fragments.homeLayoutRenderScript, /getMobileCurrentSortLabel/);
 assert.match(fragments.homeLayoutRenderScript, /sortCrumb/);
+assert.match(fragments.homeLayoutRenderScript, /data-return-all-projects/);
+assert.match(homeAppSource, /querySelectorAll\('\[data-return-all-projects\]'\)/);
+assert.match(homeAppSource, /state\.showSubscribedAndInstalledProjects = false/);
 assert.match(fragments.homeLayoutRenderScript, /data-mobile-tool=\"page\"/);
 assert.match(fragments.homeLayoutRenderScript, /data-search-tag/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /projectTagFilterMobile/);

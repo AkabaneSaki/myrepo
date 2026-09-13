@@ -451,6 +451,16 @@ export const homeScript = String.raw`
         openMobileTool(button.dataset.mobileTool || 'search');
       });
     });
+    document.querySelectorAll('[data-return-all-projects]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        state.showOnlyMyProjects = false;
+        state.showSubscribedAndInstalledProjects = false;
+        state.mobileToolMode = '';
+        state.userMenuOpen = false;
+        renderApp();
+      });
+    });
     if (workshopCloseBtn) workshopCloseBtn.onclick = requestCloseWorkshop;
     if (logoutBtn) logoutBtn.onclick = logout;
     if (uploadBtn) uploadBtn.onclick = event => {

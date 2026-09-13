@@ -1198,6 +1198,16 @@ export const homeShellStyles = String.raw`
   }
   .mobile-breadcrumb i { font-size:.58rem; opacity:.72; }
   .mobile-breadcrumb strong { color:#ddc8aa; font-size:.76rem; font-weight:750; }
+  .mobile-breadcrumb-home {
+    border:0;
+    padding:4px 0;
+    background:transparent;
+    color:var(--cw-text-muted);
+    font:inherit;
+    font-weight:650;
+    cursor:pointer;
+  }
+  .mobile-breadcrumb-home:active { color:#ddc8aa; }
   .mobile-page-list {
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));

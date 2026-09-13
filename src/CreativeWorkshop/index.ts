@@ -263,33 +263,32 @@ function openCreativeWorkshop() {
       top: `${viewportTop}px`,
       height: `${viewportHeight}px`,
       alignItems: useFullscreenLayout ? 'stretch' : 'center',
-      paddingTop: useFullscreenLayout ? '0' : '24px',
-      paddingRight: useFullscreenLayout ? '0' : '24px',
-      paddingBottom: useFullscreenLayout ? '0' : '24px',
-      paddingLeft: useFullscreenLayout ? '0' : '24px',
+      paddingTop: useFullscreenLayout ? 'calc(env(safe-area-inset-top, 0px) + 10px)' : '24px',
+      paddingRight: useFullscreenLayout ? 'env(safe-area-inset-right, 0px)' : '24px',
+      paddingBottom: useFullscreenLayout ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : '24px',
+      paddingLeft: useFullscreenLayout ? 'env(safe-area-inset-left, 0px)' : '24px',
     });
 
     $frameShell.css({
-      width: useFullscreenLayout ? '100vw' : '90vw',
-      height: useFullscreenLayout ? `${viewportHeight}px` : '90vh',
+      width: useFullscreenLayout ? '100%' : '90vw',
+      height: useFullscreenLayout ? '100%' : '90vh',
     });
 
     $frame.css({
-      // ponytail: mobile fills viewport; desktop keeps simple 90% sizing with no extra ratio math.
-      width: useFullscreenLayout ? '100vw' : '90vw',
-      height: useFullscreenLayout ? `${viewportHeight}px` : '90vh',
-      borderRadius: useFullscreenLayout ? '0' : '20px',
-      boxShadow: useFullscreenLayout ? 'none' : '0 24px 80px rgba(0,0,0,0.45)',
+      // Mobile keeps a small visual safe zone; desktop keeps simple 90% sizing.
+      width: useFullscreenLayout ? '100%' : '90vw',
+      height: useFullscreenLayout ? '100%' : '90vh',
+      borderRadius: useFullscreenLayout ? '12px' : '20px',
+      boxShadow: useFullscreenLayout ? '0 8px 30px rgba(0,0,0,0.28)' : '0 24px 80px rgba(0,0,0,0.45)',
     });
 
     $closeButton.css({
-      top: useFullscreenLayout
-        ? '50%'
-        : 'calc(env(safe-area-inset-top, 0px) + 12px)',
-      right: useFullscreenLayout ? 'auto' : 'calc(env(safe-area-inset-right, 0px) + 12px)',
-      left: useFullscreenLayout ? 'calc(env(safe-area-inset-left, 0px) + 6px)' : 'auto',
-      transform: useFullscreenLayout ? 'translateY(-50%)' : 'none',
-      padding: useFullscreenLayout ? '0 10px' : '0 14px',
+      display: useFullscreenLayout ? 'none' : 'block',
+      top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+      right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
+      left: 'auto',
+      transform: 'none',
+      padding: '0 14px',
     });
 
   };
