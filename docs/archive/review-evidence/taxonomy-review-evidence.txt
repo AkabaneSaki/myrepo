@@ -1,0 +1,82 @@
+Creative Workshop taxonomy shadow migration review evidence (current working tree)
+
+1) cloudflare/migrations/0008_project_taxonomy_shadow.sql
+-- 新版项目分类的 shadow columns。
+-- 旧 tags 继续保留为兼容数据；本 migration 不猜测旧自定义标签的新版语义。
+ALTER TABLE projects ADD COLUMN project_type TEXT;
+ALTER TABLE projects ADD COLUMN project_tags TEXT;
+ALTER TABLE projects ADD COLUMN custom_tags TEXT;
+ALTER TABLE projects ADD COLUMN taxonomy_version INTEGER NOT NULL DEFAULT 0;
+
+2) cloudflare/src/utils/project-taxonomy.ts (full semantic logic)
+PROJECT_TYPE_VALUES = 系统/扩展/角色/事件.
+normalizeStringList: accepts arrays only, keeps trimmed strings, drops blanks, dedupes.
+normalizeProjectType: returns one of those four or null.
+resolveLegacyProjectType(tags): first recognized legacy base type or null.
+getLegacyCustomTags(tags): all non-base-type legacy strings.
+hasExplicitTaxonomyInput(input): true iff projectType/projectTags/customTags is supplied.
+buildLegacyTagMirror(projectType, projectTags, customTags): unique [type,...official,...custom], slice(0,4), only for legacy compatibility.
+buildTaxonomyUpdate(current,input):
+- type priority: explicit input type -> current new type -> legacy type from current.tags; throws if none.
+- official tags: explicit input array, else current projectTags normalized.
+- custom tags: explicit input array, else current customTags if non-null/defined, else legacy non-base tags.
+- returns projectType, projectTags, customTags, taxonomyVersion:1, tags: compatibility mirror.
+
+3) projectDb create/update and row parser, cloudflare/src/utils/db.ts
+create INSERT columns:
+id,name,description,version,version_label,author_id,author_name,author_avatar,
+status,download_url,file_size,has_ejs,has_character_artwork,tags,project_type,project_tags,custom_tags,taxonomy_version,cover_image,root_project_id,published_project_id,
+draft_project_id,review_target,draft_revision,visibility,is_published,latest_approved_at,created_at,updated_at
+VALUES has 29 placeholders. Bind list has matching 29 values; taxonomy segment is:
+JSON.stringify(project.tags || []),
+project.projectType ?? null,
+project.projectTags == null ? null : JSON.stringify(project.projectTags),
+project.customTags == null ? null : JSON.stringify(project.customTags),
+Math.max(0, Number(project.taxonomyVersion || 0)),
+project.coverImage || null,
+...existing remaining values.
+update writes project_type/project_tags/custom_tags/taxonomy_version only when corresponding update value !== undefined; array fields serialize JSON, null remains SQL NULL.
+parseNullableStringArray returns null for SQL null/undefined/non-string/invalid JSON/non-string arrays; otherwise string[]. parseProjectRow exposes projectType nullable, projectTags/customTags nullable, taxonomyVersion default 0.
+
+createDraftFromPublished(existing draft branch):
+const carriesExplicitTaxonomy = updates.projectType !== undefined || updates.projectTags !== undefined || updates.customTags !== undefined;
+const nextLegacyTags = !carriesExplicitTaxonomy && Number(existingDraft.taxonomyVersion || 0) > 0
+  ? existingDraft.tags
+  : updates.tags ?? existingDraft.tags;
+Then update existing draft with nextLegacyTags and each taxonomy field = explicit update if supplied, otherwise existing draft field. taxonomyVersion = updates.taxonomyVersion ?? existingDraft.taxonomyVersion.
+New-draft branch copies taxonomy fields from explicit updates if supplied, otherwise published fields. Published row itself is not taxonomy-mutated here; only its draft_project_id link is updated.
+
+4) ProjectUpdate endpoint, cloudflare/src/endpoints/projects.ts
+After permission check:
+let updates = requestedUpdates;
+if (hasExplicitTaxonomyInput(data.body)) {
+  updates = { ...requestedUpdates, ...buildTaxonomyUpdate(project, data.body) };
+} else if (data.body.tags !== undefined && Number(project.taxonomyVersion || 0) > 0) {
+  // legacy editor tags-only write cannot overwrite confirmed compatibility mirror
+  updates = { ...requestedUpdates, tags: project.tags };
+}
+If published+approved, calls createDraftFromPublished(projectId,{...updates,version:targetVersion}); does NOT projectDb.update published taxonomy.
+If target itself is a draft, applies updates to that draft and bumps draft revision.
+
+5) Draft deletion/cancel existing behavior
+ProjectDelete deletes the draft row. projectDb.delete reads published_project_id/draft_project_id; if deleting a draft with published_project_id it executes UPDATE published SET draft_project_id=NULL, then DELETE draft. It does not copy any draft content/taxonomy fields back to published.
+
+6) Approval, cloudflare/src/endpoints/admin.ts
+For approved reviewTarget=draft with publishedProjectId, after validation/assets copy it updates published with draft values including:
+tags: project.tags,
+projectType: project.projectType,
+projectTags: project.projectTags,
+customTags: project.customTags,
+taxonomyVersion: project.taxonomyVersion,
+plus existing metadata/content refs/status fields; then deletes draft. Thus taxonomy reaches published only in approval path.
+
+7) Integration evidence, cloudflare/scripts/check-local-api-workflow.mjs (PASS locally)
+Tests all of these against local Wrangler+D1:
+A. Legacy published row after first approval: tags=['角色']; projectType/projectTags/customTags=null; taxonomyVersion=0.
+B. Create draft with explicit new taxonomy (扩展 / 临时官方 / 临时自定义); assert draft new fields/version1/mirror; DELETE draft; assert published remains tags=['角色'], all new fields null/version0, draftProjectId null.
+C. Create real new-taxonomy draft (事件 / [剧情,战斗] / [approved-draft]); assert draft mirror. Then simulate old client PUT to PUBLISHED ID while this new-taxonomy draft already exists with tags=['系统','old-client-during-existing-draft']; assert same existing draft keeps new taxonomy and mirror. Then approve and assert published receives exact taxonomy/version1/mirror.
+D. After published taxonomyVersion=1, simulate old client creating another update using only legacy tags=['系统','old-client-overwrite']; assert resulting draft still keeps confirmed 事件/[剧情,战斗]/[approved-draft]/version1/mirror.
+E. New project creation with explicit taxonomy plus misleading legacy tags: assert new fields/version1 and generated mirror win.
+`npm run check:local-api-workflow` passes.
+
+Other passed checks: check:project-taxonomy-migration, check:project-taxonomy-compat, check:project-type-compat, check:home-js-smoke, check:types, root pnpm build. Local migration 0008 applied successfully only to local D1. No remote D1 changed.

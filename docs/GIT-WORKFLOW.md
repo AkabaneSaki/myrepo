@@ -275,8 +275,8 @@ Where practical, verify the live site contains behavior/code unique to the deplo
 The primary machine has one fail-closed engine plus target/source profiles:
 
 ```text
-C:\Project\myrepo-git\.ai-bridge\one-click-deploy\deploy-worker.ps1
-C:\Project\myrepo-git\.ai-bridge\one-click-deploy\profiles\*.json
+C:\Project\myrepo-git\.cotel\local\one-click-deploy\deploy-worker.ps1
+C:\Project\myrepo-git\.cotel\local\one-click-deploy\profiles\*.json
 ```
 
 Do not clone deployment logic for a second staging Worker, preview Worker, release branch, or release tag. Change/add the target profile and source selector instead. The helper supports `-SourceRepoRoot`, branch/tag selection, config override, and `-CheckOnly` while preserving the same Git/Cloudflare/D1/dry-run checks.
@@ -288,13 +288,13 @@ The legacy convenience shortcuts below remain wrappers around that same engine.
 For routine Workshop staging deployments on the primary development machine, use the fail-closed helper instead of rebuilding the Wrangler command by hand:
 
 ```text
-C:\Project\myrepo-git\.ai-bridge\CHECK_STAGING.cmd
-C:\Project\myrepo-git\.ai-bridge\DEPLOY_STAGING.cmd
+C:\Project\myrepo-git\.cotel\local\CHECK_STAGING.cmd
+C:\Project\myrepo-git\.cotel\local\DEPLOY_STAGING.cmd
 ```
 
 The helper must verify the exact latest `origin/staging`, expected staging Cloudflare account/Worker/D1/R2, and dry-run before deploying. Deploy mode also applies pending D1 migrations before Worker deployment; check-only mode reports migration state without mutating D1.
 
-`.ai-bridge/` is local operational state and is not the portable source of truth. If the helper is missing on another machine, reproduce the same fail-closed checks rather than weakening the SOP.
+`.cotel/local/` is persistent machine-local operational state and is not the portable source of truth. `.ai-bridge/` is reserved for current-session AI handoff state only. If the helper is missing on another machine, reproduce the same fail-closed checks rather than weakening the SOP.
 
 ## 10. Preview / experimental deployment exception
 
@@ -337,8 +337,8 @@ Production should normally run an exact commit already present in owner main.
 For routine Workshop production deployment after staging acceptance and owner-main promotion, use:
 
 ```text
-C:\Project\myrepo-git\.ai-bridge\CHECK_PRODUCTION.cmd
-C:\Project\myrepo-git\.ai-bridge\DEPLOY_PRODUCTION.cmd
+C:\Project\myrepo-git\.cotel\local\CHECK_PRODUCTION.cmd
+C:\Project\myrepo-git\.cotel\local\DEPLOY_PRODUCTION.cmd
 ```
 
 These shortcuts wrap the same composable deploy engine. The default production source is refreshed `upstream/main`. When an explicitly authorized release exception is active, the same helper can select an owner `release/*` branch or owner release tag without creating another deploy script:

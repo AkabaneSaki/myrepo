@@ -11,7 +11,7 @@ For all limits and quotas, retrieve from the product's `/platform/limits/` page.
 
 ## Commands
 
-For this repository, **do not use raw `npx wrangler deploy` for staging or production**. The root `AGENTS.md` deployment-helper contract is mandatory: use `.ai-bridge/one-click-deploy/deploy-worker.ps1` (or its Cotel deployment capability when exposed) with a target profile/source selector. A failed helper check must be fixed, not bypassed with shell commands.
+For this repository, **do not use raw `npx wrangler deploy` for staging or production**. The root `AGENTS.md` deployment-helper contract is mandatory: use `.cotel/local/one-click-deploy/deploy-worker.ps1` (or its Cotel deployment capability when exposed) with a target profile/source selector. A failed helper check must be fixed, not bypassed with shell commands.
 
 | Command | Purpose |
 |---------|---------|

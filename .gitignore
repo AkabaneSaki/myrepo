@@ -6,3 +6,4 @@ node_modules/
 worker-configuration.d.ts
 cloudflare/wrangler.master-staging.jsonc
 .ai-bridge/
+.cotel/local/

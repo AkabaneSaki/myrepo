@@ -43,10 +43,10 @@ Git hosting and runtime infrastructure are separate concerns.
 
 A reusable fail-closed deployment helper already exists on the primary machine. **Use it before considering any raw Wrangler/PowerShell/Bash deployment path.**
 
-- Generic engine: `.ai-bridge/one-click-deploy/deploy-worker.ps1`
-- Target/source profiles: `.ai-bridge/one-click-deploy/profiles/*.json`
-- Compatibility shortcuts: `.ai-bridge/CHECK_STAGING.cmd`, `.ai-bridge/DEPLOY_STAGING.cmd`, `.ai-bridge/CHECK_PRODUCTION.cmd`, `.ai-bridge/DEPLOY_PRODUCTION.cmd`
-- Helper documentation: `.ai-bridge/one-click-deploy/README.md`
+- Generic engine: `.cotel/local/one-click-deploy/deploy-worker.ps1`
+- Target/source profiles: `.cotel/local/one-click-deploy/profiles/*.json`
+- Compatibility shortcuts: `.cotel/local/CHECK_STAGING.cmd`, `.cotel/local/DEPLOY_STAGING.cmd`, `.cotel/local/CHECK_PRODUCTION.cmd`, `.cotel/local/DEPLOY_PRODUCTION.cmd`
+- Helper documentation: `.cotel/local/one-click-deploy/README.md`
 
 Treat deployment as composable bricks, not one script per situation:
 
@@ -67,7 +67,7 @@ Agent rules:
 5. A failed helper check is a stop signal to fix the profile/source/credential/state mismatch. Do not weaken or bypass the check to make deployment pass.
 6. If Cotel exposes a dedicated deployment capability for this helper, prefer that capability over shell execution.
 
-The helper is local operational tooling under `.ai-bridge/`; long-lived deployment policy remains this `AGENTS.md` plus `docs/GIT-WORKFLOW.md`.
+The helper is persistent machine-local operational tooling under `.cotel/local/`. `.ai-bridge/` is reserved for current-session AI handoff state only; long-lived deployment policy remains this `AGENTS.md` plus `docs/GIT-WORKFLOW.md`.
 
 ## Staging terminology contract
 
