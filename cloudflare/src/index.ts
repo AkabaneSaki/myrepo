@@ -6,6 +6,7 @@ import type { Env } from './env';
 
 // 工具函数
 import { projectDb } from './utils/db';
+import { generateProjectRankingDay } from './utils/project-daily-rankings';
 import { jwt } from './utils/jwt';
 
 // 页面
@@ -229,4 +230,14 @@ openapi.post('/api/admin/set-admin', AdminSetAdmin);
 // app.get('/test', (c) => c.text('Hono!'))
 
 // Export the Hono app
-export default app;
+const worker: ExportedHandler<Env> = {
+  fetch(request, env, ctx) {
+    return app.fetch(request, env, ctx);
+  },
+  async scheduled(_controller, env) {
+    const rankingDay = await generateProjectRankingDay({ env });
+    console.log(`Project ranking board ready: ${rankingDay}`);
+  },
+};
+
+export default worker;

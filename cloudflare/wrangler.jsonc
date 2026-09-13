@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-03-12",
   "keep_vars": true,
+  "triggers": {
+    "crons": ["5 * * * *"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

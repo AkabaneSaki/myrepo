@@ -6,6 +6,9 @@
   "dev": {
     "port": 8790
   },
+  "triggers": {
+    "crons": ["5 * * * *"]
+  },
   "vars": {
     "ALLOWED_GUILD_IDS": "",
     "ADMIN_ROLE_IDS": "",

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Local scale/cost guard for D1 hot-path queries.
 
-This intentionally measures SQLite VM work, not Cloudflare D1 billable rows.
-The purpose is to catch queries whose work grows with the whole dataset before
-we spend remote D1 quota. Real D1 rows_read/rows_written remains a later gate.
+This measures SQLite VM work, not Cloudflare D1 billable rows. It is the local
+zero-quota guard; real D1 meta.rows_read/meta.rows_written is verified later on
+staging with a deliberately small remote probe.
 """
 
 from __future__ import annotations
@@ -16,13 +16,90 @@ from typing import Any
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 PROGRESS_INTERVAL = 100
+PAGE_SIZE = 13
 
 
 def project_id(index: int) -> str:
     return f"p{index:06d}"
 
 
-def make_connection(size: int, profile: str, with_snapshot: bool, calls: list[dict[str, Any]]) -> sqlite3.Connection:
+def project_shape(index: int, size: int, profile: str) -> tuple[str, int]:
+    types = ["角色", "扩展", "系统核心", "事件"]
+    ptype = types[(index - 1) % len(types)]
+    visibility = 1
+    if profile == "rareType":
+        ptype = "事件" if index <= max(1, size // 100) else "角色"
+    elif profile == "noMatch":
+        ptype = "角色"
+    elif profile == "manyHidden":
+        visibility = 1 if index % 10 == 0 else 0
+    return ptype, visibility
+
+
+def build_daily_rank_rows(size: int, profile: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    discover_type_counter: dict[str, int] = {}
+    rating_type_counter: dict[str, int] = {}
+    discover_rank = 0
+    rating_rank = 0
+
+    for index in range(1, size + 1):
+        ptype, visibility = project_shape(index, size, profile)
+        if not visibility:
+            continue
+        discover_rank += 1
+        discover_type_counter[ptype] = discover_type_counter.get(ptype, 0) + 1
+        row: dict[str, Any] = {
+            "projectId": project_id(index),
+            "projectType": ptype,
+            "discoverRank": discover_rank,
+            "discoverTypeRank": discover_type_counter[ptype],
+            "ratingRank": None,
+            "ratingTypeRank": None,
+        }
+        if index * 10 >= 100:
+            rating_rank += 1
+            rating_type_counter[ptype] = rating_type_counter.get(ptype, 0) + 1
+            row["ratingRank"] = rating_rank
+            row["ratingTypeRank"] = rating_type_counter[ptype]
+        rows.append(row)
+    return rows
+
+
+def seed_daily_board(conn: sqlite3.Connection, size: int, profile: str, ranking_day: str) -> None:
+    rows = build_daily_rank_rows(size, profile)
+    conn.execute(
+        "INSERT INTO project_ranking_days (ranking_day, generated_at, project_count) VALUES (?, ?, ?)",
+        (ranking_day, f"{ranking_day}T00:00:00.000Z", len(rows)),
+    )
+    conn.executemany(
+        """
+        INSERT INTO project_daily_rankings (
+          ranking_day, project_id, project_type,
+          discover_rank, discover_type_rank, rating_rank, rating_type_rank
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                ranking_day,
+                row["projectId"],
+                row["projectType"],
+                row["discoverRank"],
+                row["discoverTypeRank"],
+                row["ratingRank"],
+                row["ratingTypeRank"],
+            )
+            for row in rows
+        ],
+    )
+
+
+def make_connection(
+    size: int,
+    profile: str,
+    with_ranking_day: bool,
+    ranking_day: str,
+) -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     conn.execute(
@@ -35,16 +112,8 @@ def make_connection(size: int, profile: str, with_snapshot: bool, calls: list[di
     )
 
     rows = []
-    types = ["角色", "扩展", "系统核心", "事件"]
     for index in range(1, size + 1):
-        ptype = types[(index - 1) % len(types)]
-        visibility = 1
-        if profile == "rareType":
-            ptype = "事件" if index <= max(1, size // 100) else "角色"
-        elif profile == "noMatch":
-            ptype = "角色"
-        elif profile == "manyHidden":
-            visibility = 1 if index % 10 == 0 else 0
+        ptype, visibility = project_shape(index, size, profile)
         rows.append(
             (
                 project_id(index),
@@ -71,34 +140,17 @@ def make_connection(size: int, profile: str, with_snapshot: bool, calls: list[di
     )
     conn.executemany(
         "INSERT INTO project_likes (project_id, user_id) VALUES (?, ?)",
-        [(project_id(index), "viewer") for index in range(1, min(size, 13) + 1)],
+        [(project_id(index), "viewer") for index in range(1, min(size, PAGE_SIZE) + 1)],
     )
 
-    if with_snapshot:
-        payload = json.dumps([project_id(index) for index in range(1, size + 1)], separators=(",", ":"))
-        seen: set[tuple[str, int]] = set()
-        for call in calls:
-            sql = call["sql"].upper()
-            values = call.get("values", [])
-            if "FROM PROJECT_RANK_SNAPSHOTS" not in sql or "KIND = ?" not in sql or "BUCKET = ?" not in sql:
-                continue
-            if len(values) < 2 or values[0] not in ("discover", "rating"):
-                continue
-            key = (str(values[0]), int(values[1]))
-            if key in seen:
-                continue
-            seen.add(key)
-            conn.execute(
-                "INSERT OR IGNORE INTO project_rank_snapshots (kind, bucket, project_ids) VALUES (?, ?, ?)",
-                (key[0], key[1], payload),
-            )
+    if with_ranking_day:
+        seed_daily_board(conn, size, profile, ranking_day)
 
     conn.execute("ANALYZE")
     return conn
 
 
-def rewrite_values(sql: str, values: list[Any], size: int) -> list[Any]:
-    del sql  # Scale JSON parameters by their content, not by brittle SQL table/join order.
+def rewrite_values(values: list[Any], size: int, profile: str) -> list[Any]:
     all_ids = [project_id(index) for index in range(1, size + 1)]
     rewritten = list(values)
 
@@ -109,12 +161,16 @@ def rewrite_values(sql: str, values: list[Any], size: int) -> list[Any]:
             parsed = json.loads(value)
         except json.JSONDecodeError:
             continue
-        if not isinstance(parsed, list) or not parsed or not all(isinstance(item, str) for item in parsed):
+        if not isinstance(parsed, list) or len(parsed) <= PAGE_SIZE + 1:
             continue
-        if not all(item.startswith("p") for item in parsed):
-            continue
-        if len(parsed) > 14:
+
+        if all(isinstance(item, str) and item.startswith("p") for item in parsed):
             rewritten[index] = json.dumps(all_ids, separators=(",", ":"))
+            continue
+
+        if all(isinstance(item, dict) and "projectId" in item for item in parsed):
+            rewritten[index] = json.dumps(build_daily_rank_rows(size, profile), separators=(",", ":"))
+
     return rewritten
 
 
@@ -145,16 +201,17 @@ def execute_measured(
 
     plan = explain_plan(conn, sql, values)
     conn.set_progress_handler(progress, PROGRESS_INTERVAL)
-    row_count = 0
+    rows_returned = 0
+    rows_changed = 0
     try:
         cursor = conn.execute(sql, values)
         if operation in ("all", "first"):
             if operation == "first":
-                row_count = 1 if cursor.fetchone() is not None else 0
+                rows_returned = 1 if cursor.fetchone() is not None else 0
             else:
-                row_count = len(cursor.fetchall())
+                rows_returned = len(cursor.fetchall())
         else:
-            row_count = max(0, cursor.rowcount)
+            rows_changed = max(0, cursor.rowcount)
     except sqlite3.OperationalError as exc:
         if "interrupted" not in str(exc).lower():
             raise
@@ -165,58 +222,75 @@ def execute_measured(
     return {
         "steps": steps,
         "interrupted": interrupted,
-        "rowsReturned": row_count,
+        "rowsReturned": rows_returned,
+        "rowsChanged": rows_changed,
         "plan": plan,
     }
 
 
 def run_scenario(size: int, scenario: dict[str, Any], budgets: dict[str, int]) -> dict[str, Any]:
-    conn = make_connection(size, scenario.get("profile", "default"), bool(scenario.get("withSnapshot", True)), scenario["calls"])
+    cost_class = scenario.get("costClass", "ordinary")
+    conn = make_connection(
+        size,
+        scenario.get("profile", "default"),
+        bool(scenario.get("withRankingDay", True)),
+        scenario["rankingDay"],
+    )
     query_results: list[dict[str, Any]] = []
     total_steps = 0
+    total_writes = 0
     violations: list[str] = []
+
+    query_budget = budgets["generationQuerySteps"] if cost_class in ("generation", "search") else budgets["singleQuerySteps"]
+    request_budget = budgets["generationRequestSteps"] if cost_class in ("generation", "search") else budgets["requestSteps"]
+
     try:
         for query_index, call in enumerate(scenario["calls"], start=1):
             sql = call["sql"]
-            values = rewrite_values(sql, call.get("values", []), size)
-            measured = execute_measured(
-                conn,
-                call["operation"],
-                sql,
-                values,
-                budgets["singleQuerySteps"],
-            )
+            values = rewrite_values(call.get("values", []), size, scenario.get("profile", "default"))
+            measured = execute_measured(conn, call["operation"], sql, values, query_budget)
             total_steps += measured["steps"]
+            total_writes += measured["rowsChanged"]
             query_results.append({
                 "index": query_index,
                 "steps": measured["steps"],
                 "interrupted": measured["interrupted"],
                 "rowsReturned": measured["rowsReturned"],
+                "rowsChanged": measured["rowsChanged"],
                 "plan": measured["plan"],
                 "sql": sql[:220],
             })
-            if measured["interrupted"] or measured["steps"] > budgets["singleQuerySteps"]:
-                violations.append(
-                    f"query {query_index} exceeded {budgets['singleQuerySteps']} SQLite steps"
-                )
-            if total_steps > budgets["requestSteps"]:
-                violations.append(
-                    f"request exceeded {budgets['requestSteps']} aggregate SQLite steps"
-                )
+
+            if cost_class != "search" and (measured["interrupted"] or measured["steps"] > query_budget):
+                violations.append(f"query {query_index} exceeded {query_budget} SQLite steps")
+            if cost_class != "search" and total_steps > request_budget:
+                violations.append(f"request exceeded {request_budget} aggregate SQLite steps")
                 break
+            if cost_class == "hot-ranking":
+                if any("USE TEMP B-TREE" in line.upper() for line in measured["plan"]):
+                    violations.append(f"query {query_index} uses a temporary B-tree on the ranking hot path")
+                if any("SCAN R" in line.upper() for line in measured["plan"]):
+                    violations.append(f"query {query_index} scans the ranking table instead of using its rank index")
     finally:
         conn.close()
+
+    if cost_class == "generation" and total_writes > budgets["generationWriteRows"]:
+        violations.append(
+            f"daily generation wrote {total_writes} rows (budget: {budgets['generationWriteRows']})"
+        )
 
     return {
         "size": size,
         "totalSteps": total_steps,
+        "totalWrites": total_writes,
         "queries": query_results,
         "violations": violations,
     }
 
 
 def measure_fixture(size: int, bad: bool, budget: int) -> int:
-    conn = make_connection(size, "default", False, [])
+    ranking_day = "2026-09-14"
+    conn = make_connection(size, "default", not bad, ranking_day)
     try:
         if bad:
             ids = json.dumps([project_id(index) for index in range(1, size + 1)], separators=(",", ":"))
@@ -232,35 +306,16 @@ def measure_fixture(size: int, bad: bool, budget: int) -> int:
                 ORDER BY r.rank_index
                 LIMIT 13 OFFSET 0
             """
-            result = execute_measured(conn, "all", sql, [ids], budget)
-            return result["steps"]
+            return execute_measured(conn, "all", sql, [ids], budget)["steps"]
 
-        conn.executescript(
-            """
-            CREATE TABLE daily_project_rankings (
-              ranking_day TEXT NOT NULL,
-              project_id TEXT NOT NULL,
-              discovery_rank INTEGER NOT NULL,
-              PRIMARY KEY (ranking_day, project_id)
-            );
-            CREATE UNIQUE INDEX idx_daily_discovery_rank
-              ON daily_project_rankings(ranking_day, discovery_rank);
-            """
-        )
-        conn.executemany(
-            "INSERT INTO daily_project_rankings (ranking_day, project_id, discovery_rank) VALUES (?, ?, ?)",
-            [("2026-09-14", project_id(index), index) for index in range(1, size + 1)],
-        )
-        conn.execute("ANALYZE")
         sql = """
             SELECT p.id
-            FROM daily_project_rankings r
+            FROM project_daily_rankings r
             JOIN projects p ON p.id = r.project_id
-            WHERE r.ranking_day = ? AND r.discovery_rank BETWEEN ? AND ?
-            ORDER BY r.discovery_rank
+            WHERE r.ranking_day = ? AND r.discover_rank BETWEEN ? AND ?
+            ORDER BY r.discover_rank
         """
-        result = execute_measured(conn, "all", sql, ["2026-09-14", 1, 13], budget)
-        return result["steps"]
+        return execute_measured(conn, "all", sql, [ranking_day, 1, 13], budget)["steps"]
     finally:
         conn.close()
 
@@ -276,20 +331,18 @@ def main() -> int:
 
     bad_1k = bad_steps.get(1_000, 0)
     bad_10k = bad_steps.get(10_000, 0)
-    bad_detected = (
+    if not (
         bad_10k > budgets["singleQuerySteps"]
         or bad_10k > bad_1k * budgets["scaleMultiplier"] + budgets["scaleSlack"]
-    )
-    if not bad_detected:
+    ):
         failures.append("guard self-test failed: incident-style JSON ranking query was not detected as expensive")
 
     good_1k = good_steps.get(1_000, 0)
     good_10k = good_steps.get(10_000, 0)
-    good_passes = (
+    if not (
         good_10k <= budgets["singleQuerySteps"]
         and good_10k <= good_1k * budgets["scaleMultiplier"] + budgets["scaleSlack"]
-    )
-    if not good_passes:
+    ):
         failures.append("guard self-test failed: bounded indexed ranking query exceeded the scale budget")
 
     print("D1 cost scale self-test:")
@@ -306,18 +359,26 @@ def main() -> int:
                 failures.append(f"{scenario['name']} @ {size}: {violation}")
         scenario_reports[scenario["name"]] = per_size
 
+        if scenario.get("costClass") == "search":
+            continue
         one_k = per_size.get(1_000, {"totalSteps": 0})["totalSteps"]
         ten_k = per_size.get(10_000, {"totalSteps": 0})["totalSteps"]
-        if ten_k > one_k * budgets["scaleMultiplier"] + budgets["scaleSlack"]:
+        multiplier = (
+            budgets["generationScaleMultiplier"]
+            if scenario.get("costClass") == "generation"
+            else budgets["scaleMultiplier"]
+        )
+        if ten_k > one_k * multiplier + budgets["scaleSlack"]:
             failures.append(
                 f"{scenario['name']}: 10k request steps {ten_k} exceed scale budget "
-                f"({one_k} * {budgets['scaleMultiplier']} + {budgets['scaleSlack']})"
+                f"({one_k} * {multiplier} + {budgets['scaleSlack']})"
             )
 
     print("\nBusiness-query scale summary:")
     for name, per_size in scenario_reports.items():
         totals = {size: report["totalSteps"] for size, report in per_size.items()}
-        print(f"  {name}: {totals}")
+        writes = {size: report["totalWrites"] for size, report in per_size.items() if report["totalWrites"]}
+        print(f"  {name}: steps={totals}" + (f" writes={writes}" if writes else ""))
         worst = per_size[max(sizes)]
         for query in worst["queries"]:
             if query["steps"] >= budgets["singleQuerySteps"] or query["interrupted"]:
