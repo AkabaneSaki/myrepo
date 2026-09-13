@@ -351,7 +351,8 @@ const cardRenderUi = Function(
 const displayTagCardHtml = cardRenderUi.renderProjectCard({ id: 'display-tags', name: 'Display Tags', version: '1.0.0', versionLabel: null, displayTags: ['人鱼', '纯爱'], hasCharacterArtwork: true, coverImage: '/cover.png', tags: [], downloadsCount: 0 });
 assert.match(displayTagCardHtml, />人鱼<\/span>/);
 assert.match(displayTagCardHtml, />纯爱<\/span>/);
-assert.match(displayTagCardHtml, /card-quality-signal[^>]*>.*fa-images/);
+assert.match(displayTagCardHtml, /card-cover-wrap.*card-art-badge[^>]*>.*fa-images/);
+assert.doesNotMatch(displayTagCardHtml, /card-quality-signal[^>]*>.*fa-images/);
 assert.doesNotMatch(displayTagCardHtml, /icon-stat-btn|card-meta--version/);
 const legacyCardHtml = cardRenderUi.renderProjectCard({ id: 'legacy', name: 'Legacy', version: '1.2.3', versionLabel: null, tags: [], downloadsCount: 0 });
 assert.doesNotMatch(legacyCardHtml, /card-meta--version|1\.2\.3/);

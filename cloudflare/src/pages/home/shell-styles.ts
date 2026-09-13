@@ -1259,8 +1259,64 @@ export const homeShellStyles = String.raw`
 
 /* Keep browse cards visually aligned and keep the primary install action readable. */
 .projects-grid { align-items:stretch; }
-.project-card { height:100%; }
-.card-content { flex:1; }
+.project-card {
+  height:100%;
+  display:flex;
+  flex-direction:column;
+}
+.card-cover-wrap {
+  position:relative;
+  flex:none;
+}
+.card-content {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-height:0;
+}
+.project-name {
+  min-height:calc(1.38em * 2);
+  margin-bottom:0;
+}
+.project-tags {
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px 6px;
+  margin-top:0;
+  min-width:0;
+  align-content:flex-start;
+  white-space:normal;
+  overflow:hidden;
+  max-height:calc(1.55em * 2 + 4px);
+}
+.project-tags .tag {
+  flex:none;
+  line-height:1.55;
+}
+.project-tags .tag + .tag::before {
+  content:none;
+  margin:0;
+}
+.card-art-badge {
+  position:absolute;
+  top:8px;
+  left:8px;
+  z-index:2;
+  width:26px;
+  height:26px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px;
+  background:rgba(20,21,24,.72);
+  color:#d7c2a0;
+  backdrop-filter:blur(8px);
+  box-shadow:0 4px 12px rgba(0,0,0,.22);
+  pointer-events:none;
+}
+.card-art-badge i { font-size:.78rem; }
 .card-footer { margin-top:auto; }
 .card-footer .install-btn:not(.is-disabled) {
   border-color:#ceb58f;
