@@ -1278,6 +1278,12 @@ export const homeShellStyles = String.raw`
   position:relative;
   flex:none;
 }
+.card-title-row {
+  flex:none;
+  padding:9px 10px 8px;
+  background:#1b1c1f;
+  border-bottom:1px solid rgba(255,255,255,.075);
+}
 .card-content {
   flex:1;
   display:flex;
@@ -1286,9 +1292,28 @@ export const homeShellStyles = String.raw`
   min-height:0;
 }
 .project-name {
+  height:calc(1.38em * 2);
   min-height:calc(1.38em * 2);
+  max-height:calc(1.38em * 2);
   margin-bottom:0;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-clamp:2;
+  overflow:hidden;
+  word-break:break-word;
+  overflow-wrap:anywhere;
 }
+.card-type-prefix {
+  margin-right:.32em;
+  font-weight:820;
+  white-space:nowrap;
+}
+.card-type-prefix--system { color:#8eadd7; }
+.card-type-prefix--extension { color:#d4ad68; }
+.card-type-prefix--character { color:#c6a0d9; }
+.card-type-prefix--event { color:#79bda9; }
+.project-title-text { color:inherit; }
 .project-tags {
   display:flex;
   flex-wrap:wrap;
@@ -1303,6 +1328,7 @@ export const homeShellStyles = String.raw`
 .project-tags .tag {
   flex:none;
   line-height:1.55;
+  color:#aaa69d;
 }
 .project-tags .tag + .tag::before {
   content:none;

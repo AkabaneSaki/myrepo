@@ -168,6 +168,13 @@ assert.match(fragments.homeModalsScript, /data-new-additional-worldbook-confirm/
 assert.match(fragments.homeModalsScript, /已有同名世界书，将安装到现有世界书/);
 assert.match(fragments.homeModalsScript, /新附加世界书不能与角色主世界书同名/);
 assert.match(fragments.homeModalsScript, /newAdditionalConfirm\?\.click\(\)/);
+assert.match(fragments.homeCardsRenderScript, /const projectType = getBaseTag\(project\)/);
+assert.match(fragments.homeCardsRenderScript, /const typeClass = getTypeClass\(project\)/);
+assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\.slice\(0, 5\)/);
+assert.ok(fragments.homeCardsRenderScript.includes('class="tag">#${escapeHtml(tag)}</span>'));
+assert.ok(fragments.homeCardsRenderScript.includes('class="card-title-row"'));
+assert.ok(fragments.homeCardsRenderScript.includes('card-type-prefix--${typeClass}'));
+assert.doesNotMatch(fragments.homeCardsRenderScript, /Set\(\[baseTag, \.\.\.getProjectDisplayTags/);
 assert.match(fragments.homeDetailModalRenderScript, /getInstalledLocationLabel/);
 assert.match(fragments.homeDetailModalRenderScript, /附加世界书/);
 assert.match(fragments.homeDetailModalRenderScript, /角色正则/);
@@ -317,6 +324,7 @@ const cardRenderUi = Function(
   'escapeHtml',
   'getCoverImageSources',
   'getTypeClass',
+  'getBaseTag',
   'getProjectTypeDisplayLabel',
   'getAuthorName',
   'getAuthorAvatar',
@@ -340,6 +348,7 @@ const cardRenderUi = Function(
   () => ({ primary: 'cover', fallback: 'fallback', placeholder: 'placeholder', authenticated: '' }),
   () => 'extension',
   () => '扩展',
+  () => '扩展',
   () => 'Author',
   () => 'avatar',
   () => false,
@@ -353,8 +362,9 @@ const cardRenderUi = Function(
   { systemSignals: { ejs: { label: 'EJS', card: false }, characterArtwork: { label: '有角色立绘', card: true } }, display: { cardCustomTags: true } },
 );
 const displayTagCardHtml = cardRenderUi.renderProjectCard({ id: 'display-tags', name: 'Display Tags', version: '1.0.0', versionLabel: null, displayTags: ['人鱼', '纯爱'], hasCharacterArtwork: true, coverImage: '/cover.png', tags: [], downloadsCount: 0 });
-assert.match(displayTagCardHtml, />人鱼<\/span>/);
-assert.match(displayTagCardHtml, />纯爱<\/span>/);
+assert.match(displayTagCardHtml, /card-type-prefix--extension">\[扩展\]<\/span>/);
+assert.match(displayTagCardHtml, />#人鱼<\/span>/);
+assert.match(displayTagCardHtml, />#纯爱<\/span>/);
 assert.match(displayTagCardHtml, /card-cover-wrap.*card-art-badge[^>]*>.*fa-images/);
 assert.doesNotMatch(displayTagCardHtml, /card-quality-signal[^>]*>.*fa-images/);
 assert.doesNotMatch(displayTagCardHtml, /icon-stat-btn|card-meta--version/);
