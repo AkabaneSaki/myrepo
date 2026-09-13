@@ -219,6 +219,8 @@ assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(',
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);
 assert.match(fragments.homeLayoutRenderScript, /mobileBaseTagFilter/);
 assert.match(fragments.homeLayoutRenderScript, /mobile-breadcrumb/);
+assert.match(fragments.homeLayoutRenderScript, /getMobileCurrentSortLabel/);
+assert.match(fragments.homeLayoutRenderScript, /sortCrumb/);
 assert.match(fragments.homeLayoutRenderScript, /data-mobile-tool=\"page\"/);
 assert.match(fragments.homeLayoutRenderScript, /data-search-tag/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /projectTagFilterMobile/);
