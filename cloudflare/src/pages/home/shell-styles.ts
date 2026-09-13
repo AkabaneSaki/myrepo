@@ -1257,6 +1257,33 @@ export const homeShellStyles = String.raw`
 .card-text-preview__type,.card-text-preview__hint,.card-signals { color:var(--cw-text-muted); }
 .card-footer .action-btn,.card-footer .install-btn { color:var(--cw-text-primary); }
 
+/* Keep browse cards visually aligned and keep the primary install action readable. */
+.projects-grid { align-items:stretch; }
+.project-card { height:100%; }
+.card-content { flex:1; }
+.card-footer { margin-top:auto; }
+.card-footer .install-btn:not(.is-disabled) {
+  border-color:#ceb58f;
+  background:#bea47d;
+  color:#151619;
+  font-weight:760;
+}
+.card-footer .install-btn:not(.is-disabled) i { color:#151619; }
+.card-footer .install-btn:not(.is-disabled):hover,
+.card-footer .install-btn:not(.is-disabled):active {
+  border-color:#dbc39d;
+  background:#cdb38b;
+  color:#101113;
+}
+.card-footer .install-btn.is-disabled {
+  opacity:1;
+  cursor:not-allowed;
+  border-color:rgba(162,139,107,.18);
+  background:rgba(162,139,107,.08);
+  color:#a49e95;
+}
+.card-footer .install-btn.is-disabled i { color:#958d82; }
+
 .card-creator { font-size:.8rem; }
 .card-text-preview__type,.card-text-preview__hint { font-size:.72rem; font-weight:600; }
 .project-tags .tag { font-size:.72rem; font-weight:500; }
