@@ -2,63 +2,93 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  getProjectRankingBucket,
-  getProjectRankingRetentionCutoffBucket,
+  getProjectRankingDay,
+  getProjectRankingRetentionCutoffDay,
   invalidateCurrentDiscoveryRankingSnapshot,
-  pruneOldProjectRankingSnapshots,
+  pruneOldProjectRankingDays,
 } from '../src/utils/project-ranking-snapshots.ts';
 
 const db = new DatabaseSync(':memory:');
 db.exec(`
   CREATE TABLE projects (
     id TEXT PRIMARY KEY,
-    project_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    is_published INTEGER NOT NULL,
-    visibility INTEGER NOT NULL
+    project_type TEXT NOT NULL
   );
 `);
 
-const migration = await readFile(new URL('../migrations/0010_project_rank_snapshots.sql', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../migrations/0011_project_daily_rankings.sql', import.meta.url), 'utf8');
 db.exec(migration);
 
-const snapshotColumns = db.prepare("PRAGMA table_info('project_rank_snapshots')").all();
-for (const name of ['kind', 'bucket', 'project_ids', 'generated_at']) {
-  assert.equal(snapshotColumns.some(column => column.name === name), true, `missing snapshot column ${name}`);
+const rankingColumns = db.prepare("PRAGMA table_info('project_daily_rankings')").all();
+for (const name of [
+  'ranking_day',
+  'project_id',
+  'project_type',
+  'discover_rank',
+  'discover_type_rank',
+  'rating_rank',
+  'rating_type_rank',
+]) {
+  assert.equal(rankingColumns.some(column => column.name === name), true, `missing daily ranking column ${name}`);
 }
 
-const insertProject = db.prepare(
-  'INSERT INTO projects (id, project_type, status, is_published, visibility) VALUES (?, ?, ?, 1, 1)',
+const rankingIndexes = new Set(
+  db.prepare("PRAGMA index_list('project_daily_rankings')").all().map(row => row.name),
 );
-insertProject.run('p1', '角色', 'approved');
-insertProject.run('p2', '扩展', 'approved');
-insertProject.run('p3', '角色', 'approved');
+for (const name of [
+  'idx_project_daily_rankings_discover',
+  'idx_project_daily_rankings_discover_type',
+  'idx_project_daily_rankings_rating',
+  'idx_project_daily_rankings_rating_type',
+]) {
+  assert.equal(rankingIndexes.has(name), true, `missing daily ranking index ${name}`);
+}
 
-const orderedIds = JSON.stringify(['p2', 'p3', 'p1']);
-db.prepare('INSERT INTO project_rank_snapshots (kind, bucket, project_ids) VALUES (?, ?, ?)')
-  .run('discover', 123, orderedIds);
+assert.equal(getProjectRankingDay(Date.parse('2026-09-14T23:59:59Z')), '2026-09-14');
+assert.equal(getProjectRankingRetentionCutoffDay('2026-09-14'), '2026-09-07');
 
-db.prepare('INSERT OR IGNORE INTO project_rank_snapshots (kind, bucket, project_ids) VALUES (?, ?, ?)')
-  .run('discover', 123, JSON.stringify(['p1']));
-assert.equal(
-  db.prepare("SELECT project_ids FROM project_rank_snapshots WHERE kind = 'discover' AND bucket = 123").get().project_ids,
-  orderedIds,
-  'first snapshot writer must win the bucket race',
-);
+const insertProject = db.prepare('INSERT INTO projects (id, project_type) VALUES (?, ?)');
+insertProject.run('p1', '角色');
+insertProject.run('p2', '扩展');
+insertProject.run('p3', '角色');
+insertProject.run('p4', '角色');
 
-const filtered = db.prepare(`
-  WITH ranked AS (
-    SELECT CAST(key AS INTEGER) AS rank_index, value AS project_id
-    FROM json_each(?)
-  )
-  SELECT p.id
-  FROM ranked r
-  JOIN projects p ON p.id = r.project_id
-  WHERE p.status = 'approved' AND p.is_published = 1 AND p.visibility = 1 AND p.project_type = ?
-  ORDER BY r.rank_index ASC
-`).all(orderedIds, '角色');
+db.prepare('INSERT INTO project_ranking_days (ranking_day, generated_at, project_count) VALUES (?, ?, ?)')
+  .run('2026-09-14', '2026-09-14T00:00:00.000Z', 4);
+const insertRank = db.prepare(`
+  INSERT INTO project_daily_rankings (
+    ranking_day, project_id, project_type,
+    discover_rank, discover_type_rank, rating_rank, rating_type_rank
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+insertRank.run('2026-09-14', 'p2', '扩展', 1, 1, 2, 1);
+insertRank.run('2026-09-14', 'p3', '角色', 2, 1, 1, 1);
+insertRank.run('2026-09-14', 'p1', '角色', 3, 2, 3, 2);
+insertRank.run('2026-09-14', 'p4', '角色', 4, 3, null, null);
 
-assert.deepEqual(filtered.map(row => row.id), ['p3', 'p1'], 'filters must preserve snapshot ranking order');
+const globalPage = db.prepare(`
+  SELECT project_id
+  FROM project_daily_rankings
+  WHERE ranking_day = ? AND discover_rank BETWEEN ? AND ?
+  ORDER BY discover_rank ASC
+`).all('2026-09-14', 1, 3);
+assert.deepEqual(globalPage.map(row => row.project_id), ['p2', 'p3', 'p1']);
+
+const typePage = db.prepare(`
+  SELECT project_id
+  FROM project_daily_rankings
+  WHERE ranking_day = ? AND project_type = ? AND discover_type_rank BETWEEN ? AND ?
+  ORDER BY discover_type_rank ASC
+`).all('2026-09-14', '角色', 1, 2);
+assert.deepEqual(typePage.map(row => row.project_id), ['p3', 'p1']);
+
+const ratingPage = db.prepare(`
+  SELECT project_id
+  FROM project_daily_rankings
+  WHERE ranking_day = ? AND rating_rank BETWEEN ? AND ?
+  ORDER BY rating_rank ASC
+`).all('2026-09-14', 1, 4);
+assert.deepEqual(ratingPage.map(row => row.project_id), ['p3', 'p2', 'p1']);
 
 {
   const calls = [];
@@ -68,29 +98,28 @@ assert.deepEqual(filtered.map(row => row.id), ['p3', 'p1'], 'filters must preser
         prepare(sql) {
           return {
             bind(...values) {
-              return {
-                async run() {
-                  calls.push({ sql, values });
-                  return {};
-                },
-              };
+              return { __sql: sql, __values: values };
             },
           };
+        },
+        async batch(statements) {
+          calls.push(...statements);
+          return statements.map(() => ({}));
         },
       },
     },
   };
-  const nowMs = Date.parse('2026-09-13T00:00:00Z');
-  const bucket = getProjectRankingBucket(nowMs);
-  await invalidateCurrentDiscoveryRankingSnapshot(fakeContext, nowMs);
-  await pruneOldProjectRankingSnapshots(fakeContext, bucket);
 
-  assert.match(calls[0].sql, /DELETE FROM project_rank_snapshots/);
-  assert.match(calls[0].sql, /kind = 'discover'/);
-  assert.deepEqual(calls[0].values, [bucket]);
-  assert.match(calls[1].sql, /DELETE FROM project_rank_snapshots/);
-  assert.match(calls[1].sql, /bucket < \?/);
-  assert.deepEqual(calls[1].values, [getProjectRankingRetentionCutoffBucket(bucket)]);
+  await invalidateCurrentDiscoveryRankingSnapshot(fakeContext, Date.parse('2026-09-14T12:00:00Z'));
+  assert.equal(calls.length, 0, 'published daily board must not be invalidated during the day');
+
+  await pruneOldProjectRankingDays(fakeContext, '2026-09-14');
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].__sql, /DELETE FROM project_daily_rankings/);
+  assert.deepEqual(calls[0].__values, ['2026-09-07']);
+  assert.match(calls[1].__sql, /DELETE FROM project_ranking_days/);
+  assert.deepEqual(calls[1].__values, ['2026-09-07']);
 }
 
-console.log('project ranking snapshot smoke: ok');
+db.close();
+console.log('project daily ranking smoke: ok');
