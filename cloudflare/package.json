@@ -16,6 +16,7 @@
 		"check:types": "tsc -p tsconfig.json",
 		"dev": "wrangler dev",
 		"dev:staging": "wrangler dev --config wrangler.staging.jsonc",
+		"dev:local-snapshot": "wrangler dev --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --ip 127.0.0.1 --port 8792 --var JWT_SECRET:cw-local-snapshot",
 		"dev:lan": "wrangler dev --config wrangler.staging.jsonc --local --ip 0.0.0.0 --port 8790",
 		"dev:test-api": "node scripts/start-local-api-test.mjs",
 		"check:home-js": "node scripts/check-home-js.mjs",
@@ -27,13 +28,19 @@
 		"check:review-diff": "node tests/project-review-diff.mjs",
 		"check:project-ranking": "node tests/project-ranking.mjs",
 		"check:project-ranking-snapshot": "node tests/project-ranking-snapshot-smoke.mjs",
-		"check:d1-cost": "node --import ./tests/ts-import-loader.mjs tests/d1-query-cost.mjs",
 		"check:creative-workshop-syntax": "node scripts/check-creative-workshop-syntax.mjs",
 		"check:creative-workshop-regex-identity": "node tests/creative-workshop-regex-identity-smoke.mjs",
 		"check:local-api-workflow": "node scripts/check-local-api-workflow.mjs",
 		"check:cover-isolation": "node tests/cover-approval-isolation.mjs",
 		"check:content-validation": "node tests/content-validation-approval.mjs",
 		"test:db-init-local": "wrangler d1 execute creative_workshop_staging --local --config wrangler.staging.jsonc --file=schema.sql",
+		"test:db-snapshot-seed-local": "wrangler d1 execute creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --file=../../workshop-backups/2026-09-06/creative_workshop.sql",
+		"test:db-snapshot-migrate-local": "wrangler d1 migrations apply creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906",
+		"check:db-snapshot-local": "wrangler d1 execute creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --command=\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\"",
+		"check:db-snapshot-stats-local": "wrangler d1 execute creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --command=\"SELECT (SELECT COUNT(*) FROM projects) AS projects, (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM project_likes) AS likes, (SELECT COUNT(*) FROM project_subscribes) AS subscriptions;\"",
+		"check:db-snapshot-migrations-local": "wrangler d1 migrations list creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906",
+		"check:local-snapshot-http": "node scripts/check-local-snapshot-http.mjs",
+		"check:d1-cost": "node scripts/check-d1-cost.mjs",
 		"check:db-migrations-local": "wrangler d1 migrations list creative_workshop_staging --local --config wrangler.staging.jsonc",
 		"test:db-migrate-local": "wrangler d1 migrations apply creative_workshop_staging --local --config wrangler.staging.jsonc",
 		"start": "wrangler dev",
@@ -48,6 +55,6 @@
 	"devDependencies": {
 		"@types/node": "^22.13.0",
 		"@types/service-worker-mock": "^2.0.4",
-		"wrangler": "^4.74.0"
+		"wrangler": "^4.131.1"
 	}
 }
