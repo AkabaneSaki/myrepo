@@ -1278,15 +1278,15 @@ export const homeShellStyles = String.raw`
   position:relative;
   flex:none;
 }
-.project-card--system { --card-type-accent:142,173,215; }
-.project-card--extension { --card-type-accent:212,173,104; }
-.project-card--character { --card-type-accent:198,160,217; }
-.project-card--event { --card-type-accent:121,189,169; }
+
+
+
+
 .card-title-row {
   flex:none;
   padding:9px 10px 8px;
-  background:linear-gradient(90deg,rgba(var(--card-type-accent,162,139,107),.09) 0,#1b1c1f 44%);
-  box-shadow:inset 3px 0 0 rgba(var(--card-type-accent,162,139,107),.72);
+  background:#1b1c1f;
+  
   border-bottom:1px solid rgba(255,255,255,.075);
 }
 .card-content {
