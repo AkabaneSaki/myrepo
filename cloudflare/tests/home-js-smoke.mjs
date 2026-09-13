@@ -174,6 +174,7 @@ assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\
 assert.ok(fragments.homeCardsRenderScript.includes('class="tag">#${escapeHtml(tag)}</span>'));
 assert.ok(fragments.homeCardsRenderScript.includes('class="card-title-row"'));
 assert.ok(fragments.homeCardsRenderScript.includes('card-type-badge--${typeClass}'));
+assert.ok(fragments.homeCardsRenderScript.includes('project-card project-card--${typeClass}'));
 assert.match(fragments.homeCardsRenderScript, /extension: \"fa-puzzle-piece\"/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /Set\(\[baseTag, \.\.\.getProjectDisplayTags/);
 assert.match(fragments.homeDetailModalRenderScript, /getInstalledLocationLabel/);
