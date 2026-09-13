@@ -36,6 +36,7 @@ export const homeCardsRenderScript = [
   '  const projectType = getBaseTag(project);',
   '  const baseTag = getProjectTypeDisplayLabel(project);',
   '  const typeClass = getTypeClass(project);',
+  '  const typeIcon = { system: "fa-microchip", extension: "fa-puzzle-piece", character: "fa-user-group", event: "fa-calendar-days" }[typeClass] || "fa-folder";',
   '  const authorName = getAuthorName(project);',
   '  const view = buildProjectCardViewModel(project);',
   '  const showAdminActions = isProjectEditable(project);',
@@ -75,7 +76,7 @@ export const homeCardsRenderScript = [
   '    ? `<div class="card-cover" data-cover-src="${escapeHtml(coverSources.primary)}" data-cover-fallback-src="${escapeHtml(coverSources.fallback)}" data-cover-placeholder-src="${escapeHtml(coverSources.placeholder)}" data-cover-auth-src="${escapeHtml(coverSources.authenticated || "")}" style="background-image:url(\'${escapeHtml(coverSources.primary)}\')"></div>`',
   '    : `<div class="card-text-preview"><span class="card-text-preview__type">${escapeHtml(baseTag)}</span><p>${escapeHtml(project.description || "这个项目暂时没有提供首页简介。")}</p><span class="card-text-preview__hint">打开查看完整说明 →</span></div>`;',
   '  const previewHtml = `<div class="card-cover-wrap">${previewBodyHtml}${artworkBadgeHtml}</div>`;',
-  '  const titleHtml = `<div class="card-title-row"><div class="project-name"><span class="card-type-prefix card-type-prefix--${typeClass}">[${escapeHtml(projectType)}]</span><span class="project-title-text">${escapeHtml(project.name)}</span></div></div>`;',
+  '  const titleHtml = `<div class="card-title-row"><div class="project-name"><span class="card-type-badge card-type-badge--${typeClass}"><span class="card-type-icon"><i class="fas ${typeIcon}"></i></span><span class="card-type-label">${escapeHtml(projectType)}</span></span><span class="project-title-text">${escapeHtml(project.name)}</span></div></div>`;',
   '  return `<article class="project-card" data-id="${project.id}" role="button" tabindex="0" aria-label="查看项目详情：${escapeHtml(project.name)}"><div class="card-head"><span class="card-creator">${escapeHtml(authorName)}</span>${adminActionsHtml}</div>${titleHtml}${previewHtml}<div class="card-content">${tagsRowHtml}${statusHtml}<div class="card-footer"><div class="card-signals">${ownerStatsHtml}${installedSignalHtml}</div><div class="card-footer-actions">${updateButton}<button class="${installButtonClass}" data-id="${project.id}" ${view.installDisabled ? "disabled" : ""}><i class="fas ${view.installPending ? "fa-spinner fa-spin" : view.isInstalled ? "fa-trash" : "fa-download"}"></i><span>${view.installText}</span></button></div></div></div></article>`;',
   '}',
 ].join('\n');
