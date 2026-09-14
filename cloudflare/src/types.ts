@@ -126,6 +126,9 @@ export const Project = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).default([]).describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签镜像'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).default(50).describe('封面水平焦点百分比'),
+  coverPositionY: z.number().min(0).max(100).default(50).describe('封面垂直焦点百分比'),
+  coverZoom: z.number().min(1).max(3).default(1).describe('封面显示缩放'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),
   regexEntriesPreview: z.array(RegexEntryPreview).default([]).describe('正则条目预览'),
   likesCount: z.number().int().min(0).default(0).describe('点赞数'),
@@ -172,6 +175,9 @@ export const ProjectCreateRequest = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).optional(),
+  coverPositionY: z.number().min(0).max(100).optional(),
+  coverZoom: z.number().min(1).max(3).optional(),
 });
 
 // 项目更新请求
@@ -186,6 +192,9 @@ export const ProjectUpdateRequest = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).optional().describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).optional(),
+  coverPositionY: z.number().min(0).max(100).optional(),
+  coverZoom: z.number().min(1).max(3).optional(),
 });
 
 // 审核请求

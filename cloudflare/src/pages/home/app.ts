@@ -1,5 +1,6 @@
 import { homeApiScript } from './api';
 import { homeModalsScript } from './modals';
+import { homePresentationScript } from './presentation';
 import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
 import { homeReviewDiffRenderScript } from './render/review-diff';
@@ -30,6 +31,7 @@ export const homeScript = String.raw`
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
   ${homeModalsScript}
+  ${homePresentationScript}
 
   const isEmbedded = window.parent !== window;
   const REJECTED_REMINDER_STORAGE_PREFIX = 'creative_workshop_rejected_reminders_v1:';
@@ -392,11 +394,13 @@ export const homeScript = String.raw`
 
   function bindStaticActions(filteredProjects) {
     const loginBtn = document.getElementById('loginBtn');
+    const localAdminLoginBtn = document.getElementById('localAdminLoginBtn');
     const logoutBtn = document.getElementById('logoutBtn');
     const workshopCloseBtn = document.getElementById('workshopCloseBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const myProjectsMenuBtn = document.getElementById('myProjectsMenuBtn');
     const adminPanelBtn = document.getElementById('adminPanelBtn');
+    const bannerSettingsBtn = document.getElementById('bannerSettingsBtn');
     const addAdminBtn = document.getElementById('addAdminBtn');
     const adminLogsBtn = document.getElementById('adminLogsBtn');
     const installedToggle = document.getElementById('installedProjectsToggle');
@@ -418,6 +422,20 @@ export const homeScript = String.raw`
     const mobileToolClose = document.getElementById('mobileToolClose');
 
     if (loginBtn) loginBtn.onclick = openLoginPopup;
+    if (localAdminLoginBtn) localAdminLoginBtn.onclick = async () => {
+      localAdminLoginBtn.disabled = true;
+      try {
+        const response = await fetch('/api/auth/local-preview', { method: 'POST' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.token || !payload?.user) {
+          throw new Error(payload?.error || '本地管理员登录不可用');
+        }
+        finishLogin(payload);
+      } catch (error) {
+        showToast('本地 Admin 登录失败: ' + (error?.message || String(error)), 'error');
+        localAdminLoginBtn.disabled = false;
+      }
+    };
     if (releaseNoticeBtn) releaseNoticeBtn.onclick = openReleaseNoticeModal;
 
     const closeMobileTool = () => {
@@ -456,9 +474,66 @@ export const homeScript = String.raw`
         event.stopPropagation();
         state.showOnlyMyProjects = false;
         state.showSubscribedAndInstalledProjects = false;
+        state.viewMode = 'catalog';
+        state.activeBaseTag = 'all';
+        state.activeTags = [];
+        state.searchKeyword = '';
+        state.searchDraft = '';
+        if (state.sortMode === 'discover') state.sortMode = 'published';
         state.mobileToolMode = '';
         state.userMenuOpen = false;
+        resetProjectPagination();
         renderApp();
+        void fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
+      });
+    });
+    document.querySelectorAll('[data-workshop-view]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        if (state.filterRequestPending) return;
+        const nextView = button.dataset.workshopView === 'discover' ? 'discover' : 'catalog';
+        state.viewMode = nextView;
+        state.showOnlyMyProjects = false;
+        state.showSubscribedAndInstalledProjects = false;
+        state.activeBaseTag = 'all';
+        state.activeTags = [];
+        state.searchKeyword = '';
+        state.searchDraft = '';
+        lastCommittedSearchKeyword = '';
+        state.sortMode = nextView === 'discover' ? 'discover' : 'published';
+        state.mobileToolMode = '';
+        resetProjectPagination();
+        state.filterRequestPending = true;
+        renderApp();
+        const request = nextView === 'discover'
+          ? fetchDiscoverShelves(true)
+          : fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
+        request.finally(() => {
+          state.filterRequestPending = false;
+          renderApp();
+        });
+      });
+    });
+    document.querySelectorAll('[data-discover-more-sort]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (state.filterRequestPending) return;
+        const nextSortMode = button.dataset.discoverMoreSort || 'published';
+        state.viewMode = 'catalog';
+        state.sortMode = nextSortMode;
+        state.activeBaseTag = 'all';
+        state.activeTags = [];
+        state.searchKeyword = '';
+        state.searchDraft = '';
+        lastCommittedSearchKeyword = '';
+        resetProjectPagination();
+        state.filterRequestPending = true;
+        renderApp();
+        fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize }).finally(() => {
+          state.filterRequestPending = false;
+          renderApp();
+        });
       });
     });
     if (workshopCloseBtn) workshopCloseBtn.onclick = requestCloseWorkshop;
@@ -492,8 +567,26 @@ export const homeScript = String.raw`
       }
     };
     if (adminPanelBtn) adminPanelBtn.onclick = openAdminPanel;
+    if (bannerSettingsBtn) bannerSettingsBtn.onclick = event => {
+      event.stopPropagation();
+      state.userMenuOpen = false;
+      openDiscoverBannerSettingsModal();
+    };
     if (addAdminBtn) addAdminBtn.onclick = openAddAdminModal;
     if (adminLogsBtn) adminLogsBtn.onclick = openAdminLogsModal;
+    document.querySelectorAll('.cover-presentation-btn').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const projectId = button.dataset.id;
+        const project = filteredProjects.find(item => item.id === projectId)
+          || state.projects.find(item => item.id === projectId)
+          || state.myProjects.find(item => item.id === projectId);
+        if (!project) { showToast('找不到项目资料', 'error'); return; }
+        button.closest('.project-card')?.classList.remove('admin-menu-open');
+        openCoverPresentationModal(project);
+      });
+    });
 
     if (installedToggle) {
       const checkbox = installedToggle.querySelector('input');
@@ -647,6 +740,8 @@ export const homeScript = String.raw`
     if (searchInput) {
       const runSearch = value => {
         const nextKeyword = String(value || '').trim();
+        state.viewMode = 'catalog';
+        if (state.sortMode === 'discover') state.sortMode = 'published';
         state.searchKeyword = nextKeyword;
         state.searchDraft = '';
         if (nextKeyword === lastCommittedSearchKeyword) {
@@ -673,6 +768,8 @@ export const homeScript = String.raw`
     if (mobileSearchInput) {
       const runMobileSearch = value => {
         const nextKeyword = String(value || '').trim();
+        state.viewMode = 'catalog';
+        if (state.sortMode === 'discover') state.sortMode = 'published';
         state.searchKeyword = nextKeyword;
         state.searchDraft = '';
         state.mobileToolMode = '';
@@ -707,7 +804,9 @@ export const homeScript = String.raw`
         const nextTagButton = event.target instanceof Element ? event.target.closest('[data-base-tag]') : null;
         if (!nextTagButton) return;
         const nextTag = nextTagButton.dataset.baseTag || 'all';
-        if (state.activeBaseTag === nextTag) return;
+        if (state.viewMode === 'catalog' && state.activeBaseTag === nextTag) return;
+        state.viewMode = 'catalog';
+        if (state.sortMode === 'discover') state.sortMode = 'published';
         state.activeBaseTag = nextTag;
         state.activeTags = [];
         state.searchDraft = '';
@@ -737,10 +836,12 @@ export const homeScript = String.raw`
         const nextTagButton = event.target instanceof Element ? event.target.closest('[data-base-tag]') : null;
         if (!nextTagButton) return;
         const nextTag = nextTagButton.dataset.baseTag || 'all';
-        if (state.activeBaseTag === nextTag) {
+        if (state.viewMode === 'catalog' && state.activeBaseTag === nextTag) {
           closeMobileTool();
           return;
         }
+        state.viewMode = 'catalog';
+        if (state.sortMode === 'discover') state.sortMode = 'published';
         state.activeBaseTag = nextTag;
         state.activeTags = [];
         state.searchDraft = '';
@@ -768,6 +869,8 @@ export const homeScript = String.raw`
         .filter(Boolean))).slice(0, 12);
       const current = getActivePublicTags();
       if (normalized.length === current.length && normalized.every((tag, index) => tag === current[index])) return;
+      state.viewMode = 'catalog';
+      if (state.sortMode === 'discover') state.sortMode = 'published';
       state.activeTags = normalized;
       state.searchDraft = '';
       if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
@@ -862,7 +965,7 @@ export const homeScript = String.raw`
 
     if (projectLoadMoreBtn) projectLoadMoreBtn.onclick = () => loadMoreProjects();
 
-    document.querySelectorAll('.project-card').forEach(card => {
+    document.querySelectorAll('.project-card, .discover-card').forEach(card => {
       const openDetail = () => {
         const project = filteredProjects.find(item => item.id === card.dataset.id);
         if (project) showProjectDetail(project);
@@ -1051,7 +1154,8 @@ export const homeScript = String.raw`
       resumeEmbeddedOAuthPolling();
     }
     showRejectedProjectReminder(authState?.rejectedProjects);
-    await fetchProjects(false, { page: 0, pageSize: state.projectPagination.pageSize });
+    await fetchDiscoverBanner().catch(error => console.warn('[CreativeWorkshop] Banner 配置加载失败', error));
+    await fetchDiscoverShelves(false);
   }
 
   init();

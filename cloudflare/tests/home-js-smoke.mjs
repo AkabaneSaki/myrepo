@@ -30,6 +30,7 @@ const fragments = {
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
+  homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
 };
 
 for (const [name, script] of Object.entries(fragments)) {
@@ -222,7 +223,10 @@ assert.match(fragments.homeDetailModalRenderScript, /const tagsHtml = inspection
 assert.match(fragments.homeModalsScript, /admin-review-signal--ejs/);
 assert.match(fragments.homeApiScript, /URLSearchParams\(\{ page: '0', pageSize: '50', sort \}\)/);
 assert.match(fragments.homeStateScript, /DEFAULT_SORT_MODE = 'discover'/);
-assert.match(fragments.homeLayoutRenderScript, /value: \"discover\", label: \"发现\"/);
+assert.match(fragments.homeStateScript, /viewMode: 'discover'/);
+assert.match(fragments.homeLayoutRenderScript, /data-workshop-view=\"discover\"/);
+assert.match(fragments.homeLayoutRenderScript, /renderDiscoverHome/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /value: \"discover\", label: \"发现\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"published\", label: \"最新\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"rating\", label: \"玩家好评\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"downloads\", label: \"下载最多\"/);
@@ -599,7 +603,19 @@ assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: project\?\.draftRevision \|\| reviewProjectData\?\.draftRevision/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /正在审核\/被退回的更新草稿也会一并删除/);
-assert.match(homeScript, /document\.querySelectorAll\('\.project-card'\)/);
+assert.match(homeScript, /document\.querySelectorAll\('\.project-card, \.discover-card'\)/);
+const discoverCardRenderer = fragments.homeCardsRenderScript.match(/function renderDiscoverCard[\s\S]*?function renderProjectCard/)?.[0] || '';
+assert.match(discoverCardRenderer, /discover-card-cover/);
+assert.match(discoverCardRenderer, /data-cover-title/);
+assert.match(discoverCardRenderer, /data-cover-position-x/);
+assert.match(discoverCardRenderer, /data-cover-position-y/);
+assert.match(discoverCardRenderer, /data-cover-zoom/);
+assert.doesNotMatch(discoverCardRenderer, /install-btn/);
+assert.match(fragments.homePresentationScript, /function openCoverPresentationModal/);
+assert.match(fragments.homePresentationScript, /function openDiscoverBannerSettingsModal/);
+assert.match(fragments.homeLayoutRenderScript, /bannerSettingsBtn/);
+assert.match(fragments.homeCardsRenderScript, /cover-presentation-btn/);
+assert.match(homeScript, /\/api\/projects\/.*cover-presentation/);
 assert.match(homeScript, /document\.querySelectorAll\('\.delete-project-btn'\)/);
 assert.doesNotMatch(homeScript, /document\.querySelectorAll\('\.detail-btn'\)/);
 

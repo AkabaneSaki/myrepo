@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS projects (
     display_tags TEXT,
     tags TEXT DEFAULT '[]',
     cover_image TEXT,
+    cover_position_x REAL NOT NULL DEFAULT 50,
+    cover_position_y REAL NOT NULL DEFAULT 50,
+    cover_zoom REAL NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TEXT,
@@ -149,6 +152,13 @@ BEGIN
     SET likes_count = MAX(COALESCE(likes_count, 0) - 1, 0)
     WHERE id = OLD.project_id;
 END;
+
+CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by TEXT
+);
 
 CREATE TABLE IF NOT EXISTS admin_action_logs (
     id TEXT PRIMARY KEY,

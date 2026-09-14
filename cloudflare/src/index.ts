@@ -13,13 +13,14 @@ import { jwt } from './utils/jwt';
 import { homePage, homeScriptPage } from './pages/home';
 
 // 认证端点
-import { AuthCallback, AuthLogin, AuthLogout, AuthMe, AuthPoll } from './endpoints/auth';
+import { AuthCallback, AuthLocalPreview, AuthLogin, AuthLogout, AuthMe, AuthPoll } from './endpoints/auth';
 
 // 项目端点
 import {
   MyProjects,
   MySubscriptions,
   ProjectBatchFetch,
+  ProjectCoverPresentationUpdate,
   ProjectCoverUpload,
   ProjectCreate,
   ProjectDelete,
@@ -46,6 +47,8 @@ import {
   AdminSetAdmin,
 } from './endpoints/admin';
 
+import { AdminDiscoverBannerUpdate, AdminDiscoverBannerUpload, DiscoverBannerGet } from './endpoints/site-settings';
+
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
 
@@ -62,6 +65,26 @@ app.onError((error, c) => {
 // ============ CORS 中间件 =============
 app.use('*', async (c, next) => {
   const isOAuthCallbackRequest = c.req.path === '/api/auth/callback';
+  const requestHostname = new URL(c.req.url).hostname.toLowerCase();
+  const previewHostOctets = requestHostname.split('.').map(part => Number(part));
+  const isPrivateLanHost = previewHostOctets.length === 4
+    && previewHostOctets.every(part => Number.isInteger(part) && part >= 0 && part <= 255)
+    && (previewHostOctets[0] === 10
+      || (previewHostOctets[0] === 172 && previewHostOctets[1] >= 16 && previewHostOctets[1] <= 31)
+      || (previewHostOctets[0] === 192 && previewHostOctets[1] === 168));
+  const isLocalDiscoverPreview = requestHostname === '127.0.0.1'
+    || requestHostname === 'localhost'
+    || requestHostname.endsWith('.trycloudflare.com')
+    || isPrivateLanHost;
+  let previewImageOrigin = '';
+  if (isLocalDiscoverPreview && c.env.LOCAL_PREVIEW_FILE_BASE) {
+    try {
+      previewImageOrigin = new URL(c.env.LOCAL_PREVIEW_FILE_BASE).origin;
+    } catch {
+      previewImageOrigin = '';
+    }
+  }
+  const previewImageSource = previewImageOrigin ? ` ${previewImageOrigin}` : '';
 
   const applyCorsHeaders = (headers: Headers) => {
     headers.set('Access-Control-Allow-Origin', '*');
@@ -73,7 +96,7 @@ app.use('*', async (c, next) => {
     if (!isOAuthCallbackRequest) {
       headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; script-src 'self'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' https://discord.com;",
+        `default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; script-src 'self'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl${previewImageSource} data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' https://discord.com;`,
       );
     }
   };
@@ -138,6 +161,7 @@ app.get('/', c => {
 
 // ============ 认证接口 ============
 openapi.get('/api/auth/login', AuthLogin);
+openapi.post('/api/auth/local-preview', AuthLocalPreview);
 openapi.get('/api/auth/callback', AuthCallback);
 openapi.get('/api/auth/poll', AuthPoll);
 openapi.get('/api/auth/me', AuthMe);
@@ -147,6 +171,7 @@ openapi.post('/api/auth/logout', AuthLogout);
 openapi.get('/api/projects', ProjectList);
 openapi.post('/api/projects/batch', ProjectBatchFetch);
 openapi.get('/api/projects/:projectId', ProjectFetch);
+openapi.get('/api/site/discover-banner', DiscoverBannerGet);
 
 // ============ 项目接口 (需要登录) ============
 openapi.get('/api/my/projects', MyProjects);
@@ -163,6 +188,7 @@ openapi.put('/api/projects/:projectId/subscribe', ProjectSubscribeSet);
 // ============ 项目文件上传 ============
 openapi.post('/api/projects/:projectId/upload', ProjectUpload);
 openapi.post('/api/projects/:projectId/upload-cover', ProjectCoverUpload);
+openapi.put('/api/projects/:projectId/cover-presentation', ProjectCoverPresentationUpdate);
 openapi.post('/api/projects/:projectId/upload-regex', ProjectRegexUpload);
 
 // ============ 项目文件下载 (代理) ============
@@ -227,6 +253,8 @@ openapi.post('/api/admin/review/:projectId', AdminReview);
 openapi.get('/api/admin/projects', AdminProjectList);
 openapi.get('/api/admin/list', AdminList);
 openapi.post('/api/admin/set-admin', AdminSetAdmin);
+openapi.put('/api/admin/discover-banner', AdminDiscoverBannerUpdate);
+openapi.post('/api/admin/discover-banner/upload', AdminDiscoverBannerUpload);
 
 // You may also register routes for non OpenAPI directly on Hono
 // app.get('/test', (c) => c.text('Hono!'))

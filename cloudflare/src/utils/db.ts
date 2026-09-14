@@ -235,6 +235,9 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
       downloadUrl?: string;
       fileSize?: number;
       hasEjs?: boolean;
@@ -255,9 +258,9 @@ export const projectDb = {
         `
 			INSERT INTO projects (
 				id, name, description, version, version_label, author_id, author_name, author_avatar,
-				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, root_project_id, published_project_id,
+				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, cover_position_x, cover_position_y, cover_zoom, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -281,6 +284,9 @@ export const projectDb = {
         JSON.stringify(project.displayTags || []),
         JSON.stringify(project.tags || []),
         project.coverImage || null,
+        project.coverPositionX ?? 50,
+        project.coverPositionY ?? 50,
+        project.coverZoom ?? 1,
         project.rootProjectId || project.id,
         project.publishedProjectId || null,
         project.draftProjectId || null,
@@ -356,6 +362,9 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
       downloadUrl?: string;
       fileSize?: number;
       hasEjs?: boolean;
@@ -417,6 +426,18 @@ export const projectDb = {
     if (updates.coverImage !== undefined) {
       setClauses.push('cover_image = ?');
       values.push(updates.coverImage);
+    }
+    if (updates.coverPositionX !== undefined) {
+      setClauses.push('cover_position_x = ?');
+      values.push(updates.coverPositionX);
+    }
+    if (updates.coverPositionY !== undefined) {
+      setClauses.push('cover_position_y = ?');
+      values.push(updates.coverPositionY);
+    }
+    if (updates.coverZoom !== undefined) {
+      setClauses.push('cover_zoom = ?');
+      values.push(updates.coverZoom);
     }
     if (updates.downloadUrl !== undefined) {
       setClauses.push('download_url = ?');
@@ -884,6 +905,19 @@ export const projectDb = {
       .run();
   },
 
+  setCoverPresentation: async (
+    c: AppContext,
+    projectIds: string[],
+    presentation: { coverPositionX: number; coverPositionY: number; coverZoom: number },
+  ): Promise<void> => {
+    const ids = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 2);
+    for (const id of ids) {
+      await c.env.DB.prepare(`UPDATE projects SET cover_position_x = ?, cover_position_y = ?, cover_zoom = ? WHERE id = ?`)
+        .bind(presentation.coverPositionX, presentation.coverPositionY, presentation.coverZoom, id)
+        .run();
+    }
+  },
+
   toggleLike: async (c: AppContext, projectId: string, userId: string) => {
     const db = c.env.DB;
     const existing = await db
@@ -965,6 +999,9 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
     },
   ) => {
     const published = await projectDb.get(c, publishedProjectId);
@@ -984,6 +1021,9 @@ export const projectDb = {
         displayTags: updates.displayTags ?? existingDraft.displayTags,
         tags: updates.tags ?? existingDraft.tags,
         coverImage: updates.coverImage ?? existingDraft.coverImage ?? undefined,
+        coverPositionX: updates.coverPositionX ?? existingDraft.coverPositionX,
+        coverPositionY: updates.coverPositionY ?? existingDraft.coverPositionY,
+        coverZoom: updates.coverZoom ?? existingDraft.coverZoom,
       });
       await projectDb.bumpDraftRevision(c, existingDraft.id);
       return existingDraft.id;
@@ -1006,6 +1046,9 @@ export const projectDb = {
       displayTags: updates.displayTags ?? published.displayTags,
       tags: updates.tags ?? published.tags,
       coverImage: updates.coverImage ?? published.coverImage ?? undefined,
+      coverPositionX: updates.coverPositionX ?? published.coverPositionX,
+      coverPositionY: updates.coverPositionY ?? published.coverPositionY,
+      coverZoom: updates.coverZoom ?? published.coverZoom,
       downloadUrl: published.downloadUrl || undefined,
       fileSize: published.fileSize || undefined,
       hasEjs: published.hasEjs,
@@ -1126,6 +1169,20 @@ async function enrichProjects(
     }
   }
 
+  const requestHostname = new URL(c.req.url).hostname.toLowerCase();
+  const previewHostOctets = requestHostname.split('.').map(part => Number(part));
+  const isPrivateLanHost = previewHostOctets.length === 4
+    && previewHostOctets.every(part => Number.isInteger(part) && part >= 0 && part <= 255)
+    && (previewHostOctets[0] === 10
+      || (previewHostOctets[0] === 172 && previewHostOctets[1] >= 16 && previewHostOctets[1] <= 31)
+      || (previewHostOctets[0] === 192 && previewHostOctets[1] === 168));
+  const isLocalDiscoverPreview = requestHostname === '127.0.0.1'
+    || requestHostname === 'localhost'
+    || requestHostname.endsWith('.trycloudflare.com')
+    || isPrivateLanHost;
+  const previewFileBaseRaw = String(c.env.LOCAL_PREVIEW_FILE_BASE || '').trim();
+  const previewFileBase = previewFileBaseRaw ? previewFileBaseRaw.replace(/\/?$/, '/') : '';
+
   return projects.map(project => ({
     ...project,
     downloadUrl: project.downloadUrl
@@ -1135,10 +1192,17 @@ async function enrichProjects(
         )
       : null,
     coverImage: project.coverImage
-      ? withProjectReleaseCacheIdentity(
-          r2Storage.getProxyUrl(c, project.coverImage.replace(/^.*\/api\/files\//, '')),
-          project.version,
-        )
+      ? isLocalDiscoverPreview && previewFileBase
+        ? withProjectReleaseCacheIdentity(
+            /^https?:\/\//i.test(project.coverImage)
+              ? project.coverImage
+              : `${previewFileBase}${project.coverImage.replace(/^.*\/api\/files\//, '').replace(/^\/+/, '')}`,
+            project.version,
+          )
+        : withProjectReleaseCacheIdentity(
+            r2Storage.getProxyUrl(c, project.coverImage.replace(/^.*\/api\/files\//, '')),
+            project.version,
+          )
       : null,
     downloadsCount: Number(project.downloadsCount || 0),
     likesCount: Number(project.likesCount || 0),
@@ -1245,6 +1309,9 @@ function parseProjectRow(row: Record<string, unknown>) {
     displayTags,
     tags: parsedTags,
     coverImage: row.cover_image as string | null,
+    coverPositionX: Math.min(100, Math.max(0, Number(row.cover_position_x ?? 50))),
+    coverPositionY: Math.min(100, Math.max(0, Number(row.cover_position_y ?? 50))),
+    coverZoom: Math.min(3, Math.max(1, Number(row.cover_zoom ?? 1))),
     worldbookEntriesPreview: [],
     regexEntriesPreview: [],
     likesCount: Number(row.likes_count ?? 0),

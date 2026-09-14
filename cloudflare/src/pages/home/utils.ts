@@ -431,8 +431,24 @@ function encodeWsrvSource(url) {
   }
 }
 
+function isPrivateLocalPreviewHost() {
+  const hostname = String(globalThis.location?.hostname || '').toLowerCase();
+  if (hostname === '127.0.0.1' || hostname === 'localhost') return true;
+  const octets = hostname.split('.').map(part => Number(part));
+  if (octets.length !== 4 || octets.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return octets[0] === 10
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
+}
+
+function isLocalDiscoverPreviewHost() {
+  const hostname = String(globalThis.location?.hostname || '').toLowerCase();
+  return isPrivateLocalPreviewHost() || hostname.endsWith('.trycloudflare.com');
+}
+
 function getWsrvUrl(url) {
   if (!url) return url;
+  if (isLocalDiscoverPreviewHost()) return url;
   return 'https://wsrv.nl/?url=' + encodeWsrvSource(url) + '&w=640&output=webp';
 }
 
@@ -486,7 +502,26 @@ function getCoverImageSources(project) {
 
 function setCoverBackground(element, url) {
   if (!element || !url) return;
+  element.classList.remove('discover-card-cover--title');
+  if (element.dataset.coverTitle) element.replaceChildren();
   element.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
+  const x = Math.min(100, Math.max(0, Number(element.dataset.coverPositionX ?? 50)));
+  const y = Math.min(100, Math.max(0, Number(element.dataset.coverPositionY ?? 50)));
+  const zoom = Math.min(3, Math.max(1, Number(element.dataset.coverZoom ?? 1)));
+  element.style.backgroundPosition = x + '% ' + y + '%';
+  element.style.transform = 'scale(' + zoom + ')';
+  element.style.transformOrigin = x + '% ' + y + '%';
+}
+
+function setCoverTitleFallback(element, title) {
+  if (!element || !title) return false;
+  element.style.backgroundImage = 'none';
+  element.classList.add('discover-card-cover--title');
+  element.replaceChildren();
+  const label = document.createElement('span');
+  label.textContent = title;
+  element.appendChild(label);
+  return true;
 }
 
 function bindCoverImageFallbacks(root) {
@@ -502,17 +537,21 @@ function bindCoverImageFallbacks(root) {
     const fallback = element.dataset.coverFallbackSrc || '';
     const placeholder = element.dataset.coverPlaceholderSrc || '';
     const authenticated = element.dataset.coverAuthSrc || '';
+    const coverTitle = element.dataset.coverTitle || '';
+    const showFallback = () => {
+      if (!setCoverTitleFallback(element, coverTitle)) setCoverBackground(element, placeholder);
+    };
 
     if (authenticated) {
-      setCoverBackground(element, placeholder);
+      showFallback();
       void getAuthenticatedCoverObjectUrl(authenticated)
         .then(url => setCoverBackground(element, url))
-        .catch(() => setCoverBackground(element, placeholder));
+        .catch(showFallback);
       return;
     }
 
     if (!primary || primary === placeholder) {
-      setCoverBackground(element, placeholder);
+      showFallback();
       return;
     }
 
@@ -520,13 +559,13 @@ function bindCoverImageFallbacks(root) {
     probe.onload = () => setCoverBackground(element, primary);
     probe.onerror = () => {
       if (!fallback) {
-        setCoverBackground(element, placeholder);
+        showFallback();
         return;
       }
 
       const directProbe = new Image();
       directProbe.onload = () => setCoverBackground(element, fallback);
-      directProbe.onerror = () => setCoverBackground(element, placeholder);
+      directProbe.onerror = showFallback;
       directProbe.src = fallback;
     };
     probe.src = primary;

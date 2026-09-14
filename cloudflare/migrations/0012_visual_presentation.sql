@@ -1,0 +1,10 @@
+ALTER TABLE projects ADD COLUMN cover_position_x REAL NOT NULL DEFAULT 50;
+ALTER TABLE projects ADD COLUMN cover_position_y REAL NOT NULL DEFAULT 50;
+ALTER TABLE projects ADD COLUMN cover_zoom REAL NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by TEXT
+);

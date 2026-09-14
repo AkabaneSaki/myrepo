@@ -5,5 +5,7 @@ node_modules/
 .wrangler/
 worker-configuration.d.ts
 cloudflare/wrangler.master-staging.jsonc
+cloudflare/wrangler.discover-preview.jsonc
+cloudflare/.preview-assets/
 .ai-bridge/
 .cotel/local/

@@ -1277,6 +1277,7 @@ export const homeShellStyles = String.raw`
 .card-cover-wrap {
   position:relative;
   flex:none;
+  overflow:hidden;
 }
 
 

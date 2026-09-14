@@ -138,6 +138,35 @@ async function fetchSubscriptions(forceRefresh = false) {
   return projectIds;
 }
 
+async function fetchDiscoverShelves(forceRefresh = false) {
+  const shelfSpecs = [
+    { key: 'discover', sort: 'discover', pageSize: 10 },
+    { key: 'published', sort: 'published', pageSize: 5 },
+    { key: 'rating', sort: 'rating', pageSize: 5 },
+    { key: 'downloads', sort: 'downloads', pageSize: 5 },
+  ];
+  setDiscoverShelves({ ...state.discoverShelves, loading: true });
+  renderApp();
+  try {
+    const results = await Promise.all(shelfSpecs.map(async spec => {
+      const params = new URLSearchParams({ page: '0', pageSize: String(spec.pageSize), sort: spec.sort });
+      if (forceRefresh) params.set('_', String(Date.now()));
+      const data = await apiFetch('/api/projects?' + params.toString());
+      return [spec.key, Array.isArray(data.projects) ? data.projects : []];
+    }));
+    const shelves = { discover: [], published: [], rating: [], downloads: [], loading: false };
+    results.forEach(([key, projects]) => { shelves[key] = projects; });
+    setDiscoverShelves(shelves);
+    syncProjectStats(state.projects);
+    renderApp();
+    return shelves;
+  } catch (error) {
+    setDiscoverShelves({ ...state.discoverShelves, loading: false });
+    renderApp();
+    throw error;
+  }
+}
+
 async function fetchProjects(forceRefresh = false, options = {}) {
   const append = Boolean(options.append);
   const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
@@ -457,6 +486,44 @@ async function uploadCoverFile(projectId, file) {
   } catch (error) {
     throw normalizeThrownError(error, '上传失败');
   }
+}
+
+async function fetchDiscoverBanner() {
+  const result = await apiFetch('/api/site/discover-banner', { cache: 'no-store' });
+  setDiscoverBanner(result?.banner || {});
+  return result?.banner || {};
+}
+
+async function updateCoverPresentation(projectId, presentation) {
+  const result = await apiFetch('/api/projects/' + projectId + '/cover-presentation', {
+    method: 'PUT',
+    body: JSON.stringify(presentation),
+  });
+  invalidateProjectDetailCache(projectId);
+  return result;
+}
+
+async function updateDiscoverBannerPresentation(presentation) {
+  const result = await apiFetch('/api/admin/discover-banner', {
+    method: 'PUT',
+    body: JSON.stringify(presentation),
+  });
+  if (result?.banner) setDiscoverBanner(result.banner);
+  return result;
+}
+
+async function uploadDiscoverBanner(file) {
+  const formData = new FormData();
+  formData.append('banner', file);
+  const response = await fetch('/api/admin/discover-banner/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY) },
+    body: formData,
+  });
+  const { rawText, data } = await parseResponseBody(response);
+  if (!response.ok) throw new Error(resolveApiErrorMessage(response.status, rawText, data, 'Banner 上传失败'));
+  if (data?.banner) setDiscoverBanner(data.banner);
+  return data || {};
 }
 
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {

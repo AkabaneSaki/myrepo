@@ -82,6 +82,23 @@ const state = {
   currentUser: null,
   projects: [],
   myProjects: [],
+  discoverShelves: {
+    discover: [],
+    published: [],
+    rating: [],
+    downloads: [],
+    loading: false,
+  },
+  discoverBanner: {
+    imageUrl: '/discover-preview-banner.png',
+    positionX: 50,
+    positionY: 50,
+    zoom: 1,
+    mobilePositionX: 50,
+    mobilePositionY: 50,
+    mobileZoom: 1,
+  },
+  viewMode: 'discover',
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
   sortMode: DEFAULT_SORT_MODE,
@@ -109,6 +126,15 @@ const state = {
   },
 };
 
+function isDiscoverHomeView() {
+  return state.viewMode === 'discover'
+    && !state.showOnlyMyProjects
+    && !state.showSubscribedAndInstalledProjects
+    && state.activeBaseTag === 'all'
+    && !String(state.searchKeyword || '').trim()
+    && getActivePublicTags().length === 0;
+}
+
 function setCurrentUser(user) {
   const previousUserId = state.currentUser?.id || null;
   const nextUser = user || null;
@@ -121,11 +147,42 @@ function setCurrentUser(user) {
   }
 }
 
+function setDiscoverBanner(banner) {
+  state.discoverBanner = {
+    ...state.discoverBanner,
+    ...(banner && typeof banner === 'object' ? banner : {}),
+  };
+}
+
 function setProjects(projects) {
   state.projects = Array.isArray(projects) ? projects : [];
   if (state.tavern.installedProjectsLoaded) {
     rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
   }
+}
+
+function setDiscoverShelves(payload = {}) {
+  state.discoverShelves = {
+    discover: Array.isArray(payload.discover) ? payload.discover : [],
+    published: Array.isArray(payload.published) ? payload.published : [],
+    rating: Array.isArray(payload.rating) ? payload.rating : [],
+    downloads: Array.isArray(payload.downloads) ? payload.downloads : [],
+    loading: Boolean(payload.loading),
+  };
+  const combined = [
+    ...state.discoverShelves.discover,
+    ...state.discoverShelves.published,
+    ...state.discoverShelves.rating,
+    ...state.discoverShelves.downloads,
+  ];
+  const uniqueProjects = [];
+  const seen = new Set();
+  combined.forEach(project => {
+    if (!project?.id || seen.has(project.id)) return;
+    seen.add(project.id);
+    uniqueProjects.push(project);
+  });
+  setProjects(uniqueProjects);
 }
 
 function setProjectsPage(payload) {
