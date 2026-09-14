@@ -318,6 +318,27 @@ export const projectDb = {
   },
 
   /**
+   * 批量获取指定项目摘要。用于本地已安装项目补全，避免逐项目 HTTP/D1 查询。
+   */
+  getMany: async (c: AppContext, projectIds: string[], currentUser?: JWTPayload | null) => {
+    const uniqueProjectIds = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 50);
+    if (uniqueProjectIds.length === 0) return [];
+
+    const results = await c.env.DB
+      .prepare(
+        `
+          SELECT p.*
+          FROM json_each(?1) requested
+          JOIN projects p ON p.id = requested.value
+        `,
+      )
+      .bind(JSON.stringify(uniqueProjectIds))
+      .all<Record<string, unknown>>();
+
+    return enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser);
+  },
+
+  /**
    * 更新项目
    */
   update: async (
@@ -588,13 +609,13 @@ export const projectDb = {
         case 'updated':
           return 'p.updated_at DESC, p.created_at DESC';
         case 'downloads':
-          return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+          return 'p.downloads_count DESC, p.created_at DESC';
         case 'likes':
-          return 'COALESCE(p.likes_count, 0) DESC, p.created_at DESC';
+          return 'p.likes_count DESC, p.created_at DESC';
         case 'subscribes':
           // Legacy clients may still request this sort. Subscription is now an install/update-notification state,
           // not a public popularity metric, so use downloads as the closest cheap fallback.
-          return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+          return 'p.downloads_count DESC, p.created_at DESC';
         case 'published':
         default:
           return 'p.latest_approved_at DESC, p.updated_at DESC';

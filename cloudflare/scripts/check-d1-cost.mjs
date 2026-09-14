@@ -1,5 +1,6 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,19 +10,19 @@ const SNAPSHOT_DATE = '2026-09-06';
 const SNAPSHOT_FILE = 'creative_workshop.sql';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
-const DEFAULT_BUDGET = Object.freeze({ maxQueries: 10, maxRowsRead: 10_000, maxRowsWritten: 0 });
+const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
 const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
 const scenarios = [
-  { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' } },
-  { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' } },
-  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 20, sort: 'likes' } },
-  { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' } },
-  { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' } },
-  { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' } },
-  { name: '全文搜索', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' } },
-  { name: '深分页 · 第 11 页', params: { page: 10, pageSize: 20, sort: 'published' } },
+  { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 20, sort: 'likes' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
+  { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' }, budget: { maxRowsRead: 80 } },
+  { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' }, budget: { maxRowsRead: 120 } },
+  { name: '全文搜索', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' }, budget: { maxRowsRead: 400 } },
+  { name: '深分页 · 第 11 页', params: { page: 10, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 600 } },
 ];
 
 function findSnapshot() {
@@ -51,6 +52,35 @@ const seededMarker = path.join(persistDir, '.seeded-from-production-snapshot.jso
 let serverLog = '';
 let server = null;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function assertPortAvailable() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', error => {
+      reject(new Error(`D1 cost gate port ${PORT} is already in use; refusing to measure a stale Worker. ${error.message}`));
+    });
+    probe.listen(PORT, '127.0.0.1', () => {
+      probe.close(closeError => closeError ? reject(closeError) : resolve());
+    });
+  });
+}
+
+async function stopServerTree() {
+  if (!server?.pid) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(server.pid), '/T', '/F'], { stdio: 'ignore' });
+    await sleep(250);
+    return;
+  }
+  if (server.exitCode === null) {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise(resolve => server.once('exit', resolve)),
+      sleep(3000),
+    ]);
+    if (server.exitCode === null) server.kill('SIGKILL');
+  }
+}
 
 function runWrangler(args, label, { inherit = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -209,6 +239,7 @@ async function runScenario(scenario) {
 let failed = false;
 try {
   await ensureSnapshotState();
+  await assertPortAvailable();
   startServer();
   await waitForServer();
   console.log(`D1 cost gate: ${scenarios.length} local scenarios on production snapshot ${SNAPSHOT_DATE}`);
@@ -235,12 +266,5 @@ try {
     console.log('\nD1 COST GATE PASSED');
   }
 } finally {
-  if (server && server.exitCode === null) {
-    server.kill('SIGTERM');
-    await Promise.race([
-      new Promise(resolve => server.once('exit', resolve)),
-      sleep(3000),
-    ]);
-    if (server.exitCode === null) server.kill('SIGKILL');
-  }
+  await stopServerTree();
 }

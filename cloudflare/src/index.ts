@@ -19,6 +19,7 @@ import { AuthCallback, AuthLogin, AuthLogout, AuthMe, AuthPoll } from './endpoin
 import {
   MyProjects,
   MySubscriptions,
+  ProjectBatchFetch,
   ProjectCoverUpload,
   ProjectCreate,
   ProjectDelete,
@@ -144,6 +145,7 @@ openapi.post('/api/auth/logout', AuthLogout);
 
 // ============ 项目接口 (公开) ============
 openapi.get('/api/projects', ProjectList);
+openapi.post('/api/projects/batch', ProjectBatchFetch);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 
 // ============ 项目接口 (需要登录) ============

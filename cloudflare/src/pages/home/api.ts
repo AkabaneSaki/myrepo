@@ -99,6 +99,7 @@ async function fetchCurrentUser() {
 }
 
 const PROJECT_DETAIL_CACHE_TTL_MS = 60 * 1000;
+const INSTALLED_PROJECT_BATCH_SIZE = 50;
 const projectDetailCache = new Map();
 const projectDetailInFlight = new Map();
 const projectDetailGeneration = new Map();
@@ -239,15 +240,17 @@ async function fetchInstalledProjectDetails() {
   const missingProjectIds = installedProjectIds.filter(projectId => !loadedProjectIds.has(projectId));
   if (!missingProjectIds.length) return [];
 
-  const results = await Promise.allSettled(
-    missingProjectIds.map(async projectId => {
-      const detail = await fetchProjectEntries(projectId);
-      return detail?.project?.id ? detail.project : null;
-    }),
-  );
-  const remoteProjects = results
-    .filter(result => result.status === 'fulfilled' && result.value)
-    .map(result => result.value);
+  const remoteProjects = [];
+  for (let offset = 0; offset < missingProjectIds.length; offset += INSTALLED_PROJECT_BATCH_SIZE) {
+    const projectIds = missingProjectIds.slice(offset, offset + INSTALLED_PROJECT_BATCH_SIZE);
+    const data = await apiFetch('/api/projects/batch', {
+      method: 'POST',
+      body: JSON.stringify({ projectIds }),
+    });
+    if (Array.isArray(data.projects)) {
+      remoteProjects.push(...data.projects);
+    }
+  }
   mergeInstalledRemoteProjects(remoteProjects);
   return remoteProjects;
 }

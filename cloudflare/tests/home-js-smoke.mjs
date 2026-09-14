@@ -168,6 +168,10 @@ assert.match(fragments.homeModalsScript, /data-new-additional-worldbook-confirm/
 assert.match(fragments.homeModalsScript, /已有同名世界书，将安装到现有世界书/);
 assert.match(fragments.homeModalsScript, /新附加世界书不能与角色主世界书同名/);
 assert.match(fragments.homeModalsScript, /newAdditionalConfirm\?\.click\(\)/);
+assert.match(fragments.homeApiScript, /INSTALLED_PROJECT_BATCH_SIZE = 50/);
+assert.match(fragments.homeApiScript, /apiFetch\('\/api\/projects\/batch'/);
+assert.match(fragments.homeApiScript, /JSON\.stringify\(\{ projectIds \}\)/);
+assert.doesNotMatch(fragments.homeApiScript, /missingProjectIds\.map\(async projectId/);
 assert.match(fragments.homeCardsRenderScript, /const projectType = getBaseTag\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /const typeClass = getTypeClass\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\.slice\(0, 5\)/);
