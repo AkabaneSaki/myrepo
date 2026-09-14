@@ -174,7 +174,8 @@ assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\
 assert.ok(fragments.homeCardsRenderScript.includes('class="tag">#${escapeHtml(tag)}</span>'));
 assert.ok(fragments.homeCardsRenderScript.includes('class="card-title-row"'));
 assert.ok(fragments.homeCardsRenderScript.includes('card-type-badge--${typeClass}'));
-assert.match(fragments.homeCardsRenderScript, /extension: \"fa-puzzle-piece\"/);
+assert.ok(fragments.homeCardsRenderScript.includes('class="card-type-label">${escapeHtml(projectType)}</span>'));
+assert.doesNotMatch(fragments.homeCardsRenderScript, /card-type-icon|fa-puzzle-piece|fa-user-group|fa-microchip|fa-calendar-days/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /Set\(\[baseTag, \.\.\.getProjectDisplayTags/);
 assert.match(fragments.homeDetailModalRenderScript, /getInstalledLocationLabel/);
 assert.match(fragments.homeDetailModalRenderScript, /附加世界书/);
@@ -364,7 +365,7 @@ const cardRenderUi = Function(
 );
 const displayTagCardHtml = cardRenderUi.renderProjectCard({ id: 'display-tags', name: 'Display Tags', version: '1.0.0', versionLabel: null, displayTags: ['人鱼', '纯爱'], hasCharacterArtwork: true, coverImage: '/cover.png', tags: [], downloadsCount: 0 });
 assert.match(displayTagCardHtml, /card-type-badge--extension/);
-assert.match(displayTagCardHtml, /fa-puzzle-piece/);
+assert.doesNotMatch(displayTagCardHtml, /card-type-icon|fa-puzzle-piece/);
 assert.match(displayTagCardHtml, />扩展<\/span>/);
 assert.match(displayTagCardHtml, />#人鱼<\/span>/);
 assert.match(displayTagCardHtml, />#纯爱<\/span>/);

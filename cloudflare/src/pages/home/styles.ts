@@ -685,8 +685,8 @@ button.detail-stat:disabled { cursor:not-allowed; opacity:.55; }
 /* 2026 mobile gallery integration: homepage discovery shell only. */
 body { background:#0f1012; color:#ececea; }
 .container { max-width:1480px; padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
-.projects-grid { grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; margin-top:16px; align-items:start; }
-.project-card { position:relative; overflow:visible; border:1px solid rgba(255,255,255,.075); border-radius:11px; background:#1b1c1f; box-shadow:0 4px 14px rgba(0,0,0,.14); transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease; }
+.projects-grid { grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); grid-auto-rows:1fr; gap:14px; margin-top:16px; align-items:stretch; }
+.project-card { position:relative; height:100%; overflow:visible; border:1px solid rgba(255,255,255,.075); border-radius:11px; background:#1b1c1f; box-shadow:0 4px 14px rgba(0,0,0,.14); transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease; }
 .project-card:hover { transform:translateY(-2px); border-color:rgba(255,255,255,.13); box-shadow:0 10px 26px rgba(0,0,0,.2); }
 .project-card:focus-visible { outline:2px solid rgba(162,139,107,.65); outline-offset:3px; }
 .card-head { position:relative; height:36px; display:flex; align-items:center; gap:8px; padding:0 6px 0 10px; border-bottom:1px solid rgba(255,255,255,.075); border-radius:10px 10px 0 0; background:#1b1c1f; }
@@ -712,7 +712,7 @@ body { background:#0f1012; color:#ececea; }
 .project-tags .tag + .tag::before { content:' · '; margin:0 2px; color:#66645f; }
 .card-status-line { display:flex; align-items:center; gap:6px; min-width:0; margin-top:6px; color:#aaa8a3; font-size:.58rem; overflow:hidden; }
 .card-reject-reason { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#d07770; }
-.card-footer { min-height:38px; margin-top:8px; padding-top:7px; border-top:1px solid rgba(255,255,255,.075); display:flex; align-items:center; gap:6px; }
+.card-footer { min-height:38px; margin-top:auto; padding-top:7px; border-top:1px solid rgba(255,255,255,.075); display:flex; align-items:center; gap:6px; }
 .card-signals { min-width:0; flex:1; display:flex; align-items:center; gap:8px; overflow:hidden; white-space:nowrap; color:#77756f; }
 .card-quality-signal { display:inline-flex; align-items:center; gap:4px; min-width:0; color:#8f8d87; font-size:.58rem; }
 .card-quality-signal i { color:#a28b6b; font-size:.62rem; }

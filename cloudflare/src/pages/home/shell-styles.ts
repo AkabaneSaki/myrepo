@@ -1312,9 +1312,9 @@ export const homeShellStyles = String.raw`
 .card-type-badge {
   display:inline-flex;
   align-items:center;
-  gap:.28em;
+  gap:0;
   margin-right:.42em;
-  padding:.15em .44em .15em .18em;
+  padding:.18em .46em;
   border:1px solid var(--type-border);
   border-radius:6px;
   background:var(--type-bg);
