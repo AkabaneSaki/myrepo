@@ -11,13 +11,17 @@ const SNAPSHOT_FILE = 'creative_workshop.sql';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
 const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
+const RANKING_REBUILD_BUDGET = Object.freeze({ maxQueries: 8, maxRowsRead: 2000, maxRowsWritten: 20 });
+const RANKING_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
 const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
 const scenarios = [
+  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 20, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
   { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
-  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 20, sort: 'likes' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 20, sort: 'rating' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
+  { name: '分类 · 角色玩家好评', params: { page: 0, pageSize: 20, sort: 'rating', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
   { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
   { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' }, budget: { maxRowsRead: 80 } },
   { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' }, budget: { maxRowsRead: 120 } },
@@ -213,6 +217,45 @@ function formatSql(sql) {
   return String(sql ?? '').replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
+async function resetCurrentRankingSnapshots() {
+  const bucket = Math.floor(Date.now() / 3_600_000);
+  const sql = `DELETE FROM project_rank_snapshots WHERE bucket = ${bucket};`;
+  await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir, '--command', sql,
+  ], 'D1 ranking snapshot reset');
+}
+
+async function triggerScheduledRanking(name, budget) {
+  await clearObservability();
+  const response = await fetch(`${ORIGIN}/cdn-cgi/local/scheduled`);
+  const responseText = await response.text();
+  if (!response.ok) throw new Error(`${name}: HTTP ${response.status}: ${responseText.slice(0, 500)}`);
+  await sleep(75);
+
+  const cost = await readD1Cost();
+  if (cost.queries === 0) throw new Error(`${name}: no D1 spans captured; cost cannot be verified`);
+
+  const reasons = [];
+  if (cost.queries > budget.maxQueries) reasons.push(`queries ${cost.queries} > ${budget.maxQueries}`);
+  if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
+  if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
+  if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
+  return { cost, reasons };
+}
+
+function printCostResult(name, result) {
+  const mark = result.reasons.length ? 'FAIL' : 'PASS';
+  console.log(`[${mark}] ${name}: queries=${result.cost.queries}, rows_read=${result.cost.rowsRead}, rows_written=${result.cost.rowsWritten}, d1_span_ms=${result.cost.d1SpanMs}`);
+  if (!result.reasons.length) return;
+
+  failed = true;
+  console.log(`  Reasons: ${result.reasons.join('; ')}`);
+  for (const query of result.cost.details) {
+    console.log(`  - rows_read=${query.rows_read ?? '?'} rows_written=${query.rows_written ?? '?'} ${formatSql(query.sql)}`);
+  }
+}
+
 async function runScenario(scenario) {
   await clearObservability();
   const url = new URL('/api/projects', ORIGIN);
@@ -221,6 +264,15 @@ async function runScenario(scenario) {
   const response = await fetch(url);
   const responseText = await response.text();
   if (!response.ok) throw new Error(`${scenario.name}: HTTP ${response.status}: ${responseText.slice(0, 500)}`);
+  let responseJson = {};
+  try {
+    responseJson = JSON.parse(responseText);
+  } catch {
+    throw new Error(`${scenario.name}: response was not valid JSON`);
+  }
+  const projectIds = Array.isArray(responseJson.projects)
+    ? responseJson.projects.map(project => String(project?.id || '')).filter(Boolean)
+    : [];
   await sleep(50);
 
   const cost = await readD1Cost();
@@ -232,30 +284,52 @@ async function runScenario(scenario) {
   if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
   if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
   if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
+  if (scenario.requireSnapshot) {
+    const sqlTexts = cost.details.map(query => String(query.sql || ''));
+    if (!sqlTexts.some(sql => sql.includes('FROM project_rank_snapshots'))) {
+      reasons.push('ranking request did not read project_rank_snapshots (fallback path detected)');
+    }
+    if (!sqlTexts.some(sql => sql.includes('WITH ranked(project_id, rank_index) AS (VALUES'))) {
+      reasons.push('ranking request did not use bounded page-ID fetch');
+    }
+  }
 
-  return { cost, reasons };
+  return { cost, reasons, projectIds };
 }
 
 let failed = false;
 try {
   await ensureSnapshotState();
+  await resetCurrentRankingSnapshots();
   await assertPortAvailable();
   startServer();
   await waitForServer();
-  console.log(`D1 cost gate: ${scenarios.length} local scenarios on production snapshot ${SNAPSHOT_DATE}`);
-  console.log(`Default budget: <=${DEFAULT_BUDGET.maxQueries} queries, <=${DEFAULT_BUDGET.maxRowsRead} rows read, ${DEFAULT_BUDGET.maxRowsWritten} rows written`);
+  console.log(`D1 cost gate: hourly ranking + ${scenarios.length} local browse scenarios on production snapshot ${SNAPSHOT_DATE}`);
+  console.log(`Default browse budget: <=${DEFAULT_BUDGET.maxQueries} queries, <=${DEFAULT_BUDGET.maxRowsRead} rows read, ${DEFAULT_BUDGET.maxRowsWritten} rows written`);
+  console.log(`Hourly rebuild budget: <=${RANKING_REBUILD_BUDGET.maxQueries} queries, <=${RANKING_REBUILD_BUDGET.maxRowsRead} rows read, <=${RANKING_REBUILD_BUDGET.maxRowsWritten} rows written`);
   console.log(`Shared local state: ${persistDir}\n`);
 
+  printCostResult('排行榜 · 每小时完整重建', await triggerScheduledRanking('排行榜 · 每小时完整重建', RANKING_REBUILD_BUDGET));
+  printCostResult('排行榜 · 同小时重复触发', await triggerScheduledRanking('排行榜 · 同小时重复触发', RANKING_FAST_PATH_BUDGET));
+
+  const scenarioResults = new Map();
   for (const scenario of scenarios) {
     const result = await runScenario(scenario);
-    const mark = result.reasons.length ? 'FAIL' : 'PASS';
-    console.log(`[${mark}] ${scenario.name}: queries=${result.cost.queries}, rows_read=${result.cost.rowsRead}, rows_written=${result.cost.rowsWritten}, d1_span_ms=${result.cost.d1SpanMs}`);
-    if (result.reasons.length) {
+    scenarioResults.set(scenario.name, result);
+    printCostResult(scenario.name, result);
+  }
+
+  const publishedIds = scenarioResults.get('首页 · 最新发布')?.projectIds || [];
+  for (const rankedName of ['首页 · 发现推荐', '首页 · 玩家好评']) {
+    const rankedIds = scenarioResults.get(rankedName)?.projectIds || [];
+    if (rankedIds.length === 0) {
       failed = true;
-      console.log(`  Reasons: ${result.reasons.join('; ')}`);
-      for (const query of result.cost.details) {
-        console.log(`  - rows_read=${query.rows_read ?? '?'} rows_written=${query.rows_written ?? '?'} ${formatSql(query.sql)}`);
-      }
+      console.log(`[FAIL] ${rankedName}: ranking result is empty on the production snapshot fixture`);
+      continue;
+    }
+    if (JSON.stringify(rankedIds) === JSON.stringify(publishedIds)) {
+      failed = true;
+      console.log(`[FAIL] ${rankedName}: ranking order collapsed to 最新发布`);
     }
   }
 

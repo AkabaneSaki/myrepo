@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  getProjectRankingBucket,
   getProjectRankingDay,
+  getProjectRankingRetentionCutoffBucket,
   getProjectRankingRetentionCutoffDay,
+  getProjectRankingSnapshotIds,
   invalidateCurrentDiscoveryRankingSnapshot,
+  parseProjectRankingSnapshot,
   pruneOldProjectRankingDays,
 } from '../src/utils/project-ranking-snapshots.ts';
 
@@ -16,8 +20,15 @@ db.exec(`
   );
 `);
 
-const migration = await readFile(new URL('../migrations/0011_project_daily_rankings.sql', import.meta.url), 'utf8');
-db.exec(migration);
+const snapshotMigration = await readFile(new URL('../migrations/0010_project_rank_snapshots.sql', import.meta.url), 'utf8');
+const dailyMigration = await readFile(new URL('../migrations/0011_project_daily_rankings.sql', import.meta.url), 'utf8');
+db.exec(snapshotMigration);
+db.exec(dailyMigration);
+
+const snapshotColumns = db.prepare("PRAGMA table_info('project_rank_snapshots')").all();
+for (const name of ['kind', 'bucket', 'project_ids', 'generated_at']) {
+  assert.equal(snapshotColumns.some(column => column.name === name), true, `missing ranking snapshot column ${name}`);
+}
 
 const rankingColumns = db.prepare("PRAGMA table_info('project_daily_rankings')").all();
 for (const name of [
@@ -46,6 +57,47 @@ for (const name of [
 
 assert.equal(getProjectRankingDay(Date.parse('2026-09-14T23:59:59Z')), '2026-09-14');
 assert.equal(getProjectRankingRetentionCutoffDay('2026-09-14'), '2026-09-07');
+const rankingBucket = getProjectRankingBucket(Date.parse('2026-09-14T12:34:56Z'));
+assert.equal(getProjectRankingBucket(Date.parse('2026-09-14T12:59:59Z')), rankingBucket);
+assert.equal(getProjectRankingBucket(Date.parse('2026-09-14T13:00:00Z')), rankingBucket + 1);
+assert.equal(getProjectRankingRetentionCutoffBucket(rankingBucket), rankingBucket - 7 * 24);
+
+const snapshotPayload = JSON.stringify({
+  version: 2,
+  all: ['p2', 'p3', 'p1'],
+  byType: { 角色: ['p3', 'p1'], 扩展: ['p2'] },
+  featured: ['p2', 'p3'],
+});
+assert.deepEqual(parseProjectRankingSnapshot(snapshotPayload), {
+  version: 2,
+  all: ['p2', 'p3', 'p1'],
+  byType: { 角色: ['p3', 'p1'], 扩展: ['p2'] },
+  featured: ['p2', 'p3'],
+});
+assert.equal(parseProjectRankingSnapshot(JSON.stringify(['p2', 'p3']))?.version, 1);
+assert.deepEqual(parseProjectRankingSnapshot(JSON.stringify(['p2', 'p3']))?.all, ['p2', 'p3']);
+assert.equal(parseProjectRankingSnapshot('{broken'), null);
+
+const snapshotContext = {
+  env: {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async first() {
+                return { project_ids: snapshotPayload };
+              },
+            };
+          },
+        };
+      },
+    },
+  },
+};
+assert.deepEqual(await getProjectRankingSnapshotIds(snapshotContext, 'discover', undefined, Date.parse('2026-09-14T12:34:56Z')), ['p2', 'p3', 'p1']);
+assert.deepEqual(await getProjectRankingSnapshotIds(snapshotContext, 'discover', '角色', Date.parse('2026-09-14T12:34:56Z')), ['p3', 'p1']);
+assert.equal(await getProjectRankingSnapshotIds(snapshotContext, 'discover', '事件', Date.parse('2026-09-14T12:34:56Z')), null);
 
 const insertProject = db.prepare('INSERT INTO projects (id, project_type) VALUES (?, ?)');
 insertProject.run('p1', '角色');
@@ -122,4 +174,4 @@ assert.deepEqual(ratingPage.map(row => row.project_id), ['p3', 'p2', 'p1']);
 }
 
 db.close();
-console.log('project daily ranking smoke: ok');
+console.log('project ranking snapshot smoke: ok');

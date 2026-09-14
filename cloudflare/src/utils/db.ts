@@ -12,7 +12,7 @@ import {
   type ProjectType,
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
-import { getReadyProjectRankingDay } from './project-daily-rankings';
+import { getProjectRankingSnapshotIds, type ProjectRankingSnapshotKind } from './project-ranking-snapshots';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
@@ -617,7 +617,7 @@ export const projectDb = {
 
     const sortMode = options.sort || 'published';
     const hasRankingSearchFilters = Boolean(options.authorId || searchTerm || tagFilters.length > 0);
-    const dailyRankingKind: 'discover' | 'rating' | null =
+    const snapshotKind: ProjectRankingSnapshotKind | null =
       options.approvedOnly !== false && !hasRankingSearchFilters
         ? sortMode === 'discover'
           ? 'discover'
@@ -646,69 +646,41 @@ export const projectDb = {
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
 
-    if (dailyRankingKind) {
-      const rankingDay = await getReadyProjectRankingDay(c);
-      if (rankingDay) {
-        const isTypeRanking = Boolean(options.projectType);
-        const rankColumn = dailyRankingKind === 'discover'
-          ? isTypeRanking ? 'discover_type_rank' : 'discover_rank'
-          : isTypeRanking ? 'rating_type_rank' : 'rating_rank';
-        const startRank = offset + 1;
-        const endRank = startRank + options.pageSize;
-        const rankingResults = isTypeRanking
-          ? await db
-              .prepare(
-                `SELECT p.*, u.global_name
-                 FROM project_daily_rankings r
-                 JOIN projects p ON p.id = r.project_id
-                 LEFT JOIN users u ON p.author_id = u.id
-                 WHERE r.ranking_day = ? AND r.project_type = ?
-                   AND r.${rankColumn} BETWEEN ? AND ?
-                   AND p.status = 'approved' AND p.is_published = 1 AND p.visibility = 1
-                 ORDER BY r.${rankColumn} ASC`,
-              )
-              .bind(rankingDay, options.projectType, startRank, endRank)
-              .all<Record<string, unknown>>()
-          : await db
-              .prepare(
-                `SELECT p.*, u.global_name
-                 FROM project_daily_rankings r
-                 JOIN projects p ON p.id = r.project_id
-                 LEFT JOIN users u ON p.author_id = u.id
-                 WHERE r.ranking_day = ? AND r.${rankColumn} BETWEEN ? AND ?
-                   AND p.status = 'approved' AND p.is_published = 1 AND p.visibility = 1
-                 ORDER BY r.${rankColumn} ASC`,
-              )
-              .bind(rankingDay, startRank, endRank)
-              .all<Record<string, unknown>>();
+    if (snapshotKind) {
+      const snapshotIds = await getProjectRankingSnapshotIds(c, snapshotKind, options.projectType);
+      if (snapshotIds) {
+        const pageIdsWithLookahead = snapshotIds.slice(offset, offset + fetchLimit);
+        const snapshotHasMore = pageIdsWithLookahead.length > options.pageSize;
+        const pageIds = snapshotHasMore ? pageIdsWithLookahead.slice(0, options.pageSize) : pageIdsWithLookahead;
+        if (pageIds.length === 0) {
+          return {
+            hasMore: false,
+            page: options.page,
+            pageSize: options.pageSize,
+            projects: [],
+          };
+        }
 
-        const rankingRows = rankingResults.results || [];
-        const laterRank = isTypeRanking
-          ? await db
-              .prepare(
-                `SELECT 1 AS found
-                 FROM project_daily_rankings
-                 WHERE ranking_day = ? AND project_type = ? AND ${rankColumn} > ?
-                 LIMIT 1`,
-              )
-              .bind(rankingDay, options.projectType, endRank)
-              .first<{ found: number }>()
-          : await db
-              .prepare(
-                `SELECT 1 AS found
-                 FROM project_daily_rankings
-                 WHERE ranking_day = ? AND ${rankColumn} > ?
-                 LIMIT 1`,
-              )
-              .bind(rankingDay, endRank)
-              .first<{ found: number }>();
-        const rankingHasMore = rankingRows.length > options.pageSize || Boolean(laterRank?.found);
-        const rankingPageRows = rankingRows.slice(0, options.pageSize);
+        // Slice the precomputed JSON in Worker memory first. SQL only sees this page's
+        // IDs, avoiding the old json_each(full_board) scan that grew with the catalog.
+        const rankedValues = pageIds.map((_, index) => `(?, ${index})`).join(', ');
+        const rankingResults = await db
+          .prepare(
+            `WITH ranked(project_id, rank_index) AS (VALUES ${rankedValues})
+             SELECT p.*, u.global_name
+             FROM ranked r
+             JOIN projects p ON p.id = r.project_id
+             LEFT JOIN users u ON p.author_id = u.id
+             ${listWhereClause}
+             ORDER BY r.rank_index ASC`,
+          )
+          .bind(...pageIds, ...values)
+          .all<Record<string, unknown>>();
         return {
-          hasMore: rankingHasMore,
+          hasMore: snapshotHasMore,
           page: options.page,
           pageSize: options.pageSize,
-          projects: await enrichProjects(c, rankingPageRows.map(parseProjectRow), options.currentUser),
+          projects: await enrichProjects(c, (rankingResults.results || []).map(parseProjectRow), options.currentUser),
         };
       }
     }
