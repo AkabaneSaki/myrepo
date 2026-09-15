@@ -420,22 +420,34 @@ export const homeScript = String.raw`
     const mobileToolSheet = document.getElementById('mobileToolSheet');
     const mobileToolBackdrop = document.getElementById('mobileToolBackdrop');
     const mobileToolClose = document.getElementById('mobileToolClose');
+    const mobileLoginBtn = document.getElementById('mobileLoginBtn');
+    const mobileLocalAdminLoginBtn = document.getElementById('mobileLocalAdminLoginBtn');
+    const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
+    const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
+    const mobileUploadBtn = document.getElementById('mobileUploadBtn');
+    const mobileAdminPanelBtn = document.getElementById('mobileAdminPanelBtn');
+    const mobileBannerSettingsBtn = document.getElementById('mobileBannerSettingsBtn');
+    const mobileAddAdminBtn = document.getElementById('mobileAddAdminBtn');
+    const mobileAdminLogsBtn = document.getElementById('mobileAdminLogsBtn');
+    const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
 
     if (loginBtn) loginBtn.onclick = openLoginPopup;
-    if (localAdminLoginBtn) localAdminLoginBtn.onclick = async () => {
-      localAdminLoginBtn.disabled = true;
+    if (mobileLoginBtn) mobileLoginBtn.onclick = openLoginPopup;
+    const runLocalAdminLogin = async button => {
+      button.disabled = true;
       try {
         const response = await fetch('/api/auth/local-preview', { method: 'POST' });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload?.token || !payload?.user) {
-          throw new Error(payload?.error || '本地管理员登录不可用');
-        }
+        if (!response.ok || !payload?.token || !payload?.user) throw new Error(payload?.error || '本地管理员登录不可用');
+        state.mobileToolMode = '';
         finishLogin(payload);
       } catch (error) {
         showToast('本地 Admin 登录失败: ' + (error?.message || String(error)), 'error');
-        localAdminLoginBtn.disabled = false;
+        button.disabled = false;
       }
     };
+    if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
+    if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
     if (releaseNoticeBtn) releaseNoticeBtn.onclick = openReleaseNoticeModal;
 
     const closeMobileTool = () => {
@@ -449,7 +461,7 @@ export const homeScript = String.raw`
     const openMobileTool = mode => {
       if (!mobileToolSheet || !mobileToolBackdrop) return;
       state.mobileToolMode = mode;
-      const titleMap = { page: '页面', search: '搜索', sort: '排序', font: '内容字体' };
+      const titleMap = { page: '浏览', search: '搜寻', sort: '排序', account: '个人', font: '内容字体' };
       const title = document.getElementById('mobileToolTitle');
       if (title) title.textContent = titleMap[mode] || '浏览工具';
       mobileToolSheet.querySelectorAll('[data-mobile-panel]').forEach(panel => {
@@ -460,6 +472,12 @@ export const homeScript = String.raw`
       mobileToolSheet.setAttribute('aria-hidden', 'false');
       document.querySelectorAll('[data-mobile-tool]').forEach(button => button.classList.toggle('active', button.dataset.mobileTool === mode));
       if (mode === 'search') setTimeout(() => mobileSearchInput?.focus(), 120);
+    };
+    const scrollWorkshopToTop = () => {
+      requestAnimationFrame(() => {
+        try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); }
+        catch { window.scrollTo(0, 0); }
+      });
     };
     if (mobileToolClose) mobileToolClose.onclick = closeMobileTool;
     if (mobileToolBackdrop) mobileToolBackdrop.onclick = closeMobileTool;
@@ -482,6 +500,7 @@ export const homeScript = String.raw`
         if (state.sortMode === 'discover') state.sortMode = 'published';
         state.mobileToolMode = '';
         state.userMenuOpen = false;
+        scrollWorkshopToTop();
         resetProjectPagination();
         renderApp();
         void fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize });
@@ -502,6 +521,7 @@ export const homeScript = String.raw`
         lastCommittedSearchKeyword = '';
         state.sortMode = nextView === 'discover' ? 'discover' : 'published';
         state.mobileToolMode = '';
+        scrollWorkshopToTop();
         resetProjectPagination();
         state.filterRequestPending = true;
         renderApp();
@@ -527,6 +547,7 @@ export const homeScript = String.raw`
         state.searchKeyword = '';
         state.searchDraft = '';
         lastCommittedSearchKeyword = '';
+        scrollWorkshopToTop();
         resetProjectPagination();
         state.filterRequestPending = true;
         renderApp();
@@ -548,14 +569,13 @@ export const homeScript = String.raw`
         showToast('无法打开上传窗口: ' + (error?.message || String(error)), 'error');
       }
     };
-    if (myProjectsMenuBtn) myProjectsMenuBtn.onclick = async () => {
+    const toggleMyProjectsView = async () => {
       state.showOnlyMyProjects = !state.showOnlyMyProjects;
-      if (state.showOnlyMyProjects) {
-        state.showSubscribedAndInstalledProjects = false;
-      }
+      if (state.showOnlyMyProjects) state.showSubscribedAndInstalledProjects = false;
       state.userMenuOpen = false;
+      state.mobileToolMode = '';
+      scrollWorkshopToTop();
       renderApp();
-
       if (state.showOnlyMyProjects && state.currentUser) {
         try {
           const myData = await apiFetch('/api/my/projects');
@@ -566,14 +586,27 @@ export const homeScript = String.raw`
         renderApp();
       }
     };
+    if (myProjectsMenuBtn) myProjectsMenuBtn.onclick = toggleMyProjectsView;
+    if (mobileMyProjectsBtn) mobileMyProjectsBtn.onclick = toggleMyProjectsView;
     if (adminPanelBtn) adminPanelBtn.onclick = openAdminPanel;
+    if (mobileAdminPanelBtn) mobileAdminPanelBtn.onclick = () => { state.mobileToolMode = ''; openAdminPanel(); };
     if (bannerSettingsBtn) bannerSettingsBtn.onclick = event => {
       event.stopPropagation();
       state.userMenuOpen = false;
       openDiscoverBannerSettingsModal();
     };
     if (addAdminBtn) addAdminBtn.onclick = openAddAdminModal;
+    if (mobileAddAdminBtn) mobileAddAdminBtn.onclick = () => { state.mobileToolMode = ''; openAddAdminModal(); };
     if (adminLogsBtn) adminLogsBtn.onclick = openAdminLogsModal;
+    if (mobileAdminLogsBtn) mobileAdminLogsBtn.onclick = () => { state.mobileToolMode = ''; openAdminLogsModal(); };
+    if (mobileBannerSettingsBtn) mobileBannerSettingsBtn.onclick = event => { event.stopPropagation(); state.mobileToolMode = ''; openDiscoverBannerSettingsModal(); };
+    if (mobileLogoutBtn) mobileLogoutBtn.onclick = logout;
+    if (mobileUploadBtn) mobileUploadBtn.onclick = event => {
+      event.stopPropagation();
+      state.mobileToolMode = '';
+      try { openUploadModal(); }
+      catch (error) { console.error('[CreativeWorkshop] failed to open upload modal', error); showToast('无法打开上传窗口: ' + (error?.message || String(error)), 'error'); }
+    };
     document.querySelectorAll('.cover-presentation-btn').forEach(button => {
       button.addEventListener('click', event => {
         event.preventDefault();
@@ -588,31 +621,28 @@ export const homeScript = String.raw`
       });
     });
 
+    const setInstalledProjectsView = async enabled => {
+      state.showSubscribedAndInstalledProjects = Boolean(enabled);
+      if (state.showSubscribedAndInstalledProjects) state.showOnlyMyProjects = false;
+      state.mobileToolMode = '';
+      scrollWorkshopToTop();
+      renderApp();
+      if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
+        try { await fetchInstalledProjectDetails(); }
+        catch (error) { console.warn('[CreativeWorkshop] 加载已安装项目远端详情失败', error); }
+      }
+      if (state.showSubscribedAndInstalledProjects && state.currentUser) {
+        try { await fetchSubscriptions(); }
+        catch (error) { showToast('加载订阅项目失败: ' + error.message, 'warning'); }
+      }
+      renderApp();
+    };
     if (installedToggle) {
       const checkbox = installedToggle.querySelector('input');
-      checkbox.addEventListener('change', async event => {
-        state.showSubscribedAndInstalledProjects = event.target.checked;
-        if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
-          try {
-            await fetchInstalledProjectDetails();
-          } catch (error) {
-            console.warn('[CreativeWorkshop] 加载已安装项目远端详情失败', error);
-          }
-        }
-        if (state.showSubscribedAndInstalledProjects) {
-          state.showOnlyMyProjects = false;
-        }
-        renderApp();
-
-        if (state.showSubscribedAndInstalledProjects && state.currentUser) {
-          try {
-            await fetchSubscriptions();
-          } catch (error) {
-            showToast('加载订阅项目失败: ' + error.message, 'warning');
-          }
-          renderApp();
-        }
-      });
+      checkbox.addEventListener('change', event => { void setInstalledProjectsView(event.target.checked); });
+    }
+    if (mobileInstalledProjectsBtn) {
+      mobileInstalledProjectsBtn.onclick = () => { void setInstalledProjectsView(!state.showSubscribedAndInstalledProjects); };
     }
 
     if (sortMenuTrigger && sortMenu) {
@@ -647,8 +677,17 @@ export const homeScript = String.raw`
             downloads: '下载最多',
           };
           showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
+          if (state.viewMode === 'discover') {
+            state.viewMode = 'catalog';
+            state.activeBaseTag = 'all';
+            state.activeTags = [];
+            state.searchKeyword = '';
+            state.searchDraft = '';
+            lastCommittedSearchKeyword = '';
+          }
           state.sortMode = nextSortMode;
           state.sortMenuOpen = false;
+          scrollWorkshopToTop();
           resetProjectPagination();
           renderApp();
           fetchProjects(true, {
@@ -700,8 +739,18 @@ export const homeScript = String.raw`
         state.sortRequestPending = true;
         const sortLabelMap = { discover: '发现', published: '最新', rating: '玩家好评', downloads: '下载最多' };
         showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
+        if (state.viewMode === 'discover') {
+          state.viewMode = 'catalog';
+          state.activeBaseTag = 'all';
+          state.activeTags = [];
+          state.searchKeyword = '';
+          state.searchDraft = '';
+          lastCommittedSearchKeyword = '';
+        }
         state.sortMode = nextSortMode;
         state.sortMenuOpen = false;
+        state.mobileToolMode = '';
+        scrollWorkshopToTop();
         resetProjectPagination();
         renderApp();
         fetchProjects(true, {
@@ -744,6 +793,7 @@ export const homeScript = String.raw`
         if (state.sortMode === 'discover') state.sortMode = 'published';
         state.searchKeyword = nextKeyword;
         state.searchDraft = '';
+        scrollWorkshopToTop();
         if (nextKeyword === lastCommittedSearchKeyword) {
           renderApp();
           return;
@@ -773,6 +823,7 @@ export const homeScript = String.raw`
         state.searchKeyword = nextKeyword;
         state.searchDraft = '';
         state.mobileToolMode = '';
+        scrollWorkshopToTop();
         if (searchInput && searchInput.value !== nextKeyword) searchInput.value = nextKeyword;
         if (nextKeyword === lastCommittedSearchKeyword) {
           renderApp();
@@ -810,6 +861,7 @@ export const homeScript = String.raw`
         state.activeBaseTag = nextTag;
         state.activeTags = [];
         state.searchDraft = '';
+        scrollWorkshopToTop();
 
         if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
           renderApp();
@@ -846,6 +898,7 @@ export const homeScript = String.raw`
         state.activeTags = [];
         state.searchDraft = '';
         state.mobileToolMode = '';
+        scrollWorkshopToTop();
         if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
           renderApp();
           return;
