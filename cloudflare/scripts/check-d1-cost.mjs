@@ -6,27 +6,29 @@ import { fileURLToPath } from 'node:url';
 
 const PORT = 8793;
 const DATABASE = 'creative_workshop';
-const SNAPSHOT_DATE = '2026-09-06';
+const SNAPSHOT_DATE = '2026-09-15';
 const SNAPSHOT_FILE = 'creative_workshop.sql';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
 const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
-const RANKING_REBUILD_BUDGET = Object.freeze({ maxQueries: 8, maxRowsRead: 2000, maxRowsWritten: 20 });
+const RANKING_REBUILD_BUDGET = Object.freeze({ maxQueries: 20, maxRowsWritten: 25_000 });
 const RANKING_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
 const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
 const scenarios = [
-  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 20, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
+  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 12, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
+  { name: '分类 · 角色发现', params: { page: 0, pageSize: 12, sort: 'discover', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
+  { name: '深分页 · 发现第 11 页', params: { page: 10, pageSize: 12, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
-  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 20, sort: 'rating' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
-  { name: '分类 · 角色玩家好评', params: { page: 0, pageSize: 20, sort: 'rating', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requireSnapshot: true },
+  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 12, sort: 'rating' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
+  { name: '分类 · 角色玩家好评', params: { page: 0, pageSize: 12, sort: 'rating', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
   { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' }, budget: { maxRowsRead: 80 } },
   { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' }, budget: { maxRowsRead: 120 } },
   { name: '全文搜索', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' }, budget: { maxRowsRead: 400 } },
-  { name: '深分页 · 第 11 页', params: { page: 10, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 600 } },
+  { name: '深分页 · 最新第 11 页', params: { page: 10, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 600 } },
 ];
 
 function findSnapshot() {
@@ -124,6 +126,19 @@ async function ensureSnapshotState() {
   ], 'D1 local migrations');
 }
 
+async function readEligibleProjectCount() {
+  const output = await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir,
+    '--command', "SELECT COUNT(*) AS project_count FROM projects WHERE status = 'approved' AND is_published = 1 AND visibility = 1",
+    '--json',
+  ], 'D1 eligible project count');
+  const parsed = JSON.parse(output);
+  const count = Number(parsed?.[0]?.results?.[0]?.project_count);
+  if (!Number.isInteger(count) || count < 0) throw new Error(`Invalid eligible project count: ${output.slice(0, 500)}`);
+  return count;
+}
+
 function startServer() {
   const args = [
     'dev', '--local', '--config', 'wrangler.jsonc',
@@ -217,13 +232,39 @@ function formatSql(sql) {
   return String(sql ?? '').replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
-async function resetCurrentRankingSnapshots() {
-  const bucket = Math.floor(Date.now() / 3_600_000);
-  const sql = `DELETE FROM project_rank_snapshots WHERE bucket = ${bucket};`;
+async function resetCurrentRankingDay() {
+  const rankingDay = new Date().toISOString().slice(0, 10);
+  const sql = [
+    `DELETE FROM discovery_feature_history WHERE ranking_day = '${rankingDay}'`,
+    `DELETE FROM project_daily_rankings WHERE ranking_day = '${rankingDay}'`,
+    `DELETE FROM project_ranking_builds WHERE ranking_day = '${rankingDay}'`,
+  ].join('; ');
   await runWrangler([
     'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
     '--persist-to', persistDir, '--command', sql,
-  ], 'D1 ranking snapshot reset');
+  ], 'D1 daily ranking reset');
+}
+
+async function triggerConcurrentScheduledRanking(name, budget) {
+  await clearObservability();
+  const responses = await Promise.all([
+    fetch(`${ORIGIN}/cdn-cgi/local/scheduled`),
+    fetch(`${ORIGIN}/cdn-cgi/local/scheduled`),
+  ]);
+  for (const response of responses) {
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`${name}: HTTP ${response.status}: ${responseText.slice(0, 500)}`);
+  }
+  await sleep(100);
+
+  const cost = await readD1Cost();
+  if (cost.queries === 0) throw new Error(`${name}: no D1 spans captured; cost cannot be verified`);
+  const reasons = [];
+  if (cost.queries > budget.maxQueries) reasons.push(`queries ${cost.queries} > ${budget.maxQueries}`);
+  if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
+  if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
+  if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
+  return { cost, reasons };
 }
 
 async function triggerScheduledRanking(name, budget) {
@@ -284,14 +325,14 @@ async function runScenario(scenario) {
   if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
   if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
   if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
-  if (scenario.requireSnapshot) {
+  if (scenario.requireDailyRanking) {
     const sqlTexts = cost.details.map(query => String(query.sql || ''));
-    if (!sqlTexts.some(sql => sql.includes('FROM project_rank_snapshots'))) {
-      reasons.push('ranking request did not read project_rank_snapshots (fallback path detected)');
-    }
-    if (!sqlTexts.some(sql => sql.includes('WITH ranked(project_id, rank_index) AS (VALUES'))) {
-      reasons.push('ranking request did not use bounded page-ID fetch');
-    }
+    const rankingSql = sqlTexts.find(sql => sql.includes('FROM project_daily_rankings r')) || '';
+    if (!rankingSql) reasons.push('ranking request did not read project_daily_rankings (fallback path detected)');
+    if (rankingSql && !rankingSql.includes(' BETWEEN ? AND ?')) reasons.push('ranking request did not use bounded rank BETWEEN');
+    if (sqlTexts.some(sql => sql.includes('project_rank_snapshots'))) reasons.push('retired JSON ranking snapshot appeared in browse hot path');
+    if (rankingSql && /json_each\s*\(/i.test(rankingSql)) reasons.push('ranking browse expanded JSON');
+    if (rankingSql && /OFFSET/i.test(rankingSql)) reasons.push('ranking browse used OFFSET');
   }
 
   return { cost, reasons, projectIds };
@@ -300,17 +341,22 @@ async function runScenario(scenario) {
 let failed = false;
 try {
   await ensureSnapshotState();
-  await resetCurrentRankingSnapshots();
+  const eligibleProjectCount = await readEligibleProjectCount();
+  const rankingRebuildBudget = {
+    ...RANKING_REBUILD_BUDGET,
+    maxRowsRead: 3 * eligibleProjectCount + 500,
+  };
+  await resetCurrentRankingDay();
   await assertPortAvailable();
   startServer();
   await waitForServer();
-  console.log(`D1 cost gate: hourly ranking + ${scenarios.length} local browse scenarios on production snapshot ${SNAPSHOT_DATE}`);
+  console.log(`D1 cost gate: daily ranking + ${scenarios.length} local browse scenarios on production snapshot ${path.basename(path.dirname(snapshotSql))}`);
   console.log(`Default browse budget: <=${DEFAULT_BUDGET.maxQueries} queries, <=${DEFAULT_BUDGET.maxRowsRead} rows read, ${DEFAULT_BUDGET.maxRowsWritten} rows written`);
-  console.log(`Hourly rebuild budget: <=${RANKING_REBUILD_BUDGET.maxQueries} queries, <=${RANKING_REBUILD_BUDGET.maxRowsRead} rows read, <=${RANKING_REBUILD_BUDGET.maxRowsWritten} rows written`);
+  console.log(`Daily rebuild budget: N=${eligibleProjectCount}, <=${rankingRebuildBudget.maxQueries} queries, <=3N+500=${rankingRebuildBudget.maxRowsRead} rows read, <=${rankingRebuildBudget.maxRowsWritten} rows written`);
   console.log(`Shared local state: ${persistDir}\n`);
 
-  printCostResult('排行榜 · 每小时完整重建', await triggerScheduledRanking('排行榜 · 每小时完整重建', RANKING_REBUILD_BUDGET));
-  printCostResult('排行榜 · 同小时重复触发', await triggerScheduledRanking('排行榜 · 同小时重复触发', RANKING_FAST_PATH_BUDGET));
+  printCostResult('排行榜 · 并发双触发完整重建', await triggerConcurrentScheduledRanking('排行榜 · 并发双触发完整重建', rankingRebuildBudget));
+  printCostResult('排行榜 · 同日重复触发', await triggerScheduledRanking('排行榜 · 同日重复触发', RANKING_FAST_PATH_BUDGET));
 
   const scenarioResults = new Map();
   for (const scenario of scenarios) {

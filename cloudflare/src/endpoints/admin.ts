@@ -7,7 +7,7 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
-import { invalidateCurrentDiscoveryRankingSnapshot } from '../utils/project-ranking-snapshots';
+
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -353,9 +353,8 @@ export class AdminReview extends OpenAPIRoute {
       });
     }
 
-    if (action === 'approve') {
-      await invalidateCurrentDiscoveryRankingSnapshot(c);
-    }
+    // Discovery/rating boards are immutable during the UTC day; newly approved projects
+    // appear in 最新 immediately and enter public rankings on the next scheduled build.
 
     await projectDb.logAdminAction(c, {
       action: action === 'approve' ? 'project_approved' : 'project_rejected',

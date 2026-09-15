@@ -12,7 +12,7 @@ import {
   type ProjectType,
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
-import { getProjectRankingSnapshotIds, type ProjectRankingSnapshotKind } from './project-ranking-snapshots';
+import { getReadyProjectRankingBoard } from './project-daily-rankings';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
@@ -617,13 +617,9 @@ export const projectDb = {
 
     const sortMode = options.sort || 'published';
     const hasRankingSearchFilters = Boolean(options.authorId || searchTerm || tagFilters.length > 0);
-    const snapshotKind: ProjectRankingSnapshotKind | null =
-      options.approvedOnly !== false && !hasRankingSearchFilters
-        ? sortMode === 'discover'
-          ? 'discover'
-          : sortMode === 'rating'
-            ? 'rating'
-            : null
+    const rankingKind: 'discover' | 'rating' | null =
+      options.approvedOnly !== false && !hasRankingSearchFilters && (sortMode === 'discover' || sortMode === 'rating')
+        ? sortMode
         : null;
     const orderBy = (() => {
       switch (sortMode) {
@@ -642,17 +638,18 @@ export const projectDb = {
           return 'p.latest_approved_at DESC, p.updated_at DESC';
       }
     })();
-    // 获取当前页，并多取 1 条用于判断是否还有下一批；无需额外 COUNT(*)。
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
 
-    if (snapshotKind) {
-      const snapshotIds = await getProjectRankingSnapshotIds(c, snapshotKind, options.projectType);
-      if (snapshotIds) {
-        const pageIdsWithLookahead = snapshotIds.slice(offset, offset + fetchLimit);
-        const snapshotHasMore = pageIdsWithLookahead.length > options.pageSize;
-        const pageIds = snapshotHasMore ? pageIdsWithLookahead.slice(0, options.pageSize) : pageIdsWithLookahead;
-        if (pageIds.length === 0) {
+    if (rankingKind) {
+      const board = await getReadyProjectRankingBoard(c);
+      if (board) {
+        const totalCount = options.projectType
+          ? Number(board.typeCounts[options.projectType] || 0)
+          : board.projectCount;
+        const startRank = options.page * options.pageSize + 1;
+        const endRank = startRank + options.pageSize - 1;
+        if (totalCount === 0 || startRank > totalCount) {
           return {
             hasMore: false,
             page: options.page,
@@ -661,23 +658,34 @@ export const projectDb = {
           };
         }
 
-        // Slice the precomputed JSON in Worker memory first. SQL only sees this page's
-        // IDs, avoiding the old json_each(full_board) scan that grew with the catalog.
-        const rankedValues = pageIds.map((_, index) => `(?, ${index})`).join(', ');
+        const rankColumn = rankingKind === 'discover'
+          ? options.projectType ? 'discover_type_rank' : 'discover_rank'
+          : options.projectType ? 'rating_type_rank' : 'rating_rank';
+        const typeClause = options.projectType ? 'AND r.project_type = ?' : '';
+        const rankValues: unknown[] = [board.rankingDay];
+        if (options.projectType) rankValues.push(options.projectType);
+        rankValues.push(startRank, endRank);
+
+        // Page jumps read one bounded indexed rank range. Hidden/deleted projects may
+        // leave a temporary hole; hasMore is based on immutable board counts instead.
         const rankingResults = await db
           .prepare(
-            `WITH ranked(project_id, rank_index) AS (VALUES ${rankedValues})
-             SELECT p.*, u.global_name
-             FROM ranked r
+            `SELECT p.*, u.global_name
+             FROM project_daily_rankings r
              JOIN projects p ON p.id = r.project_id
              LEFT JOIN users u ON p.author_id = u.id
-             ${listWhereClause}
-             ORDER BY r.rank_index ASC`,
+             WHERE r.ranking_day = ?
+               ${typeClause}
+               AND r.${rankColumn} BETWEEN ? AND ?
+               AND p.status = 'approved'
+               AND p.is_published = 1
+               AND p.visibility = 1
+             ORDER BY r.${rankColumn} ASC`,
           )
-          .bind(...pageIds, ...values)
+          .bind(...rankValues)
           .all<Record<string, unknown>>();
         return {
-          hasMore: snapshotHasMore,
+          hasMore: endRank < totalCount,
           page: options.page,
           pageSize: options.pageSize,
           projects: await enrichProjects(c, (rankingResults.results || []).map(parseProjectRow), options.currentUser),
