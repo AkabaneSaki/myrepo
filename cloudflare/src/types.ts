@@ -6,7 +6,7 @@ import type { Env } from './env';
 export type AppContext = Context<{ Bindings: Env }>;
 
 // ============ 枚举定义 ============
-export const ProjectStatus = z.enum(['pending', 'approved', 'rejected']);
+export const ProjectStatus = z.enum(['drafting', 'pending', 'approved', 'rejected']);
 export type ProjectStatus = z.infer<typeof ProjectStatus>;
 
 export const ProjectReviewTarget = z.enum(['project', 'draft']);

@@ -17,12 +17,6 @@ assert.match(reviewSource, /draft_revision = \?/, 'review mutation must atomical
 assert.match(reviewSource, /meta\?\.changes|meta\.changes/, 'review mutation must verify that exactly one row changed');
 assert.match(adminSource, /if \(!reviewedAt\)[\s\S]{0,180}409/, 'stale/already-completed reviews must return conflict');
 assert.match(adminSource, /restoreApprovedReviewToPending/, 'failed draft publication must restore the review to pending');
-assert.match(adminSource, /detachPublishedDraft/, 'failed post-publish draft cleanup must detach the orphaned draft');
-assert.match(
-  dbSource,
-  /detachPublishedDraft:[\s\S]{0,900}UPDATE projects SET published_project_id = NULL/,
-  'detach fallback must clear the draft-to-published link',
-);
 assert.match(r2Source, /rollback:/, 'published R2 replacement must expose a rollback operation');
 assert.match(r2Source, /mutatedKeys/, 'R2 rollback must track only keys changed by the current publication attempt');
 

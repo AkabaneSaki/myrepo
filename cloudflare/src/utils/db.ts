@@ -1,4 +1,4 @@
-import type { AppContext, ProjectReviewTarget } from '../types';
+import type { AppContext, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
@@ -250,6 +250,7 @@ export const projectDb = {
       visibility?: boolean;
       isPublished?: boolean;
       latestApprovedAt?: string | null;
+      status?: ProjectStatus;
     },
   ): Promise<void> => {
     const db = c.env.DB;
@@ -272,7 +273,7 @@ export const projectDb = {
         project.authorId,
         project.authorName,
         project.authorAvatar,
-        'pending', // 默认状态为待审核
+        project.status || 'pending',
         project.downloadUrl || null,
         project.fileSize || null,
         project.hasEjs ? 1 : 0,
@@ -528,8 +529,8 @@ export const projectDb = {
 
     if (project?.published_project_id) {
       await db
-        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ?`)
-        .bind(now(), project.published_project_id)
+        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`)
+        .bind(now(), project.published_project_id, projectId)
         .run();
     }
 
@@ -544,23 +545,6 @@ export const projectDb = {
       db.prepare(`DELETE FROM project_likes WHERE project_id = ?`).bind(projectId),
       db.prepare(`DELETE FROM project_subscribes WHERE project_id = ?`).bind(projectId),
       db.prepare(`DELETE FROM projects WHERE id = ?`).bind(projectId),
-    ]);
-  },
-
-  detachPublishedDraft: async (
-    c: AppContext,
-    draftProjectId: string,
-    publishedProjectId: string,
-  ): Promise<void> => {
-    const db = c.env.DB;
-    const detachedAt = now();
-    await db.batch([
-      db
-        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`)
-        .bind(detachedAt, publishedProjectId, draftProjectId),
-      db
-        .prepare(`UPDATE projects SET published_project_id = NULL, updated_at = ? WHERE id = ? AND published_project_id = ?`)
-        .bind(detachedAt, draftProjectId, publishedProjectId),
     ]);
   },
 
@@ -885,13 +869,17 @@ export const projectDb = {
             }
           : project;
 
+      const currentDraft = publishedProject?.draftProjectId
+        ? projects.find(project => project.id === publishedProject.draftProjectId)
+        : null;
+      if (currentDraft) return withPublishedVersion(currentDraft);
+      if (publishedProject) return publishedProject;
+
       const pendingDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'pending');
       if (pendingDraft) return withPublishedVersion(pendingDraft);
 
       const rejectedDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'rejected');
       if (rejectedDraft) return withPublishedVersion(rejectedDraft);
-
-      if (publishedProject) return publishedProject;
 
       return (
         [...projects].sort((left, right) => {
@@ -988,13 +976,13 @@ export const projectDb = {
     return projectDb.setSubscribe(c, projectId, userId, !existing);
   },
 
-  findDraftByPublishedId: async (c: AppContext, publishedProjectId: string) => {
+  listDraftIdsByPublishedId: async (c: AppContext, publishedProjectId: string): Promise<string[]> => {
     const result = await c.env.DB.prepare(
-      `SELECT p.*, u.global_name FROM projects p LEFT JOIN users u ON p.author_id = u.id WHERE p.published_project_id = ? AND p.review_target = 'draft' ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, p.updated_at DESC LIMIT 1`,
+      `SELECT id FROM projects WHERE published_project_id = ? AND review_target = 'draft'`,
     )
       .bind(publishedProjectId)
-      .first<Record<string, unknown>>();
-    return result ? parseProjectRow(result) : null;
+      .all<{ id: string }>();
+    return (result.results || []).map(row => row.id);
   },
 
   createDraftFromPublished: async (
@@ -1019,11 +1007,8 @@ export const projectDb = {
   ) => {
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
-    const existingDraft = await projectDb.findDraftByPublishedId(c, publishedProjectId);
+    const existingDraft = published.draftProjectId ? await projectDb.get(c, published.draftProjectId) : null;
     if (existingDraft) {
-      if (existingDraft.reviewTarget === 'draft' && existingDraft.status === 'approved') {
-        return null;
-      }
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
         name: updates.name ?? existingDraft.name,
@@ -1312,7 +1297,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     authorName: row.author_name as string,
     authorGlobalName: ((row.global_name as string | null) || (row.author_name as string)) as string,
     authorAvatar: row.author_avatar as string | null,
-    status: row.status as 'pending' | 'approved' | 'rejected',
+    status: row.status as 'drafting' | 'pending' | 'approved' | 'rejected',
     downloadUrl: row.download_url as string | null,
     fileSize: row.file_size as number | null,
     downloadsCount: Number(row.downloads_count ?? 0),

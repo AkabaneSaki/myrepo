@@ -10,11 +10,6 @@ import {
   type ProjectEntryKind,
 } from '../utils/project-content';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview, summarizeProjectInspection } from '../utils/project-preview';
-import {
-  isFinalizingReviewDraft,
-  isProjectMutationReviewLocked,
-  PROJECT_REVIEW_FINALIZING_ERROR,
-} from '../utils/project-review-lock';
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -22,15 +17,6 @@ const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'update
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024;
 const UPLOAD_SIZE_ERROR = '文件过大，最大 10MB';
-
-async function isMutationLockedDuringReview(c: AppContext, project: Awaited<ReturnType<typeof projectDb.get>>) {
-  if (!project) return false;
-  return isProjectMutationReviewLocked(project, publishedProjectId =>
-    projectDb.findDraftByPublishedId(c, publishedProjectId),
-  );
-}
-
-const reviewFinalizingResponse = (c: AppContext) => c.json({ error: PROJECT_REVIEW_FINALIZING_ERROR }, 409);
 
 
 async function readProjectPreview(
@@ -541,10 +527,6 @@ export class ProjectUpload extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
-
     const contentLengthHeader = c.req.header('content-length');
     const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
 
@@ -574,17 +556,11 @@ export class ProjectUpload extends OpenAPIRoute {
     if (project.isPublished && project.status === 'approved') {
       const draftId = await projectDb.createDraftFromPublished(c, projectId, {});
       if (!draftId) {
-        if (await isMutationLockedDuringReview(c, project)) {
-          return reviewFinalizingResponse(c);
-        }
         return c.json({ error: 'Draft creation failed' }, 500);
       }
 
       const inspectionSummary = await computeProjectInspectionSummary(c, draftId, { worldbook: worldbookText });
       const draftFileName = `project-${draftId}.json`;
-      if (await isMutationLockedDuringReview(c, project)) {
-        return reviewFinalizingResponse(c);
-      }
       const draftResult = await r2Storage.uploadProjectFile(c, draftId, arrayBuffer, draftFileName, contentType);
       if (!draftResult) {
         return c.json({ error: 'Upload failed' }, 500);
@@ -611,9 +587,6 @@ export class ProjectUpload extends OpenAPIRoute {
     const fileName = `project-${projectId}.json`;
 
     // 上传到 R2
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
     const result = await r2Storage.uploadProjectFile(c, projectId, arrayBuffer, fileName, contentType);
     if (!result) {
       return c.json({ error: 'Upload failed' }, 500);
@@ -681,10 +654,6 @@ export class ProjectCoverUpload extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
-
     const contentLengthHeader = c.req.header('content-length');
     const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
     if (Number.isFinite(contentLength) && contentLength > MAX_COVER_REQUEST_SIZE) {
@@ -721,12 +690,9 @@ export class ProjectCoverUpload extends OpenAPIRoute {
     let reusedDraft = false;
 
     if (project.isPublished && project.status === 'approved') {
-      const existingDraft = await projectDb.findDraftByPublishedId(c, projectId);
+      const existingDraft = project.draftProjectId ? await projectDb.get(c, project.draftProjectId, payload) : null;
       const draftId = existingDraft?.id || (await projectDb.createDraftFromPublished(c, projectId, {}));
       if (!draftId) {
-        if (await isMutationLockedDuringReview(c, project)) {
-          return reviewFinalizingResponse(c);
-        }
         return c.json({ error: 'Draft creation failed' }, 500);
       }
       targetProjectId = draftId;
@@ -737,9 +703,6 @@ export class ProjectCoverUpload extends OpenAPIRoute {
     }
 
     const key = `projects/${targetProjectId}/cover.${extension}`;
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
     const uploadResult = await r2Storage.upload(c, key, await cover.arrayBuffer(), contentType);
 
     if (!uploadResult) {
@@ -805,10 +768,6 @@ export class ProjectCoverPresentationUpdate extends OpenAPIRoute {
     if (!project) return c.json({ error: 'Project not found' }, 404);
     if (project.authorId !== payload.userId && !payload.isAdmin) {
       return c.json({ error: 'Permission denied' }, 403);
-    }
-
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
     }
 
     const presentation = {
@@ -989,10 +948,6 @@ export class ProjectUpdate extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
-
     const taxonomyInput: Record<string, unknown> = {
       tags: data.body.tags ?? project.tags,
     };
@@ -1056,9 +1011,6 @@ export class ProjectUpdate extends OpenAPIRoute {
       const targetVersion = bumpProjectVersionWithLegacyFallback(project.version, 'patch');
       const draftId = await projectDb.createDraftFromPublished(c, projectId, { ...updates, version: targetVersion });
       if (!draftId) {
-        if (await isMutationLockedDuringReview(c, project)) {
-          return reviewFinalizingResponse(c);
-        }
         return c.json({ error: 'Draft creation failed' }, 500);
       }
 
@@ -1078,9 +1030,6 @@ export class ProjectUpdate extends OpenAPIRoute {
       }
 
       const targetVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
-      if (await isMutationLockedDuringReview(c, project)) {
-        return reviewFinalizingResponse(c);
-      }
       await projectDb.update(c, projectId, { ...updates, version: targetVersion, status: 'pending' });
       await projectDb.bumpDraftRevision(c, projectId);
       return {
@@ -1146,22 +1095,82 @@ export class ProjectDelete extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
+    if (project.reviewTarget === 'draft' && project.publishedProjectId && project.status === 'pending') {
+      const published = await projectDb.get(c, project.publishedProjectId, payload);
+      if (!published) return c.json({ error: 'Published project not found for draft' }, 409);
+      if (published.draftProjectId && published.draftProjectId !== project.id) {
+        return c.json({ error: 'A newer working draft already exists.' }, 409);
+      }
+
+      const nextDraftId = generateId();
+      const nextVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      await projectDb.create(c, {
+        id: nextDraftId,
+        name: project.name,
+        description: project.description || undefined,
+        version: nextVersion,
+        versionLabel: project.versionLabel ?? null,
+        authorId: project.authorId,
+        authorName: project.authorName,
+        authorAvatar: project.authorAvatar || '',
+        projectType: project.projectType,
+        extensionType: project.extensionType,
+        facets: project.facets,
+        customTags: project.customTags,
+        displayTags: project.displayTags,
+        tags: project.tags,
+        coverImage: project.coverImage || undefined,
+        coverPositionX: project.coverPositionX,
+        coverPositionY: project.coverPositionY,
+        coverZoom: project.coverZoom,
+        downloadUrl: project.downloadUrl || undefined,
+        fileSize: project.fileSize || undefined,
+        hasEjs: project.hasEjs,
+        hasCharacterArtwork: project.hasCharacterArtwork,
+        rootProjectId: project.rootProjectId || published.rootProjectId || published.id,
+        publishedProjectId: published.id,
+        reviewTarget: 'draft',
+        draftRevision: 1,
+        visibility: project.visibility,
+        isPublished: false,
+        latestApprovedAt: published.latestApprovedAt || published.reviewedAt,
+        status: 'drafting',
+      });
+
+      try {
+        const copied = await r2Storage.copyProjectFilesToPublished(
+          c,
+          project.id,
+          nextDraftId,
+          project.coverImage || undefined,
+        );
+        await projectDb.update(c, nextDraftId, {
+          downloadUrl: copied.downloadUrl || project.downloadUrl || undefined,
+          fileSize: copied.fileSize ?? project.fileSize ?? undefined,
+          coverImage: copied.coverImage || project.coverImage || undefined,
+        });
+        await projectDb.update(c, published.id, { draftProjectId: nextDraftId });
+      } catch (error) {
+        await projectDb.delete(c, nextDraftId).catch(() => undefined);
+        throw error;
+      }
+
+      return {
+        success: true,
+        continuedDraftProjectId: nextDraftId,
+        reviewRequestId: project.id,
+        message: 'Review snapshot preserved. Continue editing in the new draft.',
+      };
     }
 
-    // 删除正式项目时，把关联的审核草稿一起清掉，避免留下 orphan draft。
-    // 删除 draft 本身则只撤回该 draft；projectDb.delete() 会解除 published 上的关联。
+    // 删除正式项目时，一并清理当前草稿和历史审核快照。
     let linkedDraftId: string | null = null;
     if (project.isPublished) {
-      const linkedDraft = await projectDb.findDraftByPublishedId(c, project.id);
-      if (linkedDraft && isFinalizingReviewDraft(linkedDraft)) {
-        return reviewFinalizingResponse(c);
-      }
-      if (linkedDraft) {
-        linkedDraftId = linkedDraft.id;
-        await r2Storage.deleteProjectFiles(c, linkedDraft.id);
-        await projectDb.delete(c, linkedDraft.id);
+      const linkedDraftIds = await projectDb.listDraftIdsByPublishedId(c, project.id);
+      linkedDraftId = project.draftProjectId || linkedDraftIds[0] || null;
+      for (const linkedId of linkedDraftIds) {
+        await r2Storage.deleteProjectFiles(c, linkedId);
+        await projectDb.delete(c, linkedId);
       }
     }
 
@@ -1221,10 +1230,6 @@ export class ProjectRegexUpload extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
-
     const contentLengthHeader = c.req.header('content-length');
     const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
     if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_SIZE) {
@@ -1254,9 +1259,6 @@ export class ProjectRegexUpload extends OpenAPIRoute {
     if (project.isPublished && project.status === 'approved') {
       const draftId = await projectDb.createDraftFromPublished(c, projectId, {});
       if (!draftId) {
-        if (await isMutationLockedDuringReview(c, project)) {
-          return reviewFinalizingResponse(c);
-        }
         return c.json({ error: 'Draft creation failed' }, 500);
       }
       targetProjectId = draftId;
@@ -1266,9 +1268,6 @@ export class ProjectRegexUpload extends OpenAPIRoute {
     const fileName = `regex-${targetProjectId}.json`;
 
     // 上传到 R2
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
     const result = await r2Storage.uploadProjectFile(c, targetProjectId, arrayBuffer, fileName, contentType);
     if (!result) {
       return c.json({ error: 'Upload failed' }, 500);
@@ -1329,9 +1328,6 @@ export class ProjectVisibilityUpdate extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
     await projectDb.setVisibility(c, project.id, data.body.visibility);
 
     return {
@@ -1375,13 +1371,11 @@ export class ProjectEntryRemove extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
-
     let targetProjectId = project.id;
     const existingDraft =
-      project.isPublished && project.status === 'approved' ? await projectDb.findDraftByPublishedId(c, project.id) : null;
+      project.isPublished && project.status === 'approved' && project.draftProjectId
+        ? await projectDb.get(c, project.draftProjectId, payload)
+        : null;
     const sourceProject =
       project.isPublished && project.status === 'approved'
         ? existingDraft || project
@@ -1393,19 +1387,11 @@ export class ProjectEntryRemove extends OpenAPIRoute {
     if (project.isPublished && project.status === 'approved') {
       const targetVersion = existingDraft?.version || bumpProjectVersionWithLegacyFallback(project.version, 'patch');
       const draftId = await projectDb.createDraftFromPublished(c, project.id, { version: targetVersion });
-      if (!draftId) {
-        if (await isMutationLockedDuringReview(c, project)) {
-          return reviewFinalizingResponse(c);
-        }
-        return c.json({ error: 'Draft creation failed' }, 500);
-      }
+      if (!draftId) return c.json({ error: 'Draft creation failed' }, 500);
       targetProjectId = draftId;
     }
 
     const inspectionSummary = await computeProjectInspectionSummary(c, targetProjectId, { [kind]: changed.text });
-    if (await isMutationLockedDuringReview(c, project)) {
-      return reviewFinalizingResponse(c);
-    }
     const result = await r2Storage.uploadProjectFile(
       c,
       targetProjectId,

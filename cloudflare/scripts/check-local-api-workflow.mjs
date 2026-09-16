@@ -298,19 +298,32 @@ try {
   });
   assert.equal(restoredByAdmin.visibility, true);
 
-  const withdrawDraftUpdate = await api(`/api/projects/${publishedId}`, {
+  const frozenReviewUpdate = await api(`/api/projects/${publishedId}`, {
     method: 'PUT',
     token: creatorToken,
-    body: { description: 'Temporary draft that should be withdrawn' },
+    body: { description: 'Frozen review snapshot A' },
   });
-  const withdrawnDraftId = withdrawDraftUpdate.draftProjectId;
-  assert.ok(withdrawnDraftId);
-  await api(`/api/projects/${withdrawnDraftId}`, { method: 'DELETE', token: creatorToken });
-  await api(`/api/projects/${withdrawnDraftId}`, { token: creatorToken, expected: 404 });
-  const publishedAfterWithdraw = await api(`/api/projects/${publishedId}`, { token: creatorToken });
-  assert.equal(publishedAfterWithdraw.project.status, 'approved');
-  assert.equal(publishedAfterWithdraw.project.description, 'Base description');
-  assert.equal(publishedAfterWithdraw.project.draftProjectId, null);
+  const frozenReviewId = frozenReviewUpdate.draftProjectId;
+  assert.ok(frozenReviewId);
+  const frozenReviewBeforeContinue = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(frozenReviewBeforeContinue.project.status, 'pending');
+  assert.equal(frozenReviewBeforeContinue.project.version, '1.0.1');
+
+  const continueEditing = await api(`/api/projects/${frozenReviewId}`, { method: 'DELETE', token: creatorToken });
+  const continuedDraftId = continueEditing.continuedDraftProjectId;
+  assert.ok(continuedDraftId);
+  assert.notEqual(continuedDraftId, frozenReviewId);
+
+  const frozenReviewAfterContinue = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(frozenReviewAfterContinue.project.status, 'pending');
+  assert.equal(frozenReviewAfterContinue.project.description, 'Frozen review snapshot A');
+  const continuedDraft = await api(`/api/projects/${continuedDraftId}`, { token: creatorToken });
+  assert.equal(continuedDraft.project.status, 'drafting');
+  assert.equal(continuedDraft.project.description, 'Frozen review snapshot A');
+  const publishedAfterContinue = await api(`/api/projects/${publishedId}`, { token: creatorToken });
+  assert.equal(publishedAfterContinue.project.status, 'approved');
+  assert.equal(publishedAfterContinue.project.description, 'Base description');
+  assert.equal(publishedAfterContinue.project.draftProjectId, continuedDraftId);
 
   const firstDraftUpdate = await api(`/api/projects/${publishedId}`, {
     method: 'PUT',
@@ -319,6 +332,7 @@ try {
   });
   draftId = firstDraftUpdate.draftProjectId;
   assert.ok(draftId);
+  assert.equal(draftId, continuedDraftId);
   assert.equal(firstDraftUpdate.targetVersion, '1.0.1');
   assert.equal('versionBump' in firstDraftUpdate, false);
 
@@ -386,6 +400,25 @@ try {
   });
   draftId = null;
 
+  const staleFrozenReview = await api(`/api/admin/review/${frozenReviewId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'approve', expectedRevision: frozenReviewBeforeContinue.project.draftRevision },
+    expected: 409,
+  });
+  assert.match(String(staleFrozenReview.error), /outdated/i);
+  await api(`/api/admin/review/${frozenReviewId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      action: 'reject',
+      rejectReason: 'Superseded by a newer approved review request',
+      expectedRevision: frozenReviewBeforeContinue.project.draftRevision,
+    },
+  });
+  const rejectedFrozenReview = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(rejectedFrozenReview.project.status, 'rejected');
+
   const finalPublished = await api(`/api/projects/${publishedId}`);
   assert.equal(finalPublished.project.name, 'Local API Draft Name Fixed');
   assert.equal(finalPublished.project.description, 'Draft description changed later');
@@ -409,6 +442,7 @@ try {
   await api(`/api/projects/${publishedId}`, { method: 'DELETE', token: adminToken });
   await api(`/api/projects/${publishedId}`, { token: creatorToken, expected: 404 });
   await api(`/api/projects/${draftId}`, { token: creatorToken, expected: 404 });
+  await api(`/api/projects/${frozenReviewId}`, { token: creatorToken, expected: 404 });
   draftId = null;
   publishedId = null;
 

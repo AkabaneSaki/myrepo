@@ -292,13 +292,24 @@ export class AdminReview extends OpenAPIRoute {
 
     let approvedVersion: string | null = null;
     let publishedVersionBeforeApproval: string | null = null;
+    let publishedDraftProjectIdBeforeApproval: string | null = null;
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
       const published = await projectDb.get(c, project.publishedProjectId);
       if (!published) {
         return c.json({ error: 'Published project not found for draft' }, 409);
       }
       publishedVersionBeforeApproval = published.version;
-      approvedVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      publishedDraftProjectIdBeforeApproval = published.draftProjectId || null;
+      const expectedTargetVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      if (project.version !== expectedTargetVersion) {
+        return c.json(
+          {
+            error: `This review request is outdated. Current project is v${published.version}; this request targets v${project.version}.`,
+          },
+          409,
+        );
+      }
+      approvedVersion = project.version;
     }
 
     // 执行审核。status + draft_revision 必须在同一条 D1 UPDATE 里原子校验，
@@ -346,7 +357,8 @@ export class AdminReview extends OpenAPIRoute {
             hasEjs: project.hasEjs,
             hasCharacterArtwork: project.hasCharacterArtwork,
             status: 'approved',
-            draftProjectId: null,
+            draftProjectId:
+              publishedDraftProjectIdBeforeApproval === projectId ? null : publishedDraftProjectIdBeforeApproval,
             visibility: project.visibility,
             isPublished: true,
             latestApprovedAt: reviewedAt,
@@ -382,28 +394,7 @@ export class AdminReview extends OpenAPIRoute {
         throw error;
       }
 
-      try {
-        await projectDb.delete(c, projectId);
-      } catch (cleanupError) {
-        console.error('Failed to delete approved draft after publish; detaching it to avoid a permanent review lock', {
-          projectId,
-          publishedProjectId: project.publishedProjectId,
-          cleanupError,
-        });
-        try {
-          await projectDb.detachPublishedDraft(c, projectId, project.publishedProjectId);
-        } catch (detachError) {
-          console.error('Failed to detach approved draft after publish cleanup failure', {
-            projectId,
-            publishedProjectId: project.publishedProjectId,
-            detachError,
-          });
-        }
-      }
-    } else if (action === 'reject' && project.reviewTarget === 'draft' && project.publishedProjectId) {
-      await projectDb.update(c, project.publishedProjectId, {
-        draftProjectId: projectId,
-      });
+      await projectDb.delete(c, projectId);
     } else if (action === 'approve') {
       try {
         await projectDb.update(c, projectId, {
