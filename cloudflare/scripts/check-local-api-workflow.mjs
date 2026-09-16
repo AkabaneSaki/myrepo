@@ -231,6 +231,21 @@ try {
   assert.equal(approved.worldbookEntriesPreview.length, 3);
   assert.equal(approved.regexEntriesPreview.length, 2);
 
+  const stalePostApprovalReview = await api(`/api/admin/review/${publishedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      action: 'reject',
+      rejectReason: 'stale review request must not overwrite an approved project',
+      expectedRevision: firstReviewRevision,
+    },
+    expected: 409,
+  });
+  assert.match(String(stalePostApprovalReview.error), /already reviewed|changed|conflict/i);
+  const approvedAfterStaleReview = await api(`/api/projects/${publishedId}`);
+  assert.equal(approvedAfterStaleReview.project.status, 'approved');
+  assert.equal(approvedAfterStaleReview.project.isPublished, true);
+
   await api('/api/projects?page=0&pageSize=50&sort=discover');
   const rankingFreshnessProject = await api('/api/projects', {
     method: 'POST',

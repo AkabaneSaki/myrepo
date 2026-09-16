@@ -730,36 +730,52 @@ export const projectDb = {
     projectId: string,
     reviewerId: string,
     action: 'approve' | 'reject',
-    rejectReason?: string,
-  ): Promise<string> => {
+    rejectReason: string | undefined,
+    expectedRevision: number,
+  ): Promise<string | null> => {
     const db = c.env.DB;
     const reviewedAt = now();
 
-    if (action === 'approve') {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, reviewedAt, projectId)
-        .run();
+    const result = action === 'approve'
+      ? await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
+                 latest_approved_at = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, projectId, expectedRevision)
+          .run()
+      : await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
+          .run();
 
-      await db.prepare(`UPDATE projects SET latest_approved_at = ? WHERE id = ?`).bind(reviewedAt, projectId).run();
-    } else {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId)
-        .run();
-    }
+    return Number(result.meta?.changes || 0) === 1 ? reviewedAt : null;
+  },
 
-    return reviewedAt;
+  restoreApprovedReviewToPending: async (
+    c: AppContext,
+    projectId: string,
+    reviewerId: string,
+    expectedRevision: number,
+    reviewedAt: string,
+    previousLatestApprovedAt: string | null,
+  ): Promise<boolean> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects
+       SET status = 'pending', reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL,
+           latest_approved_at = ?, updated_at = ?
+       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ?`,
+    )
+      .bind(previousLatestApprovedAt, now(), projectId, expectedRevision, reviewerId, reviewedAt)
+      .run();
+
+    return Number(result.meta?.changes || 0) === 1;
   },
 
   /**

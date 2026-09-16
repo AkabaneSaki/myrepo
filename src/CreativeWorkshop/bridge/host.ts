@@ -61,6 +61,16 @@ function isOAuthCallbackMessage(value: unknown): value is OAuthCallbackMessage {
   );
 }
 
+function redactOAuthLogPayload(value: unknown) {
+  return {
+    type: _.isString(_.get(value, 'type')) ? String(_.get(value, 'type')) : undefined,
+    state: _.isString(_.get(value, 'state')) ? String(_.get(value, 'state')) : undefined,
+    success: _.isBoolean(_.get(value, 'success')) ? Boolean(_.get(value, 'success')) : undefined,
+    callbackReady: _.isBoolean(_.get(value, 'callbackReady')) ? Boolean(_.get(value, 'callbackReady')) : undefined,
+    hasToken: _.isString(_.get(value, 'token')),
+  };
+}
+
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
@@ -127,7 +137,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
     console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
-      payload,
+      payload: redactOAuthLogPayload(payload),
     });
     await post('bridge:oauth:result', payload, requestId);
     clearOAuthTimers();
@@ -193,7 +203,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       pendingOauthState,
       eventOrigin: event.origin,
       sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-      data: event.data,
+      data: redactOAuthLogPayload(event.data),
     });
     if (!pendingOauthRequestId) return;
     if (event.origin !== oauthOrigin) return;
@@ -247,7 +257,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
-      payload,
+      payload: type === 'bridge:oauth:result' ? redactOAuthLogPayload(payload) : payload,
       targetOrigin,
     });
     iframe.contentWindow?.postMessage(createBridgeMessage(type as never, payload, requestId), targetOrigin);
@@ -257,7 +267,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
-      data: event.data,
+      data: {
+        type: _.get(event.data, 'type'),
+        requestId: _.get(event.data, 'requestId'),
+      },
     });
     if (event.source !== iframe.contentWindow) return;
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;

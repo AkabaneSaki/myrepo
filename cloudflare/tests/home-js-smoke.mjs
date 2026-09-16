@@ -38,6 +38,14 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+assert.match(
+  fragments.homeTavernBridgeScript,
+  /function handleBridgeMessage\(event\) \{\s*if \(event\.source !== window\.parent\) return;/,
+  'embedded bridge must only accept messages from its parent window',
+);
+
+
+
 const safeLinkUtils = Function(`${fragments.homeUtilsScript}; return { escapeHtml, normalizeExternalHttpUrl };`)();
 const safeMarkdownUi = Function(
   'escapeHtml',

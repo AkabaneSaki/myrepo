@@ -35,5 +35,12 @@ assert.match(hostSource, /externalBrowserOnly: tauriTavernMobileExternalOpen && 
 assert.match(hostSource, /if \(oauthPopup\) \{[\s\S]*oauthClosePollId = hostWindow\.setInterval/);
 assert.match(hostSource, /callbackReady: true/);
 assert.match(hostSource, /'bridge:oauth:result'/);
+assert.doesNotMatch(hostSource, /data:\s*event\.data/, 'OAuth callback logs must not dump the token-bearing event payload');
+assert.doesNotMatch(
+  hostSource,
+  /resolveOAuthResult',\s*\{\s*requestId,\s*payload,\s*\}/,
+  'OAuth result logs must not dump the token-bearing payload',
+);
+assert.match(hostSource, /redactOAuthLogPayload/);
 
 console.log('OAuth external-browser smoke checks passed.');

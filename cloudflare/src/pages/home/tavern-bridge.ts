@@ -114,6 +114,7 @@ function syncDiffFromBridge(payload) {
 }
 
 function handleBridgeMessage(event) {
+  if (event.source !== window.parent) return;
   const data = event.data;
   if (!data || data.namespace !== TAVERN_BRIDGE_NAMESPACE || !data.type) {
     return;
