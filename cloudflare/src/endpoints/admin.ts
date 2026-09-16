@@ -382,7 +382,24 @@ export class AdminReview extends OpenAPIRoute {
         throw error;
       }
 
-      await projectDb.delete(c, projectId);
+      try {
+        await projectDb.delete(c, projectId);
+      } catch (cleanupError) {
+        console.error('Failed to delete approved draft after publish; detaching it to avoid a permanent review lock', {
+          projectId,
+          publishedProjectId: project.publishedProjectId,
+          cleanupError,
+        });
+        try {
+          await projectDb.detachPublishedDraft(c, projectId, project.publishedProjectId);
+        } catch (detachError) {
+          console.error('Failed to detach approved draft after publish cleanup failure', {
+            projectId,
+            publishedProjectId: project.publishedProjectId,
+            detachError,
+          });
+        }
+      }
     } else if (action === 'reject' && project.reviewTarget === 'draft' && project.publishedProjectId) {
       await projectDb.update(c, project.publishedProjectId, {
         draftProjectId: projectId,

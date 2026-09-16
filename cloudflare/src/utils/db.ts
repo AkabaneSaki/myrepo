@@ -547,6 +547,23 @@ export const projectDb = {
     ]);
   },
 
+  detachPublishedDraft: async (
+    c: AppContext,
+    draftProjectId: string,
+    publishedProjectId: string,
+  ): Promise<void> => {
+    const db = c.env.DB;
+    const detachedAt = now();
+    await db.batch([
+      db
+        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`)
+        .bind(detachedAt, publishedProjectId, draftProjectId),
+      db
+        .prepare(`UPDATE projects SET published_project_id = NULL, updated_at = ? WHERE id = ? AND published_project_id = ?`)
+        .bind(detachedAt, draftProjectId, publishedProjectId),
+    ]);
+  },
+
   /**
    * 获取项目列表
    */
@@ -1004,6 +1021,9 @@ export const projectDb = {
     if (!published) return null;
     const existingDraft = await projectDb.findDraftByPublishedId(c, publishedProjectId);
     if (existingDraft) {
+      if (existingDraft.reviewTarget === 'draft' && existingDraft.status === 'approved') {
+        return null;
+      }
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
         name: updates.name ?? existingDraft.name,

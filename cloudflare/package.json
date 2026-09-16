@@ -35,6 +35,7 @@
 		"check:cover-isolation": "node tests/cover-approval-isolation.mjs",
 		"check:content-validation": "node tests/content-validation-approval.mjs",
 		"check:admin-review-recovery": "node tests/admin-review-recovery-smoke.mjs",
+		"check:project-review-lock": "node tests/project-review-lock-smoke.mjs",
 		"test:db-init-local": "wrangler d1 execute creative_workshop_staging --local --config wrangler.staging.jsonc --file=schema.sql",
 		"test:db-snapshot-seed-local": "wrangler d1 execute creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --file=../../workshop-backups/2026-09-06/creative_workshop.sql",
 		"test:db-snapshot-migrate-local": "wrangler d1 migrations apply creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906",
