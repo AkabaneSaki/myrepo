@@ -602,7 +602,15 @@ export const projectDb = {
       values.push(tagPattern, tagPattern, tagPattern, tag);
     });
 
-    const searchTerm = options.search?.trim();
+    const rawSearchTerm = options.search?.trim();
+    const normalizedSearchTerm = rawSearchTerm
+      ? rawSearchTerm
+          .replace(/[\u0000-\u001f\u007f]/g, ' ')
+          .replace(/[%_]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : '';
+    const searchTerm = Array.from(normalizedSearchTerm).slice(0, 20).join('');
     if (searchTerm) {
       conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
       const searchPattern = `%${searchTerm}%`;

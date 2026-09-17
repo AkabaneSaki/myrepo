@@ -258,6 +258,15 @@ function normalizeRepairProjectName(value) {
   return String(value || '').trim().toLocaleLowerCase();
 }
 
+function buildRepairSearchTerm(value) {
+  const cleaned = String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[%_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(cleaned).slice(0, 20).join('');
+}
+
 function isWorkshopUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
@@ -286,8 +295,10 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
 
   const query = String(manualQuery || candidate?.name || candidate?.legacyProjectName || '').trim();
   if (!query) return { status: 'none', method: 'none', projects: [] };
+  const searchTerm = buildRepairSearchTerm(query);
+  if (!searchTerm) return { status: 'none', method: 'none', projects: [] };
 
-  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: query });
+  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: searchTerm });
   const data = await apiFetch('/api/projects?' + params.toString());
   const projects = Array.isArray(data.projects) ? data.projects : [];
   const normalizedQuery = normalizeRepairProjectName(query);

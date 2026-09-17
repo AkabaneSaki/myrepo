@@ -1578,6 +1578,9 @@ export const homeShellStyles = String.raw`
 .repair-toolbar > div:first-child,.repair-footer > div:first-child { display:flex; flex-direction:column; gap:4px; }
 .repair-toolbar small { color:#918a82; }
 .repair-toolbar-actions,.repair-footer > div:last-child { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.repair-baseline-note { margin:14px 18px 0; padding:11px 13px; border:1px solid rgba(96,166,116,.24); border-radius:10px; background:rgba(96,166,116,.08); color:#9fd0ac; display:flex; align-items:flex-start; gap:10px; }
+.repair-baseline-note > div { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.repair-baseline-note span { color:#aeb8b0; }
 .repair-warning,.repair-blocked,.repair-error { margin:14px 18px 0; padding:11px 13px; border:1px solid rgba(226,176,72,.24); border-radius:10px; background:rgba(226,176,72,.08); color:#d9b773; }
 .repair-error { border-color:rgba(211,92,92,.28); background:rgba(211,92,92,.08); color:#e39a9a; }
 .repair-blocked { margin:12px 0 0; }

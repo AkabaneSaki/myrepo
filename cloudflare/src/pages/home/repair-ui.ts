@@ -160,9 +160,15 @@ function buildDlcRepairReportText() {
   const enabledWorldbooks = Array.isArray(report.enabledWorldbookNames) ? report.enabledWorldbookNames : [];
   const scannedWorldbooks = Array.isArray(report.scannedWorldbookNames) ? report.scannedWorldbookNames : [];
   const unreadable = Array.isArray(report.unreadableWorldbookNames) ? report.unreadableWorldbookNames : [];
+  const modifiedOfficialBaseline = Array.isArray(report.modifiedOfficialBaselineEntries) ? report.modifiedOfficialBaselineEntries : [];
   lines.push('Available worldbooks: ' + availableWorldbooks.length);
   lines.push('Enabled worldbooks: ' + (enabledWorldbooks.length ? enabledWorldbooks.join(', ') : 'none'));
   lines.push('Scanned worldbooks: ' + (scannedWorldbooks.length ? scannedWorldbooks.join(', ') : 'none'));
+  lines.push('Official baseline: ' + (report.officialBaselineVersion || 'unknown'));
+  lines.push('Official baseline entries skipped: ' + Number(report.officialBaselineSkippedCount || 0));
+  if (modifiedOfficialBaseline.length) {
+    lines.push('Modified official baseline entries: ' + modifiedOfficialBaseline.map(item => (item.worldbookName || '?') + ' :: ' + (item.name || '?')).join(' | '));
+  }
   lines.push('Unreadable worldbooks: ' + (unreadable.length ? unreadable.join(', ') : 'none'));
   lines.push('Pending repairs: ' + (Array.isArray(report.pending) ? report.pending.length : 0));
   lines.push('');
@@ -221,8 +227,14 @@ function renderDlcRepairModal() {
   const scannedLabel = scannedWorldbooks.length ? scannedWorldbooks.join('、') : '无';
   const enabledLabel = enabledWorldbooks.length ? enabledWorldbooks.join('、') : '无';
   const worldbookOptions = availableWorldbooks.slice().sort((a, b) => String(a).localeCompare(String(b))).map(name => '<option value="' + escapeHtml(name) + '"></option>').join('');
+  const officialBaselineSkipped = Number(report.officialBaselineSkippedCount || 0);
+  const modifiedOfficialBaseline = Array.isArray(report.modifiedOfficialBaselineEntries) ? report.modifiedOfficialBaselineEntries : [];
+  const baselineInfoHtml = officialBaselineSkipped || modifiedOfficialBaseline.length
+    ? '<div class="repair-baseline-note"><i class="fas fa-shield-halved"></i><div><strong>官方原版基线 ' + escapeHtml(report.officialBaselineVersion || '') + '</strong><span>已跳过 ' + officialBaselineSkipped + ' 个原版 DLC 条目' + (modifiedOfficialBaseline.length ? '；另有 ' + modifiedOfficialBaseline.length + ' 个同名原版条目内容已改变，已禁止自动删除' : '') + '</span></div></div>'
+    : '';
 
   root.innerHTML = buildPendingRepairHtml(report)
+    + baselineInfoHtml
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 无法读取世界书：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
     + '<div class="repair-worldbook-picker"><div><strong>扫描世界书</strong><small>默认只扫描当前已启用 / 已绑定的世界书。当前扫描：' + escapeHtml(scannedLabel) + '</small><small>当前启用：' + escapeHtml(enabledLabel) + '</small></div><div class="repair-worldbook-controls"><input id="dlcRepairWorldbookInput" list="dlcRepairWorldbookOptions" placeholder="输入或选择其他世界书"><datalist id="dlcRepairWorldbookOptions">' + worldbookOptions + '</datalist><button type="button" class="btn btn-outline" id="dlcRepairScanBookBtn"><i class="fas fa-book"></i> 扫描这本</button><button type="button" class="btn btn-outline" id="dlcRepairScanEnabledBtn"><i class="fas fa-link"></i> 扫描已启用</button></div></div>'
     + '<div class="repair-toolbar"><div><strong>选择玩家报告有问题的 DLC</strong><small>可以一次选择 A / B / C / D。匹配可并行，实际修改会逐个执行。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重扫当前</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制报告</button></div></div>'

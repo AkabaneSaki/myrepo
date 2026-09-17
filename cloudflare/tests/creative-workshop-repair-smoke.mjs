@@ -7,6 +7,8 @@ const repairSource = await readFile(new URL('../../src/CreativeWorkshop/services
 const repairUiSource = await readFile(new URL('../src/pages/home/repair-ui.ts', import.meta.url), 'utf8');
 const bridgeSource = await readFile(new URL('../../src/CreativeWorkshop/bridge/host.ts', import.meta.url), 'utf8');
 const protocolSource = await readFile(new URL('../../src/CreativeWorkshop/bridge/protocol.ts', import.meta.url), 'utf8');
+const officialBaseline = JSON.parse(await readFile(new URL('../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook-fingerprints.json', import.meta.url), 'utf8'));
+const officialWorldbook = JSON.parse(await readFile(new URL('../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook.json', import.meta.url), 'utf8'));
 
 const compiled = ts.transpileModule(repairSource, {
   compilerOptions: {
@@ -56,6 +58,7 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
     module,
     exports: module.exports,
     require(specifier) {
+      if (specifier.includes('worldbook-fingerprints.json')) return officialBaseline;
       if (specifier === './install-registry') {
         return {
           deleteCreativeWorkshopInstallRecord: projectId => installRecords.delete(projectId),
@@ -119,6 +122,9 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
     Array,
     String,
     Number,
+    Uint8Array,
+    TextEncoder,
+    crypto: globalThis.crypto,
     structuredClone,
     _: makeLodash(),
     getCurrentCharacterName: () => 'Tester',
@@ -169,6 +175,49 @@ const brokenEntries = [
     },
   },
 ];
+
+const officialSourceEntries = Array.isArray(officialWorldbook.entries)
+  ? officialWorldbook.entries
+  : Object.values(officialWorldbook.entries || {});
+const officialSourceEntry = officialSourceEntries.find(entry => String(entry?.comment || '').startsWith('[DLC]'));
+assert.ok(officialSourceEntry, 'official baseline must contain at least one [DLC] entry');
+const officialRuntimeEntry = {
+  uid: 501,
+  name: officialSourceEntry.comment,
+  content: officialSourceEntry.content,
+  keys: officialSourceEntry.keys,
+  secondary_keys: officialSourceEntry.secondary_keys,
+  constant: officialSourceEntry.constant,
+  selective: officialSourceEntry.selective,
+  position: officialSourceEntry.position,
+  use_regex: officialSourceEntry.use_regex,
+  extra: {},
+};
+
+{
+  const harness = createHarness({ worldbooks: { Official: [officialRuntimeEntry] }, boundWorldbookNames: ['Official'] });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(report.candidates.length, 0, 'exact official baseline entries must not become repair candidates');
+  assert.equal(report.officialBaselineVersion, 'V4.3.3');
+  assert.equal(report.officialBaselineSkippedCount, 1);
+  assert.equal(report.modifiedOfficialBaselineEntries.length, 0);
+
+  const modifiedHarness = createHarness({
+    worldbooks: { Official: [{ ...officialRuntimeEntry, content: officialRuntimeEntry.content + '\n玩家修改' }] },
+    boundWorldbookNames: ['Official'],
+  });
+  const modifiedReport = await modifiedHarness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(modifiedReport.candidates.length, 0, 'modified official baseline entries must remain fail-closed');
+  assert.equal(modifiedReport.officialBaselineSkippedCount, 0);
+  assert.equal(modifiedReport.modifiedOfficialBaselineEntries.length, 1);
+
+  const workshopManagedHarness = createHarness({
+    worldbooks: { Official: [{ ...officialRuntimeEntry, extra: { cw_project_id: 'managed-project-id' } }] },
+    boundWorldbookNames: ['Official'],
+  });
+  const workshopManagedReport = await workshopManagedHarness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(workshopManagedReport.candidates.length, 1, 'explicit Workshop metadata must override official-name baseline suppression');
+}
 
 {
   const harness = createHarness({ worldbooks: { DLC: brokenEntries } });

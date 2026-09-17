@@ -1,3 +1,4 @@
+import officialWorldbookBaseline from '../../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook-fingerprints.json';
 import {
   deleteCreativeWorkshopInstallRecord,
   getCreativeWorkshopBoundWorldbookNames,
@@ -24,6 +25,23 @@ const WORKSHOP_METADATA_FIELDS = [
   'cw_entry_key',
   'cw_name_format_version',
 ] as const;
+
+type OfficialWorldbookBaselineEntry = {
+  source_entry_id: string | number | null;
+  name: string;
+  fingerprint: string;
+  content_sha256: string;
+};
+
+const OFFICIAL_WORLDBOOK_BASELINE_VERSION = String(
+  (officialWorldbookBaseline as any)?.character_version || '',
+);
+const OFFICIAL_WORLDBOOK_BASELINE_ENTRIES = Array.isArray((officialWorldbookBaseline as any)?.entries)
+  ? ((officialWorldbookBaseline as any).entries as OfficialWorldbookBaselineEntry[])
+  : [];
+const OFFICIAL_WORLDBOOK_BASELINE_BY_NAME = new Map(
+  OFFICIAL_WORLDBOOK_BASELINE_ENTRIES.map(entry => [String(entry.name || '').trim(), entry]),
+);
 
 type WorkshopMetadataField = (typeof WORKSHOP_METADATA_FIELDS)[number];
 
@@ -85,6 +103,36 @@ type CandidateEntryRow = {
   entry: WorldbookEntry;
   header: { category: string; projectName: string; workshopSourceMarker: boolean } | null;
 };
+
+export type CreativeWorkshopModifiedOfficialBaselineEntry = {
+  worldbookName: string;
+  name: string;
+};
+
+function normalizeBaselineText(value: unknown): string {
+  return String(value ?? '').replace(/\r\n/g, '\n').trim();
+}
+
+async function sha256Hex(value: string): Promise<string | null> {
+  try {
+    if (!globalThis.crypto?.subtle) return null;
+    const bytes = new TextEncoder().encode(value);
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+  } catch (error) {
+    console.warn('[CreativeWorkshop] official baseline fingerprint 计算失败', error);
+    return null;
+  }
+}
+
+async function fingerprintWorldbookEntry(entry: WorldbookEntry): Promise<string | null> {
+  const raw = entry as any;
+  const canonical = {
+    name: normalizeBaselineText(raw.name ?? raw.comment),
+    content: normalizeBaselineText(raw.content),
+  };
+  return sha256Hex(JSON.stringify(canonical));
+}
 
 function getRepairScopeKey() {
   return getCurrentCharacterName() || '__no_character__';
@@ -220,6 +268,9 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   availableWorldbookNames: string[];
   enabledWorldbookNames: string[];
   scannedWorldbookNames: string[];
+  officialBaselineVersion: string;
+  officialBaselineSkippedCount: number;
+  modifiedOfficialBaselineEntries: CreativeWorkshopModifiedOfficialBaselineEntry[];
 }> {
   const availableWorldbookNames = _.uniq(getWorldbookNames().filter(name => _.isString(name) && Boolean(name)));
   const availableWorldbookNameSet = new Set(availableWorldbookNames);
@@ -242,10 +293,37 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
     }),
   );
 
-  const entryRows: CandidateEntryRow[] = rows
-    .filter(row => row.readable)
-    .flatMap(row => row.entries.map(entry => ({ worldbookName: row.worldbookName, entry, header: parseDlcEntryName(entry.name) })))
-    .filter(row => row.header || readStringMetadata(row.entry, 'cw_project_id') || readStringMetadata(row.entry, 'fate_project_name'));
+  let officialBaselineSkippedCount = 0;
+  const modifiedOfficialBaselineEntries: CreativeWorkshopModifiedOfficialBaselineEntry[] = [];
+  const entryRows: CandidateEntryRow[] = [];
+
+  for (const row of rows.filter(row => row.readable)) {
+    for (const entry of row.entries) {
+      const header = parseDlcEntryName(entry.name);
+      const currentProjectId = readStringMetadata(entry, 'cw_project_id');
+      const legacyProjectName = readStringMetadata(entry, 'fate_project_name');
+
+      if (header && !currentProjectId && !legacyProjectName) {
+        const baselineEntry = OFFICIAL_WORLDBOOK_BASELINE_BY_NAME.get(normalizeBaselineText((entry as any).name ?? (entry as any).comment));
+        if (baselineEntry) {
+          const fingerprint = await fingerprintWorldbookEntry(entry);
+          if (fingerprint && fingerprint === baselineEntry.fingerprint) {
+            officialBaselineSkippedCount += 1;
+          } else {
+            modifiedOfficialBaselineEntries.push({
+              worldbookName: row.worldbookName,
+              name: normalizeBaselineText((entry as any).name ?? (entry as any).comment),
+            });
+          }
+          continue;
+        }
+      }
+
+      if (header || currentProjectId || legacyProjectName) {
+        entryRows.push({ worldbookName: row.worldbookName, entry, header });
+      }
+    }
+  }
 
   const grouped = _.groupBy(entryRows, row => {
     const name = row.header?.projectName ||
@@ -316,6 +394,9 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
     availableWorldbookNames,
     enabledWorldbookNames,
     scannedWorldbookNames: requestedWorldbookNames,
+    officialBaselineVersion: OFFICIAL_WORLDBOOK_BASELINE_VERSION,
+    officialBaselineSkippedCount,
+    modifiedOfficialBaselineEntries,
   };
 }
 
