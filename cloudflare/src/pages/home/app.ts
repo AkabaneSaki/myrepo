@@ -487,6 +487,30 @@ export const homeScript = String.raw`
         openMobileTool(button.dataset.mobileTool || 'search');
       });
     });
+    document.querySelectorAll('.discover-shelf').forEach(shelf => {
+      const track = shelf.querySelector('[data-shelf-track]');
+      if (!track) return;
+      const buttons = shelf.querySelectorAll('[data-shelf-scroll]');
+      const updateShelfButtons = () => {
+        const maxScrollLeft = Math.max(0, track.scrollWidth - track.clientWidth);
+        buttons.forEach(button => {
+          const direction = Number(button.dataset.shelfScroll || 0);
+          button.disabled = direction < 0 ? track.scrollLeft <= 2 : track.scrollLeft >= maxScrollLeft - 2;
+        });
+      };
+      buttons.forEach(button => {
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const direction = Number(button.dataset.shelfScroll || 0);
+          if (!direction) return;
+          const distance = Math.max(240, Math.round(track.clientWidth * 0.82));
+          track.scrollBy({ left: direction * distance, behavior: 'smooth' });
+        });
+      });
+      track.addEventListener('scroll', updateShelfButtons, { passive: true });
+      requestAnimationFrame(updateShelfButtons);
+    });
     document.querySelectorAll('[data-return-all-projects]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();

@@ -267,7 +267,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .discover-shelf { margin-top:22px; }
   .discover-shelf-head { min-height:38px; padding-bottom:7px; }
   .discover-shelf-head h2 { font-size:.95rem; }
-  .discover-shelf-controls { display:none; }
+  .discover-shelf-controls,.discover-shelf-scroll { display:none; }
   .discover-shelf-track { gap:10px; margin-right:-10px; padding-right:36px; scroll-snap-type:x mandatory; }
   .discover-shelf-item { flex-basis:min(70vw,238px); }
   .discover-more-card { padding:16px; }
@@ -756,8 +756,14 @@ body { background:#0f1012; color:#ececea; }
 .discover-shelf-controls { display:flex; gap:6px; flex:none; }
 .discover-shelf-controls button { width:32px; height:32px; display:grid; place-items:center; border:1px solid rgba(255,255,255,.075); border-radius:50%; background:#1c1d20; color:#85837e; cursor:pointer; }
 .discover-shelf-controls button:hover { border-color:rgba(162,139,107,.25); color:#c6b08d; background:rgba(162,139,107,.07); }
+.discover-shelf-track-shell { position:relative; min-width:0; }
 .discover-shelf-track { display:flex; align-items:stretch; gap:12px; min-width:0; overflow-x:auto; overflow-y:hidden; padding:3px 34px 10px 1px; scroll-snap-type:x proximity; scroll-behavior:smooth; overscroll-behavior-x:contain; scrollbar-width:none; }
 .discover-shelf-track::-webkit-scrollbar { display:none; }
+.discover-shelf-scroll { position:absolute; top:44%; z-index:4; width:38px; height:38px; display:grid; place-items:center; border:1px solid rgba(255,255,255,.14); border-radius:50%; background:rgba(24,25,28,.88); color:#dedbd5; box-shadow:0 7px 20px rgba(0,0,0,.28); transform:translateY(-50%); cursor:pointer; backdrop-filter:blur(8px); transition:opacity .14s ease,border-color .14s ease,background .14s ease; }
+.discover-shelf-scroll--prev { left:8px; }
+.discover-shelf-scroll--next { right:8px; }
+.discover-shelf-scroll:hover:not(:disabled) { border-color:rgba(190,164,125,.42); background:rgba(36,34,31,.96); color:#e8d5b8; }
+.discover-shelf-scroll:disabled { opacity:0; pointer-events:none; }
 .discover-shelf-item { flex:0 0 clamp(190px,calc((100% - 48px)/5),248px); min-width:0; scroll-snap-align:start; }
 .discover-card { min-width:0; cursor:pointer; outline:none; }
 .discover-card:focus-visible .discover-card-cover { outline:2px solid rgba(190,164,125,.7); outline-offset:3px; }

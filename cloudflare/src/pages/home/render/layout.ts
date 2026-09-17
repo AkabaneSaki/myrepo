@@ -184,7 +184,7 @@ export const homeLayoutRenderScript = [
   'function renderDiscoverShelf(title, subtitle, projects, options = {}) {',
   '  const items = (projects || []).map(project => `<div class="discover-shelf-item">${renderDiscoverCard(project)}</div>`).join("");',
   '  const moreCard = options.moreSort ? `<div class="discover-shelf-item discover-shelf-item--more">${renderDiscoverMoreCard(options.moreSort, options.moreLabel || title)}</div>` : "";',
-  '  return `<section class="discover-shelf"><div class="discover-shelf-head"><div><small>${escapeHtml(subtitle)}</small><h2>${escapeHtml(title)}</h2></div></div><div class="discover-shelf-track" data-shelf-track>${items}${moreCard}</div></section>`;',
+  '  return `<section class="discover-shelf"><div class="discover-shelf-head"><div><small>${escapeHtml(subtitle)}</small><h2>${escapeHtml(title)}</h2></div></div><div class="discover-shelf-track-shell"><button type="button" class="discover-shelf-scroll discover-shelf-scroll--prev" data-shelf-scroll="-1" aria-label="向左浏览${escapeHtml(title)}"><i class="fas fa-chevron-left"></i></button><div class="discover-shelf-track" data-shelf-track>${items}${moreCard}</div><button type="button" class="discover-shelf-scroll discover-shelf-scroll--next" data-shelf-scroll="1" aria-label="向右浏览${escapeHtml(title)}"><i class="fas fa-chevron-right"></i></button></div></section>`;',
   '}',
   'function renderDiscoverBanner() {',
   '  const banner = state.discoverBanner || {};',
