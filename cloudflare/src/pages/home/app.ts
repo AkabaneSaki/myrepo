@@ -1,6 +1,7 @@
 import { homeApiScript } from './api';
 import { homeModalsScript } from './modals';
 import { homePresentationScript } from './presentation';
+import { homePublishCheckScript } from './publish-check';
 import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
 import { homeReviewDiffRenderScript } from './render/review-diff';
@@ -31,6 +32,7 @@ export const homeScript = String.raw`
   ${homeUploadPreviewScript}
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
+  ${homePublishCheckScript}
   ${homeModalsScript}
   ${homeRepairScript}
   ${homePresentationScript}

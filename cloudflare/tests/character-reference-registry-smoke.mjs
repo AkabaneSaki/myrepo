@@ -4,11 +4,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { computeCompatibilityStatus } from '../src/utils/character-reference.ts';
 
 const migration = await readFile(new URL('../migrations/0014_character_reference_registry.sql', import.meta.url), 'utf8');
+const conflictMigration = await readFile(new URL('../migrations/0015_project_original_conflicts.sql', import.meta.url), 'utf8');
 
 {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON; CREATE TABLE projects (id TEXT PRIMARY KEY);');
   db.exec(migration);
+  db.exec(conflictMigration);
 
   const tables = new Set(
     db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => String(row.name)),
@@ -34,6 +36,8 @@ const migration = await readFile(new URL('../migrations/0014_character_reference
     'compatibility_note',
     'compatibility_grace_until',
     'compatibility_updated_at',
+    'conflicts_with_original',
+    'original_conflict_reference_item_ids',
   ]) {
     assert.ok(projectColumns.has(required), `missing projects.${required}`);
   }
@@ -100,7 +104,7 @@ const migration = await readFile(new URL('../migrations/0014_character_reference
   );
   assert.equal(
     computeCompatibilityStatus({ builtForOrdinal: 2, testedThroughOrdinal: null, latestOrdinal: 2 }),
-    'pending_latest',
+    null,
   );
   assert.equal(
     computeCompatibilityStatus({ builtForOrdinal: 1, testedThroughOrdinal: null, latestOrdinal: 2 }),

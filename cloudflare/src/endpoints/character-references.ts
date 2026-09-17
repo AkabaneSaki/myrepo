@@ -5,6 +5,7 @@ import {
   createCharacterReference,
   createCharacterReferenceVersion,
   listCharacterReferences,
+  listCharacterReferenceVersionItems,
   updateProjectCompatibilityMetadata,
 } from '../utils/character-reference.ts';
 import { projectDb } from '../utils/db';
@@ -24,6 +25,25 @@ export class CharacterReferenceList extends OpenAPIRoute {
       success: true,
       references: await listCharacterReferences(c),
     };
+  }
+}
+
+export class CharacterReferenceVersionItems extends OpenAPIRoute {
+  schema = {
+    tags: ['Character References'],
+    summary: 'List Character Reference Version Items',
+    request: {
+      params: z.object({ versionId: Str({ description: 'Character Reference Version ID' }) }),
+    },
+    responses: {
+      '200': { description: 'Reference version items' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const data = await this.getValidatedData<typeof this.schema>();
+    const items = await listCharacterReferenceVersionItems(c, data.params.versionId);
+    return { success: true, items };
   }
 }
 

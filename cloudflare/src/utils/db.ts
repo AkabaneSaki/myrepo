@@ -233,6 +233,8 @@ export const projectDb = {
       compatibilityNote?: string | null;
       compatibilityGraceUntil?: string | null;
       compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -271,8 +273,8 @@ export const projectDb = {
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
-				created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				conflicts_with_original, original_conflict_reference_item_ids, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -315,6 +317,8 @@ export const projectDb = {
         project.compatibilityNote || null,
         project.compatibilityGraceUntil || null,
         project.compatibilityUpdatedAt || null,
+        project.conflictsWithOriginal ? 1 : 0,
+        JSON.stringify(project.originalConflictReferenceItemIds || []),
         now(),
         now(),
       )
@@ -383,6 +387,8 @@ export const projectDb = {
       compatibilityNote?: string | null;
       compatibilityGraceUntil?: string | null;
       compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -458,6 +464,14 @@ export const projectDb = {
     if (updates.compatibilityUpdatedAt !== undefined) {
       setClauses.push('compatibility_updated_at = ?');
       values.push(updates.compatibilityUpdatedAt);
+    }
+    if (updates.conflictsWithOriginal !== undefined) {
+      setClauses.push('conflicts_with_original = ?');
+      values.push(updates.conflictsWithOriginal ? 1 : 0);
+    }
+    if (updates.originalConflictReferenceItemIds !== undefined) {
+      setClauses.push('original_conflict_reference_item_ids = ?');
+      values.push(JSON.stringify(updates.originalConflictReferenceItemIds));
     }
     if (updates.projectType !== undefined) {
       setClauses.push('project_type = ?');
@@ -1068,6 +1082,8 @@ export const projectDb = {
       compatibilityNote?: string | null;
       compatibilityGraceUntil?: string | null;
       compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -1098,6 +1114,8 @@ export const projectDb = {
         compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : existingDraft.compatibilityNote,
         compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : existingDraft.compatibilityGraceUntil,
         compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
+        conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : existingDraft.conflictsWithOriginal,
+        originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : existingDraft.originalConflictReferenceItemIds,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
@@ -1128,6 +1146,8 @@ export const projectDb = {
       compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : published.compatibilityNote,
       compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : published.compatibilityGraceUntil,
       compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
+      conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : published.conflictsWithOriginal,
+      originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -1429,5 +1449,14 @@ function parseProjectRow(row: Record<string, unknown>) {
     compatibilityNote: row.compatibility_note as string | null,
     compatibilityGraceUntil: row.compatibility_grace_until as string | null,
     compatibilityUpdatedAt: row.compatibility_updated_at as string | null,
+    conflictsWithOriginal: Number(row.conflicts_with_original ?? 0) === 1,
+    originalConflictReferenceItemIds: (() => {
+      try {
+        const value = JSON.parse(String(row.original_conflict_reference_item_ids || '[]'));
+        return Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 500) : [];
+      } catch {
+        return [];
+      }
+    })(),
   };
 }

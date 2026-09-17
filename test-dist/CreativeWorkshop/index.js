@@ -154,6 +154,7 @@ function setCreativeWorkshopInstallRecord(projectId, patch) {
         projectId,
         worldbookName: patch.worldbookName !== undefined ? patch.worldbookName : current?.worldbookName ?? null,
         installedVersion: patch.installedVersion !== undefined ? patch.installedVersion : current?.installedVersion ?? null,
+        originalEntryStates: patch.originalEntryStates !== undefined ? patch.originalEntryStates : current?.originalEntryStates ?? [],
         installedAt: Date.now(),
     };
     writeInstallRegistry(registry);
@@ -356,6 +357,27 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         }
         throw error;
     }
+}
+async function fetchCreativeWorkshopReferenceVersionItems(referenceVersionId) {
+    if (!referenceVersionId)
+        return [];
+    const response = await fetch(`${getCreativeWorkshopUrl()}/api/character-references/versions/${encodeURIComponent(referenceVersionId)}/items`, { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error(`读取原版内容失败: ${response.status}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data?.items)
+        ? data.items
+            .filter((item) => _.isObject(item))
+            .map((item) => ({
+            id: String(item.id || ''),
+            referenceVersionId: String(item.referenceVersionId || referenceVersionId),
+            kind: item.kind === 'regex' ? 'regex' : 'worldbook',
+            sourceKey: _.isString(item.sourceKey) ? String(item.sourceKey) : null,
+            displayName: String(item.displayName || ''),
+        }))
+            .filter((item) => Boolean(item.id && item.displayName))
+        : [];
 }
 
 ;// ./src/CreativeWorkshop/services/project-type.ts
@@ -799,6 +821,168 @@ async function updateCreativeWorkshopRegex(projectId, expectedVersion, legacyPro
     return installCreativeWorkshopRegex(projectId, undefined, expectedVersion, legacyProjectName);
 }
 
+;// ./src/CreativeWorkshop/services/original-conflicts.ts
+
+
+function getOriginalEntryName(entry) {
+    return String(entry.comment || entry.name || '').trim();
+}
+function getEntryUid(entry) {
+    const uid = entry.uid;
+    return uid === undefined || uid === null || uid === '' ? null : String(uid);
+}
+function getEntryEnabled(entry) {
+    const enabled = entry.enabled;
+    if (typeof enabled === 'boolean')
+        return enabled;
+    const disable = entry.disable;
+    if (typeof disable === 'boolean')
+        return !disable;
+    return true;
+}
+function stateClaimKey(state) {
+    const localIdentity = state.entryUid ? `uid:${state.entryUid}` : `name:${state.displayName}`;
+    return `${state.worldbookName} ${localIdentity}`;
+}
+function entryMatchesState(entry, state) {
+    if (state.entryUid)
+        return getEntryUid(entry) === state.entryUid;
+    return getOriginalEntryName(entry) === state.displayName;
+}
+function getOtherOriginalEntryClaims(projectId) {
+    const claims = new Map();
+    for (const [otherProjectId, record] of Object.entries(getCreativeWorkshopInstallRecords())) {
+        if (otherProjectId === projectId)
+            continue;
+        for (const state of record.originalEntryStates || []) {
+            claims.set(stateClaimKey(state), state);
+        }
+    }
+    return claims;
+}
+async function loadCharacterWorldbooks() {
+    const bound = getCharWorldbookNames('current');
+    const names = _.uniq([bound.primary, ...(bound.additional || [])]).filter((name) => _.isString(name) && Boolean(name));
+    const existing = new Set(getWorldbookNames());
+    const loaded = [];
+    for (const name of names) {
+        if (!existing.has(name))
+            continue;
+        loaded.push({ name, entries: await getWorldbook(name) });
+    }
+    return loaded;
+}
+function resolveUniqueMatch(item, matches, reason) {
+    if (matches.length <= 1)
+        return matches[0] || null;
+    const label = reason === 'uid' ? '同一个 UID' : '同名';
+    throw new Error(`原版内容「${item.displayName}」出现多个${label}条目，为避免误关内容已中止`);
+}
+function findReferenceItemInWorldbooks(item, worldbooks) {
+    const nameMatches = worldbooks.flatMap(worldbook => worldbook.entries
+        .filter(entry => getOriginalEntryName(entry) === item.displayName)
+        .map(entry => ({ worldbookName: worldbook.name, entry })));
+    const byName = resolveUniqueMatch(item, nameMatches, 'name');
+    if (byName)
+        return byName;
+    if (item.sourceKey?.startsWith('uid:')) {
+        const expectedUid = item.sourceKey.slice(4);
+        const uidMatches = worldbooks.flatMap(worldbook => worldbook.entries
+            .filter(entry => getEntryUid(entry) === expectedUid)
+            .map(entry => ({ worldbookName: worldbook.name, entry })));
+        return resolveUniqueMatch(item, uidMatches, 'uid');
+    }
+    return null;
+}
+function assertStateIsUnambiguous(worldbook, state) {
+    const count = worldbook.filter(entry => entryMatchesState(entry, state)).length;
+    if (count <= 1)
+        return;
+    throw new Error(`原版内容「${state.displayName}」现在出现多个匹配条目，为避免误改已中止`);
+}
+async function applyOriginalEntryStates(projectId, desiredStates, previousStates) {
+    const desiredKeys = new Set(desiredStates.map(stateClaimKey));
+    const otherClaims = getOtherOriginalEntryClaims(projectId);
+    const worldbookNames = _.uniq([
+        ...desiredStates.map(state => state.worldbookName),
+        ...previousStates.map(state => state.worldbookName),
+    ]);
+    for (const worldbookName of worldbookNames) {
+        const desiredForBook = desiredStates.filter(state => state.worldbookName === worldbookName);
+        const restoreForBook = previousStates
+            .filter(state => state.worldbookName === worldbookName)
+            .filter(state => !desiredKeys.has(stateClaimKey(state)))
+            .filter(state => !otherClaims.has(stateClaimKey(state)));
+        if (desiredForBook.length === 0 && restoreForBook.length === 0)
+            continue;
+        await updateWorldbookWith(worldbookName, worldbook => {
+            for (const state of [...desiredForBook, ...restoreForBook]) {
+                assertStateIsUnambiguous(worldbook, state);
+            }
+            return worldbook.map(entry => {
+                const desired = desiredForBook.find(state => entryMatchesState(entry, state));
+                if (desired)
+                    return { ...entry, enabled: false };
+                const restore = restoreForBook.find(state => entryMatchesState(entry, state));
+                if (restore)
+                    return { ...entry, enabled: restore.wasEnabled };
+                return entry;
+            });
+        });
+    }
+}
+async function syncCreativeWorkshopOriginalConflicts(projectId, detail) {
+    const project = detail.project || {};
+    const previousStates = getCreativeWorkshopInstallRecord(projectId)?.originalEntryStates || [];
+    const requestedIds = project.conflictsWithOriginal && Array.isArray(project.originalConflictReferenceItemIds)
+        ? project.originalConflictReferenceItemIds.map(String).filter(Boolean)
+        : [];
+    if (requestedIds.length === 0) {
+        await applyOriginalEntryStates(projectId, [], previousStates);
+        return [];
+    }
+    const referenceVersionId = String(project.builtForReferenceVersionId || '');
+    if (!referenceVersionId)
+        throw new Error('这个 DLC 没有记录对应的角色卡版本，无法自动切换原版内容');
+    const items = await fetchCreativeWorkshopReferenceVersionItems(referenceVersionId);
+    const requested = new Set(requestedIds);
+    const selectedItems = items.filter(item => item.kind === 'worldbook' && requested.has(item.id));
+    if (selectedItems.length !== requested.size) {
+        throw new Error('这个 DLC 记录的原版内容已经有变化，请让作者重新确认');
+    }
+    const worldbooks = await loadCharacterWorldbooks();
+    const otherClaims = getOtherOriginalEntryClaims(projectId);
+    const desiredStates = [];
+    for (const item of selectedItems) {
+        const located = findReferenceItemInWorldbooks(item, worldbooks);
+        if (!located) {
+            throw new Error(`找不到原版内容「${item.displayName}」，请确认角色卡版本是否正确`);
+        }
+        const localStateIdentity = {
+            referenceItemId: item.id,
+            worldbookName: located.worldbookName,
+            displayName: getOriginalEntryName(located.entry),
+            entryUid: getEntryUid(located.entry),
+            wasEnabled: getEntryEnabled(located.entry),
+        };
+        const key = stateClaimKey(localStateIdentity);
+        const previous = previousStates.find(state => stateClaimKey(state) === key);
+        const inherited = otherClaims.get(key);
+        desiredStates.push({
+            ...localStateIdentity,
+            wasEnabled: previous?.wasEnabled ?? inherited?.wasEnabled ?? localStateIdentity.wasEnabled,
+        });
+    }
+    await applyOriginalEntryStates(projectId, desiredStates, previousStates);
+    return desiredStates;
+}
+async function restoreCreativeWorkshopOriginalConflicts(projectId, statesOverride) {
+    const previousStates = statesOverride || getCreativeWorkshopInstallRecord(projectId)?.originalEntryStates || [];
+    if (previousStates.length === 0)
+        return;
+    await applyOriginalEntryStates(projectId, [], previousStates);
+}
+
 ;// ./src/CreativeWorkshop/services/worldbook-reconcile.ts
 function getEntryExtra(entry) {
     const extra = entry.extra;
@@ -979,6 +1163,7 @@ function getCreativeWorkshopFiniteNumber(entry, rawPath, previewPath, defaultVal
 }
 
 ;// ./src/CreativeWorkshop/services/worldbook.ts
+
 
 
 
@@ -1175,24 +1360,42 @@ async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredW
 async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion) {
     invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
-    if (prepared.length === 0)
+    if (prepared.length === 0) {
+        const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+        setCreativeWorkshopInstallRecord(projectId, {
+            worldbookName: null,
+            installedVersion: detail.project.version || expectedVersion || null,
+            originalEntryStates,
+        });
         return detail;
+    }
     const worldbookName = requestedWorldbookName
         ? await ensureCreativeWorkshopTargetWorldbook(requestedWorldbookName)
         : getCurrentWorldbookName();
     await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
+    let originalEntryStates;
+    try {
+        originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+    }
+    catch (error) {
+        await deleteProjectEntriesFromWorldbook(projectId, worldbookName);
+        throw error;
+    }
     setCreativeWorkshopInstallRecord(projectId, {
         worldbookName,
         installedVersion: detail.project.version || expectedVersion || null,
+        originalEntryStates,
     });
     return detail;
 }
 async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
     const worldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
-    if (!worldbookName)
-        return [];
-    const deletedEntries = await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName);
-    await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+    const deletedEntries = worldbookName
+        ? await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName)
+        : [];
+    if (worldbookName)
+        await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
+    await restoreCreativeWorkshopOriginalConflicts(projectId);
     return deletedEntries;
 }
 async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName) {
@@ -1217,12 +1420,14 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
         worldbookName = getCurrentWorldbookName();
         await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
     }
+    const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
     if (legacyProjectName && legacyProjectName !== projectId) {
         deleteCreativeWorkshopInstallRecord(legacyProjectName);
     }
     setCreativeWorkshopInstallRecord(projectId, {
         worldbookName: prepared.length > 0 ? worldbookName : null,
         installedVersion: detail.project.version || expectedVersion || null,
+        originalEntryStates,
     });
     return detail;
 }

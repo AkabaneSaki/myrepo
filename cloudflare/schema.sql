@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS projects (
     compatibility_note TEXT,
     compatibility_grace_until TEXT,
     compatibility_updated_at TEXT,
+    conflicts_with_original INTEGER NOT NULL DEFAULT 0,
+    original_conflict_reference_item_ids TEXT NOT NULL DEFAULT '[]',
     FOREIGN KEY (author_id) REFERENCES users(id)
 );
 

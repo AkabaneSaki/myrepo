@@ -34,6 +34,14 @@ export type CharacterReferenceSummary = {
   versions: CharacterReferenceVersionSummary[];
 };
 
+export type CharacterReferenceItemSummary = {
+  id: string;
+  referenceVersionId: string;
+  kind: 'worldbook' | 'regex';
+  sourceKey: string | null;
+  displayName: string;
+};
+
 type ReferenceVersionRow = {
   id: string;
   character_reference_id: string;
@@ -60,9 +68,10 @@ export function computeCompatibilityStatus(input: {
   testedThroughOrdinal: number | null;
   latestOrdinal: number;
   knownIncompatible?: boolean;
-}): CompatibilityStatus {
+}): CompatibilityStatus | null {
   if (input.knownIncompatible) return 'known_incompatible';
   if (input.testedThroughOrdinal === input.latestOrdinal) return 'compatible_latest';
+  if (input.builtForOrdinal === input.latestOrdinal && input.testedThroughOrdinal === null) return null;
   if (input.builtForOrdinal < input.latestOrdinal && input.testedThroughOrdinal === null) return 'based_on_older';
   return 'pending_latest';
 }
@@ -145,6 +154,56 @@ export async function resolveProjectCompatibilitySelection(
     }),
     compatibilityGraceUntil: latest.grace_until,
   };
+}
+
+export async function listCharacterReferenceVersionItems(
+  c: AppContext,
+  referenceVersionId: string,
+): Promise<CharacterReferenceItemSummary[]> {
+  const result = await c.env.DB.prepare(
+    `SELECT id, reference_version_id, kind, source_key, display_name
+     FROM character_reference_items
+     WHERE reference_version_id = ?
+     ORDER BY kind ASC, display_name COLLATE NOCASE ASC`,
+  )
+    .bind(referenceVersionId)
+    .all<Record<string, unknown>>();
+
+  return (result.results || []).map(row => ({
+    id: String(row.id),
+    referenceVersionId: String(row.reference_version_id),
+    kind: String(row.kind) === 'regex' ? 'regex' : 'worldbook',
+    sourceKey: row.source_key === null || row.source_key === undefined ? null : String(row.source_key),
+    displayName: String(row.display_name || '无标题'),
+  }));
+}
+
+export async function validateOriginalConflictReferenceItems(
+  c: AppContext,
+  referenceVersionId: string | null | undefined,
+  itemIds: string[] | null | undefined,
+): Promise<string[]> {
+  const uniqueIds = Array.from(new Set((itemIds || []).map(value => String(value).trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  if (!referenceVersionId) throw new Error('请先确认当前角色卡版本');
+  if (uniqueIds.length > 500) throw new Error('选择的原版内容太多，请重新选择');
+
+  const result = await c.env.DB.prepare(
+    `SELECT id, display_name
+     FROM character_reference_items
+     WHERE reference_version_id = ?
+       AND kind = 'worldbook'
+       AND id IN (SELECT value FROM json_each(?))`,
+  )
+    .bind(referenceVersionId, JSON.stringify(uniqueIds))
+    .all<Record<string, unknown>>();
+
+  const rows = result.results || [];
+  if (rows.length !== uniqueIds.length) throw new Error('有些原版内容已经找不到，请重新选择');
+  if (rows.some(row => !String(row.display_name || '').startsWith('[本体]'))) {
+    throw new Error('只能选择原版内容');
+  }
+  return uniqueIds;
 }
 
 export async function listCharacterReferences(c: AppContext): Promise<CharacterReferenceSummary[]> {

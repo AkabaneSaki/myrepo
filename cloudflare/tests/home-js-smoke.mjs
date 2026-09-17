@@ -29,6 +29,7 @@ const fragments = {
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
+  homePublishCheckScript: await evaluateStandalone('src/pages/home/publish-check.ts', 'homePublishCheckScript'),
   homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
   homeRepairScript: await evaluateStandalone('src/pages/home/repair-ui.ts', 'homeRepairScript'),
   homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
@@ -170,9 +171,43 @@ assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" mu
 assert.doesNotMatch(fragments.homeModalsScript, /!payload\.name \|\| !fileInput\.files\[0\]/);
 assert.match(fragments.homeModalsScript, /validateProjectTaxonomySelection\(payload\)/);
 assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.projectType, hasWorldbook, hasRegex\)/);
-assert.match(fragments.homeModalsScript, /id=\"extensionType\"/);
+assert.doesNotMatch(fragments.homeModalsScript, /id=\"extensionType\"/);
 assert.match(fragments.homeModalsScript, /data-facet-group/);
 assert.match(fragments.homeModalsScript, /taxonomy-chip/);
+assert.match(fragments.homeModalsScript, /creator-tag-picker/);
+assert.match(fragments.homeModalsScript, /封面展示标签（可选）/);
+assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences\)/);
+assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences, project\)/);
+assert.match(fragments.homePublishCheckScript, /发布前检查/);
+assert.match(fragments.homePublishCheckScript, /parseOriginalBaselineItem/);
+assert.match(fragments.homePublishCheckScript, /tags\[0\] !== '本体'/);
+assert.match(fragments.homePublishCheckScript, /显示系统内容/);
+assert.match(fragments.homePublishCheckScript, /data-original-entry-id/);
+assert.match(fragments.homePublishCheckScript, /event\.target === overlay/);
+assert.match(fragments.homeApiScript, /fetchCharacterReferenceVersionItems/);
+const publishCheckUi = Function(
+  'escapeHtml',
+  `${fragments.homePublishCheckScript}; return { parseOriginalBaselineItem, buildOriginalBaselineTree };`,
+)(value => String(value));
+const groupedOriginal = publishCheckUi.parseOriginalBaselineItem({
+  id: 'base-1',
+  kind: 'worldbook',
+  displayName: '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街',
+});
+assert.deepEqual(groupedOriginal.path, ['势力', '诺斯加德联盟', '城镇', '白曜城']);
+assert.equal(groupedOriginal.title, '五馆街');
+assert.equal(publishCheckUi.parseOriginalBaselineItem({ id: 'dlc-1', kind: 'worldbook', displayName: '[DLC][角色]测试' }), null);
+const systemOriginal = publishCheckUi.parseOriginalBaselineItem({ id: 'system-1', kind: 'worldbook', displayName: '[本体][变量][mvu_update]测试' });
+assert.equal(systemOriginal.system, true);
+const treeResult = publishCheckUi.buildOriginalBaselineTree([
+  { id: 'base-1', kind: 'worldbook', displayName: '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街' },
+  { id: 'system-1', kind: 'worldbook', displayName: '[本体][变量][mvu_update]测试' },
+], new Set(), { query: '白曜城', showSystem: false });
+assert.equal(treeResult.visibleCount, 1);
+assert.match(treeResult.html, /诺斯加德联盟/);
+assert.match(treeResult.html, /白曜城/);
+assert.match(treeResult.html, /五馆街/);
+assert.doesNotMatch(treeResult.html, /mvu_update/);
 assert.match(fragments.homeModalsScript, /preparedWorldbook = hasWorldbook \?/);
 assert.match(fragments.homeModalsScript, /async function beginProjectInstall/);
 assert.match(fragments.homeModalsScript, /if \(worldbookEntries\.length > 0\)/);
@@ -287,7 +322,7 @@ assert.match(fragments.homeDetailModalRenderScript, /顺序 \${order}/);
 assert.match(fragments.homeDetailModalRenderScript, /type === \"at_depth\"/);
 assert.doesNotMatch(fragments.homeDetailModalRenderScript, /<span>深度 \${depth}<\/span>/);
 assert.match(fragments.homeReviewDiffRenderScript, /renderWorldbookEntryBehaviorMeta/);
-assert.match(fragments.homeModalsScript, /版本备注（可选）/);
+assert.match(fragments.homeModalsScript, /版本号（可选）/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateCode\"/);
 assert.match(fragments.homeModalsScript, /codeField\.select\(\)/);
 assert.match(fragments.homeModalsScript, /document\.execCommand\("copy"\)/);
@@ -305,7 +340,7 @@ assert.match(fragments.homeDetailModalRenderScript, /detail-stats-row/);
 assert.match(fragments.homeDetailModalRenderScript, /detail-like-btn/);
 assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)/);
 assert.match(fragments.homeModalsScript, /data-display-tag/);
-assert.match(fragments.homeModalsScript, /首页最多显示/);
+assert.match(fragments.homeModalsScript, /封面最多显示/);
 assert.match(fragments.homeModalsScript, /normalizeCustomTagsInput/);
 assert.match(fragments.homeCardsRenderScript, /fa-images/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /creatorTagsHtml/);

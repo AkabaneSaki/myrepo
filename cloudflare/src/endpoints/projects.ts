@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../types';
 import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../utils/db';
-import { resolveProjectCompatibilitySelection } from '../utils/character-reference.ts';
+import { resolveProjectCompatibilitySelection, validateOriginalConflictReferenceItems } from '../utils/character-reference.ts';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import {
   removeProjectEntryFromJson,
@@ -375,6 +375,9 @@ export class ProjectCreate extends OpenAPIRoute {
               description: Str({ required: false }).describe('Project description'),
               versionLabel: z.string().max(80).nullable().optional(),
               builtForReferenceVersionId: z.string().max(120).nullable().optional(),
+              compatibilityConfirmed: z.boolean().optional(),
+              conflictsWithOriginal: z.boolean().optional(),
+              originalConflictReferenceItemIds: z.array(z.string()).max(500).optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -432,7 +435,7 @@ export class ProjectCreate extends OpenAPIRoute {
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
 
       const taxonomyResult = normalizeProjectTaxonomyInput(rawBody as Record<string, unknown>, {
-        requireExtensionSubtypeForExplicitType: true,
+        requireExtensionSubtypeForExplicitType: false,
       });
       if (!taxonomyResult.value) {
         return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
@@ -450,11 +453,25 @@ export class ProjectCreate extends OpenAPIRoute {
         return c.json({ error: 'Version label must be 80 characters or fewer' }, 400);
       }
 
+      const compatibilityConfirmed = rawBody.compatibilityConfirmed === true;
+      const conflictsWithOriginal = rawBody.conflictsWithOriginal === true;
+      const requestedConflictItemIds = Array.isArray(rawBody.originalConflictReferenceItemIds)
+        ? rawBody.originalConflictReferenceItemIds.map(String)
+        : [];
+
       let compatibilitySelection;
+      let originalConflictReferenceItemIds: string[] = [];
       try {
         compatibilitySelection = await resolveProjectCompatibilitySelection(c, {
           builtForReferenceVersionId,
+          testedThroughReferenceVersionId: compatibilityConfirmed ? builtForReferenceVersionId : null,
         });
+        originalConflictReferenceItemIds = conflictsWithOriginal
+          ? await validateOriginalConflictReferenceItems(c, compatibilitySelection.builtForReferenceVersionId, requestedConflictItemIds)
+          : [];
+        if (conflictsWithOriginal && originalConflictReferenceItemIds.length === 0) {
+          return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
+        }
       } catch (error) {
         return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
       }
@@ -485,6 +502,8 @@ export class ProjectCreate extends OpenAPIRoute {
         compatibilityKnownIncompatible: false,
         compatibilityGraceUntil: compatibilitySelection.compatibilityGraceUntil,
         compatibilityUpdatedAt: compatibilitySelection.builtForReferenceVersionId ? new Date().toISOString() : null,
+        conflictsWithOriginal,
+        originalConflictReferenceItemIds,
         authorId: payload.userId,
         authorName: payload.username,
         authorAvatar: payload.avatar || '',
@@ -940,6 +959,9 @@ export class ProjectUpdate extends OpenAPIRoute {
               description: Str({ required: false }),
               versionLabel: z.string().max(80).nullable().optional(),
               builtForReferenceVersionId: z.string().max(120).nullable().optional(),
+              compatibilityConfirmed: z.boolean().optional(),
+              conflictsWithOriginal: z.boolean().optional(),
+              originalConflictReferenceItemIds: z.array(z.string()).max(500).optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -1018,39 +1040,61 @@ export class ProjectUpdate extends OpenAPIRoute {
     }
 
     const taxonomyResult = normalizeProjectTaxonomyInput(taxonomyInput, {
-      requireExtensionSubtypeForExplicitType: data.body.projectType === '扩展',
+      requireExtensionSubtypeForExplicitType: false,
     });
     if (!taxonomyResult.value) {
       return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
     }
     const taxonomy = taxonomyResult.value;
+    const targetBuiltForReferenceVersionId = data.body.builtForReferenceVersionId !== undefined
+      ? data.body.builtForReferenceVersionId
+      : project.builtForReferenceVersionId;
+    const shouldRefreshCompatibility = data.body.builtForReferenceVersionId !== undefined
+      || data.body.compatibilityConfirmed !== undefined;
     let compatibilityUpdates: Record<string, unknown> = {};
-    if (
-      data.body.builtForReferenceVersionId !== undefined
-      && data.body.builtForReferenceVersionId !== project.builtForReferenceVersionId
-    ) {
-      try {
+    let conflictUpdates: Record<string, unknown> = {};
+    try {
+      if (shouldRefreshCompatibility) {
+        const confirmed = data.body.compatibilityConfirmed === true;
         const selection = await resolveProjectCompatibilitySelection(c, {
-          builtForReferenceVersionId: data.body.builtForReferenceVersionId,
+          builtForReferenceVersionId: targetBuiltForReferenceVersionId,
+          testedThroughReferenceVersionId: confirmed ? targetBuiltForReferenceVersionId : null,
         });
         compatibilityUpdates = {
           characterReferenceId: selection.characterReferenceId,
           builtForReferenceVersionId: selection.builtForReferenceVersionId,
-          testedThroughReferenceVersionId: null,
+          testedThroughReferenceVersionId: selection.testedThroughReferenceVersionId,
           compatibilityStatus: selection.compatibilityStatus,
           compatibilityKnownIncompatible: false,
           compatibilityNote: null,
           compatibilityGraceUntil: selection.compatibilityGraceUntil,
           compatibilityUpdatedAt: selection.builtForReferenceVersionId ? new Date().toISOString() : null,
         };
-      } catch (error) {
-        return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
       }
+
+      if (data.body.conflictsWithOriginal !== undefined || data.body.originalConflictReferenceItemIds !== undefined) {
+        const conflictsWithOriginal = data.body.conflictsWithOriginal ?? project.conflictsWithOriginal;
+        const requestedIds = data.body.originalConflictReferenceItemIds ?? project.originalConflictReferenceItemIds;
+        const validatedIds = conflictsWithOriginal
+          ? await validateOriginalConflictReferenceItems(c, targetBuiltForReferenceVersionId, requestedIds)
+          : [];
+        if (conflictsWithOriginal && validatedIds.length === 0) {
+          return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
+        }
+        conflictUpdates = {
+          conflictsWithOriginal,
+          originalConflictReferenceItemIds: validatedIds,
+        };
+      }
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
     }
 
+    const { compatibilityConfirmed: _compatibilityConfirmed, ...bodyUpdates } = data.body;
     const updates = {
-      ...data.body,
+      ...bodyUpdates,
       ...compatibilityUpdates,
+      ...conflictUpdates,
       projectType: taxonomy.projectType,
       extensionType: taxonomy.extensionType,
       facets: taxonomy.facets,

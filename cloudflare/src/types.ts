@@ -163,6 +163,8 @@ export const Project = z.object({
   compatibilityNote: z.string().nullable().optional().describe('兼容性说明'),
   compatibilityGraceUntil: z.string().nullable().optional().describe('最新版兼容维护宽限期截止时间'),
   compatibilityUpdatedAt: z.string().nullable().optional().describe('兼容性 metadata 最近更新时间'),
+  conflictsWithOriginal: z.boolean().default(false).describe('是否需要暂时关闭原版世界书条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).default([]).describe('需要暂时关闭的原版条目基准 ID'),
 });
 
 // ============ API 请求/响应类型 ============
@@ -185,6 +187,9 @@ export const ProjectCreateRequest = z.object({
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
+  compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
+  conflictsWithOriginal: z.boolean().optional().describe('是否需要暂时关闭原版条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).optional().describe('需要暂时关闭的原版条目基准 ID'),
   projectType: ProjectCategory.optional().describe('项目基础分类；旧客户端可继续只发送 tags'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
@@ -203,6 +208,9 @@ export const ProjectUpdateRequest = z.object({
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
+  compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
+  conflictsWithOriginal: z.boolean().optional().describe('是否需要暂时关闭原版条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).optional().describe('需要暂时关闭的原版条目基准 ID'),
   projectType: ProjectCategory.optional().describe('项目基础分类'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),

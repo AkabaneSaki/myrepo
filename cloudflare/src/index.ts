@@ -52,6 +52,7 @@ import {
   AdminCharacterReferenceCreate,
   AdminCharacterReferenceVersionCreate,
   CharacterReferenceList,
+  CharacterReferenceVersionItems,
   ProjectCompatibilityUpdate,
 } from './endpoints/character-references';
 
@@ -179,6 +180,7 @@ openapi.post('/api/projects/batch', ProjectBatchFetch);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 openapi.get('/api/site/discover-banner', DiscoverBannerGet);
 openapi.get('/api/character-references', CharacterReferenceList);
+openapi.get('/api/character-references/versions/:versionId/items', CharacterReferenceVersionItems);
 
 // ============ 项目接口 (需要登录) ============
 openapi.get('/api/my/projects', MyProjects);

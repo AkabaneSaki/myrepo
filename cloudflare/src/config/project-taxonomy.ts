@@ -265,7 +265,7 @@ export function normalizeProjectTaxonomyInput(
   const tagPool = new Set(buildProjectTagPool(facets, customTags));
   const unknownDisplayTags = normalizedDisplayInput?.filter(tag => !tagPool.has(tag)) || [];
   const displayTags = normalizedDisplayInput === undefined
-    ? customTags.slice(0, MAX_DISPLAY_TAGS)
+    ? Array.from(tagPool).slice(0, MAX_DISPLAY_TAGS)
     : normalizedDisplayInput.filter(tag => tagPool.has(tag));
 
   if (explicitProjectTypeValue !== undefined && explicitProjectTypeValue !== null && !explicitProjectType) {
@@ -283,8 +283,8 @@ export function normalizeProjectTaxonomyInput(
   if (unknownFacets.length > 0) {
     return { value: null, error: `包含未定义的官方标签：${unknownFacets.join('；')}` };
   }
-  if (customTags.length > MAX_CUSTOM_TAGS) {
-    return { value: null, error: `其他关键词最多 ${MAX_CUSTOM_TAGS} 个` };
+  if (officialTagValues.size + customTags.length > MAX_CUSTOM_TAGS) {
+    return { value: null, error: `标签最多 ${MAX_CUSTOM_TAGS} 个` };
   }
   if ((normalizedDisplayInput?.length || 0) > MAX_DISPLAY_TAGS) {
     return { value: null, error: `首页最多显示 ${MAX_DISPLAY_TAGS} 个` };

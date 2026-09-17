@@ -12,6 +12,14 @@ export type CreativeWorkshopProjectDetail = {
 
 export type CreativeWorkshopWorldbookSourceEntry = Partial<WorldbookEntry> & Record<string, any>;
 
+export type CreativeWorkshopReferenceItem = {
+  id: string;
+  referenceVersionId: string;
+  kind: 'worldbook' | 'regex';
+  sourceKey: string | null;
+  displayName: string;
+};
+
 type CreativeWorkshopCacheStore = {
   projectDetails?: Record<
     string,
@@ -258,4 +266,30 @@ export async function fetchCreativeWorkshopProjectDetail(
     }
     throw error;
   }
+}
+
+export async function fetchCreativeWorkshopReferenceVersionItems(
+  referenceVersionId: string,
+): Promise<CreativeWorkshopReferenceItem[]> {
+  if (!referenceVersionId) return [];
+  const response = await fetch(
+    `${getCreativeWorkshopUrl()}/api/character-references/versions/${encodeURIComponent(referenceVersionId)}/items`,
+    { cache: 'no-store' },
+  );
+  if (!response.ok) {
+    throw new Error(`读取原版内容失败: ${response.status}`);
+  }
+  const data = await response.json();
+  return Array.isArray(data?.items)
+    ? data.items
+        .filter((item: unknown) => _.isObject(item))
+        .map((item: Record<string, any>) => ({
+          id: String(item.id || ''),
+          referenceVersionId: String(item.referenceVersionId || referenceVersionId),
+          kind: item.kind === 'regex' ? 'regex' as const : 'worldbook' as const,
+          sourceKey: _.isString(item.sourceKey) ? String(item.sourceKey) : null,
+          displayName: String(item.displayName || ''),
+        }))
+        .filter((item: CreativeWorkshopReferenceItem) => Boolean(item.id && item.displayName))
+    : [];
 }

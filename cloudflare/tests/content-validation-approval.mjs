@@ -172,19 +172,21 @@ try {
   await approve(metadataDraft.projectId);
   cleanupIds.delete(metadataDraft.projectId);
 
-  const invalidStructuredExtension = await api('/api/projects', {
+  const structuredExtensionWithoutSubtype = await api('/api/projects', {
     method: 'POST',
     token: creatorToken,
     body: {
-      name: 'Validation Structured Extension Missing Type',
+      name: 'Validation Structured Extension Without Subtype',
       description: 'taxonomy validation test',
       projectType: '扩展',
       customTags: [],
       tags: ['扩展'],
     },
-    expected: 400,
   });
-  assert.match(String(invalidStructuredExtension?.error || ''), /规则|内容/);
+  cleanupIds.add(structuredExtensionWithoutSubtype.projectId);
+  const structuredExtensionWithoutSubtypeDetail = await api(`/api/projects/${structuredExtensionWithoutSubtype.projectId}`, { token: creatorToken });
+  assert.equal(structuredExtensionWithoutSubtypeDetail.project.projectType, '扩展');
+  assert.equal(structuredExtensionWithoutSubtypeDetail.project.extensionType, null);
 
   const structuredCharacter = await api('/api/projects', {
     method: 'POST',

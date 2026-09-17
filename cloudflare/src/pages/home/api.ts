@@ -622,6 +622,10 @@ async function fetchCharacterReferences() {
   return apiFetch('/api/character-references', { method: 'GET', cache: 'no-store' });
 }
 
+async function fetchCharacterReferenceVersionItems(versionId) {
+  return apiFetch('/api/character-references/versions/' + encodeURIComponent(versionId) + '/items', { method: 'GET', cache: 'no-store' });
+}
+
 async function createCharacterReference(payload) {
   return apiFetch('/api/admin/character-references', {
     method: 'POST',
