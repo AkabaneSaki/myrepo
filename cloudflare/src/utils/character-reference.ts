@@ -106,7 +106,7 @@ export async function resolveProjectCompatibilitySelection(
   const builtForId = input.builtForReferenceVersionId?.trim() || null;
   const testedThroughId = input.testedThroughReferenceVersionId?.trim() || null;
   if (!builtForId) {
-    if (testedThroughId) throw new Error('Tested through requires a Built for reference version');
+    if (testedThroughId) throw new Error('这个项目还没有填写制作时使用的角色卡版本');
     return {
       characterReferenceId: null,
       builtForReferenceVersionId: null,
@@ -117,17 +117,17 @@ export async function resolveProjectCompatibilitySelection(
   }
 
   const builtFor = await getVersion(c, builtForId);
-  if (!builtFor) throw new Error('Built for reference version not found');
+  if (!builtFor) throw new Error('找不到你选择的角色卡版本，请重新选择');
 
   let testedThrough: ReferenceVersionRow | null = null;
   if (testedThroughId) {
     testedThrough = await getVersion(c, testedThroughId);
-    if (!testedThrough) throw new Error('Tested through reference version not found');
+    if (!testedThrough) throw new Error('找不到你选择的测试版本，请重新选择');
     if (testedThrough.character_reference_id !== builtFor.character_reference_id) {
-      throw new Error('Built for and Tested through must belong to the same character reference');
+      throw new Error('请选择同一张角色卡的版本');
     }
     if (Number(testedThrough.version_ordinal) < Number(builtFor.version_ordinal)) {
-      throw new Error('Tested through cannot be older than Built for');
+      throw new Error('已测试版本不能早于制作时使用的版本');
     }
   }
 
@@ -355,7 +355,7 @@ export async function updateProjectCompatibilityMetadata(
     actorName: string;
   },
 ) {
-  if (!input.builtForReferenceVersionId) throw new Error('Project has no Built for character reference version');
+  if (!input.builtForReferenceVersionId) throw new Error('这个项目还没有填写制作时使用的角色卡版本');
   const selection = await resolveProjectCompatibilitySelection(c, {
     builtForReferenceVersionId: input.builtForReferenceVersionId,
     testedThroughReferenceVersionId: input.testedThroughReferenceVersionId,

@@ -56,7 +56,7 @@ export const homeLayoutRenderScript = [
   '  const groups = [];',
   '  if (state.activeBaseTag === "all" || state.activeBaseTag === "扩展") {',
   '    const extensionTypes = Array.from(new Set((PROJECT_TAXONOMY.extensionTypes || []).map(value => String(value).trim()).filter(Boolean)));',
-  '    if (extensionTypes.length) groups.push({ label: "扩展类型", tags: extensionTypes });',
+  '    if (extensionTypes.length) groups.push({ label: "扩展方向", tags: extensionTypes });',
   '  }',
   '  if (state.activeBaseTag === "all" || state.activeBaseTag === "角色") {',
   '    Object.entries(PROJECT_TAXONOMY.characterFacets || {}).forEach(([label, values]) => {',

@@ -39,6 +39,19 @@ Git hosting and runtime infrastructure are separate concerns.
 - Do not copy, infer, or substitute production credentials/bindings from the user fork.
 - A branch being pushed to `origin` does not deploy or reconfigure production.
 
+## UX language contract — mandatory
+
+Treat all user-facing, creator-facing, and admin-facing UI as being used by non-technical people.
+
+- Use plain everyday Chinese. Prefer concrete questions and actions over engineering nouns.
+- Do not expose internal terms such as `metadata`, `schema`, `reference`, `registry`, `fingerprint`, database fields, IDs, implementation names, or other backend concepts unless there is no practical alternative.
+- File formats may be shown only as a secondary hint, for example `世界书文件 (.json)`; do not make `JSON` the main concept the user must understand.
+- Clearly mark optional fields as optional. Do not make users guess whether something can be skipped.
+- Error messages must explain what the user should do next, not what the internal parser/database failed to do.
+- Keep unavoidable product/domain terms only when the target users already need them to operate SillyTavern, such as `世界书` or `正则`.
+- When reviewing a form, first ask whether each field is truly necessary. Hide, automate, or move nonessential choices out of the primary flow before merely rewriting their labels.
+- A good default test is: a person with no coding or IT background should understand what to choose without knowing how Creative Workshop is implemented.
+
 ## Deployment helper contract — mandatory
 
 A reusable fail-closed deployment helper already exists on the primary machine. **Use it before considering any raw Wrangler/PowerShell/Bash deployment path.**

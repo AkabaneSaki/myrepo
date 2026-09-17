@@ -424,7 +424,7 @@ export class ProjectCreate extends OpenAPIRoute {
         && rawBuiltForReferenceVersionId !== null
         && typeof rawBuiltForReferenceVersionId !== 'string'
       ) {
-        return c.json({ error: 'Built for reference version must be text' }, 400);
+        return c.json({ error: '角色卡版本格式不正确，请重新选择' }, 400);
       }
       const builtForReferenceVersionId = typeof rawBuiltForReferenceVersionId === 'string'
         ? rawBuiltForReferenceVersionId.trim() || null
@@ -456,7 +456,7 @@ export class ProjectCreate extends OpenAPIRoute {
           builtForReferenceVersionId,
         });
       } catch (error) {
-        return c.json({ error: error instanceof Error ? error.message : 'Invalid character reference version' }, 400);
+        return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
       }
 
       const projectId = generateId();
@@ -1044,7 +1044,7 @@ export class ProjectUpdate extends OpenAPIRoute {
           compatibilityUpdatedAt: selection.builtForReferenceVersionId ? new Date().toISOString() : null,
         };
       } catch (error) {
-        return c.json({ error: error instanceof Error ? error.message : 'Invalid character reference version' }, 400);
+        return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
       }
     }
 
