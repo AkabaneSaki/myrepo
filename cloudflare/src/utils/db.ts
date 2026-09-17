@@ -1,4 +1,4 @@
-import type { AppContext, ProjectReviewTarget } from '../types';
+import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget } from '../types';
 import {
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
@@ -225,6 +225,14 @@ export const projectDb = {
       description?: string;
       version: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -259,8 +267,11 @@ export const projectDb = {
 			INSERT INTO projects (
 				id, name, description, version, version_label, author_id, author_name, author_avatar,
 				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, cover_position_x, cover_position_y, cover_zoom, root_project_id, published_project_id,
-				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
+				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
+				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
+				created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -295,6 +306,14 @@ export const projectDb = {
         project.visibility === false ? 0 : 1,
         project.isPublished ? 1 : 0,
         project.latestApprovedAt || null,
+        project.characterReferenceId || null,
+        project.builtForReferenceVersionId || null,
+        project.testedThroughReferenceVersionId || null,
+        project.compatibilityStatus || null,
+        project.compatibilityKnownIncompatible ? 1 : 0,
+        project.compatibilityNote || null,
+        project.compatibilityGraceUntil || null,
+        project.compatibilityUpdatedAt || null,
         now(),
         now(),
       )
@@ -355,6 +374,14 @@ export const projectDb = {
       description?: string;
       version?: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -398,6 +425,38 @@ export const projectDb = {
     if (updates.versionLabel !== undefined) {
       setClauses.push('version_label = ?');
       values.push(updates.versionLabel);
+    }
+    if (updates.characterReferenceId !== undefined) {
+      setClauses.push('character_reference_id = ?');
+      values.push(updates.characterReferenceId);
+    }
+    if (updates.builtForReferenceVersionId !== undefined) {
+      setClauses.push('built_for_reference_version_id = ?');
+      values.push(updates.builtForReferenceVersionId);
+    }
+    if (updates.testedThroughReferenceVersionId !== undefined) {
+      setClauses.push('tested_through_reference_version_id = ?');
+      values.push(updates.testedThroughReferenceVersionId);
+    }
+    if (updates.compatibilityStatus !== undefined) {
+      setClauses.push('compatibility_status = ?');
+      values.push(updates.compatibilityStatus);
+    }
+    if (updates.compatibilityKnownIncompatible !== undefined) {
+      setClauses.push('compatibility_known_incompatible = ?');
+      values.push(updates.compatibilityKnownIncompatible ? 1 : 0);
+    }
+    if (updates.compatibilityNote !== undefined) {
+      setClauses.push('compatibility_note = ?');
+      values.push(updates.compatibilityNote);
+    }
+    if (updates.compatibilityGraceUntil !== undefined) {
+      setClauses.push('compatibility_grace_until = ?');
+      values.push(updates.compatibilityGraceUntil);
+    }
+    if (updates.compatibilityUpdatedAt !== undefined) {
+      setClauses.push('compatibility_updated_at = ?');
+      values.push(updates.compatibilityUpdatedAt);
     }
     if (updates.projectType !== undefined) {
       setClauses.push('project_type = ?');
@@ -972,6 +1031,14 @@ export const projectDb = {
       description?: string;
       version?: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -994,6 +1061,14 @@ export const projectDb = {
         description: updates.description ?? existingDraft.description ?? '',
         version: nextVersion,
         versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : existingDraft.versionLabel,
+        characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : existingDraft.characterReferenceId,
+        builtForReferenceVersionId: updates.builtForReferenceVersionId !== undefined ? updates.builtForReferenceVersionId : existingDraft.builtForReferenceVersionId,
+        testedThroughReferenceVersionId: updates.testedThroughReferenceVersionId !== undefined ? updates.testedThroughReferenceVersionId : existingDraft.testedThroughReferenceVersionId,
+        compatibilityStatus: updates.compatibilityStatus !== undefined ? updates.compatibilityStatus : existingDraft.compatibilityStatus,
+        compatibilityKnownIncompatible: updates.compatibilityKnownIncompatible !== undefined ? updates.compatibilityKnownIncompatible : existingDraft.compatibilityKnownIncompatible,
+        compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : existingDraft.compatibilityNote,
+        compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : existingDraft.compatibilityGraceUntil,
+        compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
@@ -1016,6 +1091,14 @@ export const projectDb = {
       description: updates.description ?? published.description ?? undefined,
       version: updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch'),
       versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : published.versionLabel,
+      characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : published.characterReferenceId,
+      builtForReferenceVersionId: updates.builtForReferenceVersionId !== undefined ? updates.builtForReferenceVersionId : published.builtForReferenceVersionId,
+      testedThroughReferenceVersionId: updates.testedThroughReferenceVersionId !== undefined ? updates.testedThroughReferenceVersionId : published.testedThroughReferenceVersionId,
+      compatibilityStatus: updates.compatibilityStatus !== undefined ? updates.compatibilityStatus : published.compatibilityStatus,
+      compatibilityKnownIncompatible: updates.compatibilityKnownIncompatible !== undefined ? updates.compatibilityKnownIncompatible : published.compatibilityKnownIncompatible,
+      compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : published.compatibilityNote,
+      compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : published.compatibilityGraceUntil,
+      compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -1309,5 +1392,13 @@ function parseProjectRow(row: Record<string, unknown>) {
     hasPendingDraft: Boolean(row.draft_project_id),
     draftRevision: Math.max(1, Number(row.draft_revision ?? 1)),
     latestApprovedAt: row.latest_approved_at as string | null,
+    characterReferenceId: row.character_reference_id as string | null,
+    builtForReferenceVersionId: row.built_for_reference_version_id as string | null,
+    testedThroughReferenceVersionId: row.tested_through_reference_version_id as string | null,
+    compatibilityStatus: row.compatibility_status as ProjectCompatibilityStatus | null,
+    compatibilityKnownIncompatible: Number(row.compatibility_known_incompatible ?? 0) === 1,
+    compatibilityNote: row.compatibility_note as string | null,
+    compatibilityGraceUntil: row.compatibility_grace_until as string | null,
+    compatibilityUpdatedAt: row.compatibility_updated_at as string | null,
   };
 }

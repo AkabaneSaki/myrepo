@@ -29,6 +29,8 @@
 		"check:project-ranking": "node tests/project-ranking.mjs",
 		"check:project-daily-ranking": "node tests/project-daily-ranking-smoke.mjs",
 		"check:project-ranking-snapshot": "node tests/project-ranking-snapshot-smoke.mjs",
+		"check:character-reference": "node tests/character-reference-fingerprint.mjs",
+		"check:character-reference-registry": "node tests/character-reference-registry-smoke.mjs",
 		"check:creative-workshop-syntax": "node scripts/check-creative-workshop-syntax.mjs",
 		"check:creative-workshop-regex-identity": "node tests/creative-workshop-regex-identity-smoke.mjs",
 		"check:local-api-workflow": "node scripts/check-local-api-workflow.mjs",
