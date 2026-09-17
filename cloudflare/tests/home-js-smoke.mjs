@@ -38,10 +38,15 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+assert.doesNotMatch(
+  fragments.homeTavernBridgeScript,
+  /event\.source !== window\.parent/,
+  'embedded bridge must not reject valid host replies from a script-runner iframe context',
+);
 assert.match(
   fragments.homeTavernBridgeScript,
-  /function handleBridgeMessage\(event\) \{\s*if \(event\.source !== window\.parent\) return;/,
-  'embedded bridge must only accept messages from its parent window',
+  /data\.namespace !== TAVERN_BRIDGE_NAMESPACE/,
+  'embedded bridge must still reject messages outside its namespace',
 );
 
 
