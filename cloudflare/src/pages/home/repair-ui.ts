@@ -156,7 +156,13 @@ function buildDlcRepairReportText() {
   lines.push('Creative Workshop DLC Repair Report');
   lines.push('Client: ' + (state.tavern.clientVersion || 'unknown'));
   lines.push('Generated: ' + new Date().toISOString());
+  const availableWorldbooks = Array.isArray(report.availableWorldbookNames) ? report.availableWorldbookNames : [];
+  const enabledWorldbooks = Array.isArray(report.enabledWorldbookNames) ? report.enabledWorldbookNames : [];
+  const scannedWorldbooks = Array.isArray(report.scannedWorldbookNames) ? report.scannedWorldbookNames : [];
   const unreadable = Array.isArray(report.unreadableWorldbookNames) ? report.unreadableWorldbookNames : [];
+  lines.push('Available worldbooks: ' + availableWorldbooks.length);
+  lines.push('Enabled worldbooks: ' + (enabledWorldbooks.length ? enabledWorldbooks.join(', ') : 'none'));
+  lines.push('Scanned worldbooks: ' + (scannedWorldbooks.length ? scannedWorldbooks.join(', ') : 'none'));
   lines.push('Unreadable worldbooks: ' + (unreadable.length ? unreadable.join(', ') : 'none'));
   lines.push('Pending repairs: ' + (Array.isArray(report.pending) ? report.pending.length : 0));
   lines.push('');
@@ -203,16 +209,23 @@ function renderDlcRepairModal() {
     return;
   }
 
+  const availableWorldbooks = Array.isArray(report.availableWorldbookNames) ? report.availableWorldbookNames : [];
+  const enabledWorldbooks = Array.isArray(report.enabledWorldbookNames) ? report.enabledWorldbookNames : [];
+  const scannedWorldbooks = Array.isArray(report.scannedWorldbookNames) ? report.scannedWorldbookNames : [];
   const unreadable = Array.isArray(report.unreadableWorldbookNames) ? report.unreadableWorldbookNames : [];
   const selectedItems = Array.from(dlcRepairUiState.items.values()).filter(item => item.selected);
   const readyItems = selectedItems.filter(item => item.match?.status === 'unique' && isRepairCandidateSafe(item.candidate) && !['repairing', 'completed'].includes(item.status));
   const candidateHtml = dlcRepairUiState.items.size
     ? Array.from(dlcRepairUiState.items.values()).map(buildRepairCandidateHtml).join('')
-    : '<div class="repair-empty"><i class="fas fa-magnifying-glass"></i><strong>没有扫描到 DLC 候选</strong><p>如果内容存在但没有 [DLC] 命名头、Workshop metadata 或 legacy metadata，脚本无法安全判断哪些条目属于同一个 Mod。</p></div>';
+    : '<div class="repair-empty"><i class="fas fa-magnifying-glass"></i><strong>这次扫描没有发现 DLC 候选</strong><p>默认只扫描当前已启用 / 已绑定的世界书。也可以从上方世界书列表指定其他世界书进行扫描。</p></div>';
+  const scannedLabel = scannedWorldbooks.length ? scannedWorldbooks.join('、') : '无';
+  const enabledLabel = enabledWorldbooks.length ? enabledWorldbooks.join('、') : '无';
+  const worldbookOptions = availableWorldbooks.slice().sort((a, b) => String(a).localeCompare(String(b))).map(name => '<option value="' + escapeHtml(name) + '"></option>').join('');
 
   root.innerHTML = buildPendingRepairHtml(report)
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 无法读取世界书：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
-    + '<div class="repair-toolbar"><div><strong>选择玩家报告有问题的 DLC</strong><small>可以一次选择 A / B / C / D。匹配可并行，实际修改会逐个执行。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重扫</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制报告</button></div></div>'
+    + '<div class="repair-worldbook-picker"><div><strong>扫描世界书</strong><small>默认只扫描当前已启用 / 已绑定的世界书。当前扫描：' + escapeHtml(scannedLabel) + '</small><small>当前启用：' + escapeHtml(enabledLabel) + '</small></div><div class="repair-worldbook-controls"><input id="dlcRepairWorldbookInput" list="dlcRepairWorldbookOptions" placeholder="输入或选择其他世界书"><datalist id="dlcRepairWorldbookOptions">' + worldbookOptions + '</datalist><button type="button" class="btn btn-outline" id="dlcRepairScanBookBtn"><i class="fas fa-book"></i> 扫描这本</button><button type="button" class="btn btn-outline" id="dlcRepairScanEnabledBtn"><i class="fas fa-link"></i> 扫描已启用</button></div></div>'
+    + '<div class="repair-toolbar"><div><strong>选择玩家报告有问题的 DLC</strong><small>可以一次选择 A / B / C / D。匹配可并行，实际修改会逐个执行。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重扫当前</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制报告</button></div></div>'
     + '<div class="repair-candidate-list">' + candidateHtml + '</div>'
     + '<div class="repair-footer"><div><strong>' + selectedItems.length + '</strong> 个已选择 · <strong>' + readyItems.length + '</strong> 个可直接重装</div><div><button type="button" class="btn btn-outline" id="dlcRepairAnalyzeBtn" ' + (!selectedItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas fa-database"></i> 匹配 Workshop</button><button type="button" class="btn btn-primary" id="dlcRepairRunBtn" ' + (!readyItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas fa-screwdriver-wrench"></i> 重装所选最新版</button></div></div>';
 
@@ -260,8 +273,20 @@ function renderDlcRepairModal() {
     const copied = await copyTextToClipboard(buildDlcRepairReportText());
     showToast(copied ? '诊断报告已复制' : '浏览器禁止自动复制，请手动复制', copied ? 'info' : 'warning');
   });
+  const scanBookBtn = root.querySelector('#dlcRepairScanBookBtn');
+  if (scanBookBtn) scanBookBtn.addEventListener('click', () => {
+    const input = root.querySelector('#dlcRepairWorldbookInput');
+    const worldbookName = String(input?.value || '').trim();
+    if (!worldbookName || !availableWorldbooks.includes(worldbookName)) {
+      showToast('请选择世界书列表中的一本再扫描', 'warning');
+      return;
+    }
+    void loadDlcRepairScan([worldbookName]);
+  });
+  const scanEnabledBtn = root.querySelector('#dlcRepairScanEnabledBtn');
+  if (scanEnabledBtn) scanEnabledBtn.addEventListener('click', () => { void loadDlcRepairScan(); });
   const rescanBtn = root.querySelector('#dlcRepairRescanBtn');
-  if (rescanBtn) rescanBtn.addEventListener('click', () => { void loadDlcRepairScan(); });
+  if (rescanBtn) rescanBtn.addEventListener('click', () => { void loadDlcRepairScan(scannedWorldbooks.length ? scannedWorldbooks : null); });
 }
 
 async function analyzeDlcRepairItem(candidateId, manualQuery = '') {
@@ -354,17 +379,31 @@ async function retryPendingDlcRepair(repairId) {
   }
 }
 
-async function loadDlcRepairScan() {
+async function loadDlcRepairScan(worldbookNames = null) {
   if (!dlcRepairUiState.overlay) return;
   dlcRepairUiState.report = null;
   dlcRepairUiState.items = new Map();
   renderDlcRepairModal();
   try {
-    const report = await requestDlcRepairScan();
-    dlcRepairUiState.report = report || { candidates: [], unreadableWorldbookNames: [], pending: [] };
+    const report = await requestDlcRepairScan(worldbookNames);
+    dlcRepairUiState.report = report || {
+      candidates: [],
+      unreadableWorldbookNames: [],
+      pending: [],
+      availableWorldbookNames: [],
+      enabledWorldbookNames: [],
+      scannedWorldbookNames: [],
+    };
     initializeRepairItems(dlcRepairUiState.report);
   } catch (error) {
-    dlcRepairUiState.report = { candidates: [], unreadableWorldbookNames: [], pending: [] };
+    dlcRepairUiState.report = {
+      candidates: [],
+      unreadableWorldbookNames: [],
+      pending: [],
+      availableWorldbookNames: [],
+      enabledWorldbookNames: [],
+      scannedWorldbookNames: [],
+    };
     showToast('DLC 扫描失败：' + (error?.message || String(error)), 'error');
   }
   renderDlcRepairModal();

@@ -420,7 +420,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           );
           break;
         case 'bridge:repair:scan': {
-          const report = await scanCreativeWorkshopRepairCandidates();
+          const requestedWorldbookNames = Array.isArray(event.data.payload?.worldbookNames)
+            ? event.data.payload?.worldbookNames.filter(_.isString).map(String)
+            : undefined;
+          const report = await scanCreativeWorkshopRepairCandidates({ worldbookNames: requestedWorldbookNames });
           await post('bridge:repair:scan-result', report, event.data.requestId);
           break;
         }

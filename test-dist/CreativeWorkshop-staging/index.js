@@ -1360,8 +1360,15 @@ function describeCandidateProblems(candidate) {
         problems.push('没有发现 [WS] 工坊来源标记');
     return problems;
 }
-async function scanCreativeWorkshopRepairCandidates() {
-    const rows = await Promise.all(getWorldbookNames().map(async (worldbookName) => {
+async function scanCreativeWorkshopRepairCandidates(options = {}) {
+    const availableWorldbookNames = _.uniq(getWorldbookNames().filter(name => _.isString(name) && Boolean(name)));
+    const availableWorldbookNameSet = new Set(availableWorldbookNames);
+    const enabledWorldbookNames = _.uniq(getCreativeWorkshopBoundWorldbookNames().filter(name => _.isString(name) && Boolean(name)));
+    const requestedWorldbookNames = Array.isArray(options.worldbookNames) && options.worldbookNames.length > 0
+        ? _.uniq(options.worldbookNames.filter(name => _.isString(name) && Boolean(name)))
+            .filter(name => availableWorldbookNameSet.has(name))
+        : enabledWorldbookNames;
+    const rows = await Promise.all(requestedWorldbookNames.map(async (worldbookName) => {
         try {
             return { worldbookName, entries: await getWorldbook(worldbookName), readable: true };
         }
@@ -1436,6 +1443,9 @@ async function scanCreativeWorkshopRepairCandidates() {
         candidates: candidates.sort((a, b) => a.worldbookName.localeCompare(b.worldbookName) || a.name.localeCompare(b.name)),
         unreadableWorldbookNames: rows.filter(row => !row.readable).map(row => row.worldbookName),
         pending: getCreativeWorkshopPendingRepairs(),
+        availableWorldbookNames,
+        enabledWorldbookNames,
+        scannedWorldbookNames: requestedWorldbookNames,
     };
 }
 function normalizeRepairTarget(target) {
@@ -1900,7 +1910,10 @@ function createCreativeWorkshopBridgeHost(option) {
                     }, event.data.requestId);
                     break;
                 case 'bridge:repair:scan': {
-                    const report = await scanCreativeWorkshopRepairCandidates();
+                    const requestedWorldbookNames = Array.isArray(event.data.payload?.worldbookNames)
+                        ? event.data.payload?.worldbookNames.filter(_.isString).map(String)
+                        : undefined;
+                    const report = await scanCreativeWorkshopRepairCandidates({ worldbookNames: requestedWorldbookNames });
                     await post('bridge:repair:scan-result', report, event.data.requestId);
                     break;
                 }

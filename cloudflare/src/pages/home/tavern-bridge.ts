@@ -276,8 +276,11 @@ function requestRepairBridge(type, payload = {}) {
   });
 }
 
-function requestDlcRepairScan() {
-  return requestRepairBridge('bridge:repair:scan');
+function requestDlcRepairScan(worldbookNames = null) {
+  const payload = Array.isArray(worldbookNames) && worldbookNames.length
+    ? { worldbookNames }
+    : {};
+  return requestRepairBridge('bridge:repair:scan', payload);
 }
 
 function requestDlcRepairProject(target) {

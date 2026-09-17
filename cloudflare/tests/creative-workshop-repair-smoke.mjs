@@ -44,7 +44,7 @@ function makeLodash() {
   };
 }
 
-function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false } = {}) {
+function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false, boundWorldbookNames = null } = {}) {
   const worldbooks = Object.fromEntries(Object.entries(initialWorldbooks || {}).map(([name, entries]) => [name, structuredClone(entries)]));
   let regexes = structuredClone(initialRegexes);
   let variables = {};
@@ -59,6 +59,9 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
       if (specifier === './install-registry') {
         return {
           deleteCreativeWorkshopInstallRecord: projectId => installRecords.delete(projectId),
+          getCreativeWorkshopBoundWorldbookNames: () => Array.isArray(boundWorldbookNames)
+            ? [...boundWorldbookNames]
+            : Object.keys(worldbooks),
           setCreativeWorkshopInstallRecord: (projectId, record) => installRecords.set(projectId, { ...record }),
         };
       }
@@ -184,6 +187,27 @@ const brokenEntries = [
   assert.equal(projectIdMeta.status, 'missing');
   assert.equal(entryKeyMeta.status, 'partial');
   assert.ok(candidate.problems.some(problem => problem.includes('缺少 cw_project_id')));
+}
+
+{
+  const harness = createHarness({
+    worldbooks: {
+      EnabledDLC: brokenEntries,
+      DisabledDLC: [{ uid: 201, name: '[DLC][扩展][关闭中的测试][WS]规则', extra: {} }],
+    },
+    boundWorldbookNames: ['EnabledDLC'],
+  });
+  const defaultReport = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.deepEqual(Array.from(defaultReport.availableWorldbookNames).sort(), ['DisabledDLC', 'EnabledDLC']);
+  assert.deepEqual(Array.from(defaultReport.enabledWorldbookNames), ['EnabledDLC']);
+  assert.deepEqual(Array.from(defaultReport.scannedWorldbookNames), ['EnabledDLC']);
+  assert.equal(defaultReport.candidates.length, 1, 'default repair scan must only inspect enabled/bound worldbooks');
+  assert.equal(defaultReport.candidates[0].worldbookName, 'EnabledDLC');
+
+  const manualReport = await harness.api.scanCreativeWorkshopRepairCandidates({ worldbookNames: ['DisabledDLC'] });
+  assert.deepEqual(Array.from(manualReport.scannedWorldbookNames), ['DisabledDLC']);
+  assert.equal(manualReport.candidates.length, 1, 'manual picker must allow scanning an unbound worldbook');
+  assert.equal(manualReport.candidates[0].worldbookName, 'DisabledDLC');
 }
 
 {

@@ -1567,7 +1567,12 @@ export const homeShellStyles = String.raw`
 #dlcRepairRoot { min-height:220px; }
 .repair-loading,.repair-empty { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:28px; text-align:center; color:#aaa39a; }
 .repair-loading i,.repair-empty i { font-size:1.5rem; color:#a28b6b; }
-.repair-toolbar,.repair-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 18px; background:rgba(20,20,22,.96); }
+.repair-worldbook-picker,.repair-toolbar,.repair-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 18px; background:rgba(20,20,22,.96); }
+.repair-worldbook-picker { border-bottom:1px solid rgba(255,255,255,.08); background:rgba(26,25,24,.98); }
+.repair-worldbook-picker > div:first-child { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.repair-worldbook-picker small { color:#918a82; overflow-wrap:anywhere; }
+.repair-worldbook-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.repair-worldbook-controls input { width:min(360px,42vw); min-width:220px; border:1px solid rgba(255,255,255,.1); border-radius:9px; background:rgba(0,0,0,.18); color:#eee8df; padding:9px 10px; }
 .repair-toolbar { position:sticky; top:0; z-index:4; border-bottom:1px solid rgba(255,255,255,.08); }
 .repair-footer { position:sticky; bottom:0; z-index:4; border-top:1px solid rgba(255,255,255,.08); }
 .repair-toolbar > div:first-child,.repair-footer > div:first-child { display:flex; flex-direction:column; gap:4px; }
@@ -1617,7 +1622,10 @@ export const homeShellStyles = String.raw`
 
 @media (max-width:640px) {
   .dlc-repair-modal .modal-content { width:calc(100vw - 12px); max-height:94vh; }
-  .repair-toolbar,.repair-footer { align-items:stretch; flex-direction:column; }
+  .repair-worldbook-picker,.repair-toolbar,.repair-footer { align-items:stretch; flex-direction:column; }
+  .repair-worldbook-controls { align-items:stretch; flex-direction:column; }
+  .repair-worldbook-controls input { width:100%; min-width:0; }
+  .repair-worldbook-controls .btn { width:100%; }
   .repair-toolbar-actions,.repair-footer > div:last-child { justify-content:stretch; }
   .repair-toolbar-actions .btn,.repair-footer .btn { flex:1; }
   .repair-metadata-row { grid-template-columns:20px minmax(0,1fr) 52px; }
