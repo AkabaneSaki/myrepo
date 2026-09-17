@@ -719,7 +719,7 @@ export class ProjectCoverUpload extends OpenAPIRoute {
     let reusedDraft = false;
 
     if (project.isPublished && project.status === 'approved') {
-      const existingDraft = await projectDb.findDraftByPublishedId(c, projectId);
+      const existingDraft = project.draftProjectId ? await projectDb.get(c, project.draftProjectId, payload) : null;
       const draftId = existingDraft?.id || (await projectDb.createDraftFromPublished(c, projectId, {}));
       if (!draftId) {
         return c.json({ error: 'Draft creation failed' }, 500);
@@ -1150,15 +1150,82 @@ export class ProjectDelete extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    // 删除正式项目时，把关联的审核草稿一起清掉，避免留下 orphan draft。
-    // 删除 draft 本身则只撤回该 draft；projectDb.delete() 会解除 published 上的关联。
+    if (project.reviewTarget === 'draft' && project.publishedProjectId && project.status === 'pending') {
+      const published = await projectDb.get(c, project.publishedProjectId, payload);
+      if (!published) return c.json({ error: 'Published project not found for draft' }, 409);
+      if (published.draftProjectId && published.draftProjectId !== project.id) {
+        return c.json({ error: 'A newer working draft already exists.' }, 409);
+      }
+
+      const nextDraftId = generateId();
+      const nextVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      await projectDb.create(c, {
+        id: nextDraftId,
+        name: project.name,
+        description: project.description || undefined,
+        version: nextVersion,
+        versionLabel: project.versionLabel ?? null,
+        authorId: project.authorId,
+        authorName: project.authorName,
+        authorAvatar: project.authorAvatar || '',
+        projectType: project.projectType,
+        extensionType: project.extensionType,
+        facets: project.facets,
+        customTags: project.customTags,
+        displayTags: project.displayTags,
+        tags: project.tags,
+        coverImage: project.coverImage || undefined,
+        coverPositionX: project.coverPositionX,
+        coverPositionY: project.coverPositionY,
+        coverZoom: project.coverZoom,
+        downloadUrl: project.downloadUrl || undefined,
+        fileSize: project.fileSize || undefined,
+        hasEjs: project.hasEjs,
+        hasCharacterArtwork: project.hasCharacterArtwork,
+        rootProjectId: project.rootProjectId || published.rootProjectId || published.id,
+        publishedProjectId: published.id,
+        reviewTarget: 'draft',
+        draftRevision: 1,
+        visibility: project.visibility,
+        isPublished: false,
+        latestApprovedAt: published.latestApprovedAt || published.reviewedAt,
+        status: 'drafting',
+      });
+
+      try {
+        const copied = await r2Storage.copyProjectFilesToPublished(
+          c,
+          project.id,
+          nextDraftId,
+          project.coverImage || undefined,
+        );
+        await projectDb.update(c, nextDraftId, {
+          downloadUrl: copied.downloadUrl || project.downloadUrl || undefined,
+          fileSize: copied.fileSize ?? project.fileSize ?? undefined,
+          coverImage: copied.coverImage || project.coverImage || undefined,
+        });
+        await projectDb.update(c, published.id, { draftProjectId: nextDraftId });
+      } catch (error) {
+        await projectDb.delete(c, nextDraftId).catch(() => undefined);
+        throw error;
+      }
+
+      return {
+        success: true,
+        continuedDraftProjectId: nextDraftId,
+        reviewRequestId: project.id,
+        message: 'Review snapshot preserved. Continue editing in the new draft.',
+      };
+    }
+
+    // 删除正式项目时，一并清理当前草稿和历史审核快照。
     let linkedDraftId: string | null = null;
     if (project.isPublished) {
-      const linkedDraft = await projectDb.findDraftByPublishedId(c, project.id);
-      if (linkedDraft) {
-        linkedDraftId = linkedDraft.id;
-        await r2Storage.deleteProjectFiles(c, linkedDraft.id);
-        await projectDb.delete(c, linkedDraft.id);
+      const linkedDraftIds = await projectDb.listDraftIdsByPublishedId(c, project.id);
+      linkedDraftId = project.draftProjectId || linkedDraftIds[0] || null;
+      for (const linkedId of linkedDraftIds) {
+        await r2Storage.deleteProjectFiles(c, linkedId);
+        await projectDb.delete(c, linkedId);
       }
     }
 
@@ -1361,7 +1428,9 @@ export class ProjectEntryRemove extends OpenAPIRoute {
 
     let targetProjectId = project.id;
     const existingDraft =
-      project.isPublished && project.status === 'approved' ? await projectDb.findDraftByPublishedId(c, project.id) : null;
+      project.isPublished && project.status === 'approved' && project.draftProjectId
+        ? await projectDb.get(c, project.draftProjectId, payload)
+        : null;
     const sourceProject =
       project.isPublished && project.status === 'approved'
         ? existingDraft || project

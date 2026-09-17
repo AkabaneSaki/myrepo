@@ -1,0 +1,16 @@
+{
+  "format": "poem-workshop-character-baseline",
+  "format_version": 1,
+  "source_file": "v4.3.3.png",
+  "source_png_sha256": "3cfd1900fef981ebe88486ab216a855d5e952f8ff5c25a14bc4a00eeb8e1cca7",
+  "source_chunk": "ccv3",
+  "card_spec": "chara_card_v3",
+  "card_spec_version": "3.0",
+  "character_name": "命定之诗与黄昏之歌v4.3",
+  "character_version": "V4.3.3",
+  "counts": {
+    "worldbook_entries": 537,
+    "regex_scripts": 11,
+    "tavern_helper_scripts": 7
+  }
+}

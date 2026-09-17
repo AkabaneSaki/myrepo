@@ -133,6 +133,7 @@ export const r2Storage = {
     downloadUrl?: string;
     fileSize?: number;
     coverImage?: string;
+    rollback: () => Promise<void>;
   }> => {
     const bucket = c.env.R2_BUCKET;
     const sourcePrefix = `projects/${sourceProjectId}/`;
@@ -143,21 +144,22 @@ export const r2Storage = {
       fileSize?: number;
       coverImage?: string;
     } = {};
+    const pendingCopies: Array<{
+      targetKey: string;
+      targetFileName: string;
+      body: ArrayBuffer;
+      size: number;
+      httpMetadata: R2HTTPMetadata;
+      customMetadata: Record<string, string>;
+    }> = [];
 
     for (const item of listed.objects) {
       const fileName = item.key.slice(sourcePrefix.length);
-      if (!fileName) {
-        continue;
-      }
-
-      if (fileName.startsWith('cover.') && item.key !== normalizedSelectedCoverKey) {
-        continue;
-      }
+      if (!fileName) continue;
+      if (fileName.startsWith('cover.') && item.key !== normalizedSelectedCoverKey) continue;
 
       const sourceObject = await bucket.get(item.key);
-      if (!sourceObject) {
-        continue;
-      }
+      if (!sourceObject) continue;
 
       let targetFileName = fileName;
       if (fileName === `project-${sourceProjectId}.json`) {
@@ -167,8 +169,13 @@ export const r2Storage = {
       }
 
       const targetKey = `projects/${targetProjectId}/${targetFileName}`;
-      await bucket.put(targetKey, await sourceObject.arrayBuffer(), {
+      pendingCopies.push({
+        targetKey,
+        targetFileName,
+        body: await sourceObject.arrayBuffer(),
+        size: sourceObject.size,
         httpMetadata: sourceObject.httpMetadata,
+        customMetadata: sourceObject.customMetadata,
       });
 
       if (targetFileName === `project-${targetProjectId}.json`) {
@@ -179,18 +186,85 @@ export const r2Storage = {
       }
     }
 
+    let staleCoverKeys: string[] = [];
     if (copied.coverImage) {
       const targetCoverPrefix = `projects/${targetProjectId}/cover.`;
       const targetCovers = await bucket.list({ prefix: targetCoverPrefix });
-      const staleCoverKeys = targetCovers.objects
-        .map(item => item.key)
-        .filter(key => key !== copied.coverImage);
-      if (staleCoverKeys.length > 0) {
-        await bucket.delete(staleCoverKeys);
-      }
+      staleCoverKeys = targetCovers.objects.map(item => item.key).filter(key => key !== copied.coverImage);
     }
 
-    return copied;
+    type Backup = {
+      body: ArrayBuffer;
+      httpMetadata: R2HTTPMetadata;
+      customMetadata: Record<string, string>;
+    } | null;
+    const backups = new Map<string, Backup>();
+    const keysToSnapshot = new Set([
+      ...pendingCopies.map(item => item.targetKey),
+      ...staleCoverKeys,
+    ]);
+    for (const key of keysToSnapshot) {
+      const existing = await bucket.get(key);
+      backups.set(
+        key,
+        existing
+          ? {
+              body: await existing.arrayBuffer(),
+              httpMetadata: existing.httpMetadata,
+              customMetadata: existing.customMetadata,
+            }
+          : null,
+      );
+    }
+
+    const mutatedKeys: string[] = [];
+    let rollbackDone = false;
+    const rollback = async () => {
+      if (rollbackDone) return;
+      let firstFailure: unknown = null;
+      for (const key of [...mutatedKeys].reverse()) {
+        try {
+          const backup = backups.get(key) ?? null;
+          if (backup) {
+            const restored = await bucket.put(key, backup.body, {
+              httpMetadata: backup.httpMetadata,
+              customMetadata: backup.customMetadata,
+            });
+            if (!restored) throw new Error(`Failed to restore R2 object: ${key}`);
+          } else {
+            await bucket.delete(key);
+          }
+        } catch (error) {
+          firstFailure ??= error;
+        }
+      }
+      if (firstFailure) throw firstFailure;
+      rollbackDone = true;
+    };
+
+    try {
+      for (const item of pendingCopies) {
+        const stored = await bucket.put(item.targetKey, item.body, {
+          httpMetadata: item.httpMetadata,
+          customMetadata: item.customMetadata,
+        });
+        if (!stored) throw new Error(`Failed to publish R2 object: ${item.targetKey}`);
+        mutatedKeys.push(item.targetKey);
+      }
+      for (const key of staleCoverKeys) {
+        await bucket.delete(key);
+        mutatedKeys.push(key);
+      }
+    } catch (error) {
+      try {
+        await rollback();
+      } catch (rollbackError) {
+        console.error('Failed to rollback partial R2 publication', { targetProjectId, rollbackError });
+      }
+      throw error;
+    }
+
+    return { ...copied, rollback };
   },
 
   /**

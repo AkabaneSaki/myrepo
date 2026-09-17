@@ -4,6 +4,7 @@ import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
+import { repairCreativeWorkshopProject, scanCreativeWorkshopRepairCandidates } from '../services/repair';
 import {
   installCreativeWorkshopRegex,
   uninstallCreativeWorkshopRegex,
@@ -59,6 +60,16 @@ function isOAuthCallbackMessage(value: unknown): value is OAuthCallbackMessage {
       _.get(value, 'type') === 'oauth-ready') &&
     _.get(value, 'source') === OAUTH_CALLBACK_SOURCE
   );
+}
+
+function redactOAuthLogPayload(value: unknown) {
+  return {
+    type: _.isString(_.get(value, 'type')) ? String(_.get(value, 'type')) : undefined,
+    state: _.isString(_.get(value, 'state')) ? String(_.get(value, 'state')) : undefined,
+    success: _.isBoolean(_.get(value, 'success')) ? Boolean(_.get(value, 'success')) : undefined,
+    callbackReady: _.isBoolean(_.get(value, 'callbackReady')) ? Boolean(_.get(value, 'callbackReady')) : undefined,
+    hasToken: _.isString(_.get(value, 'token')),
+  };
 }
 
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
@@ -127,7 +138,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
     console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
-      payload,
+      payload: redactOAuthLogPayload(payload),
     });
     await post('bridge:oauth:result', payload, requestId);
     clearOAuthTimers();
@@ -193,7 +204,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       pendingOauthState,
       eventOrigin: event.origin,
       sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-      data: event.data,
+      data: redactOAuthLogPayload(event.data),
     });
     if (!pendingOauthRequestId) return;
     if (event.origin !== oauthOrigin) return;
@@ -247,7 +258,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
-      payload,
+      payload: type === 'bridge:oauth:result' ? redactOAuthLogPayload(payload) : payload,
       targetOrigin,
     });
     iframe.contentWindow?.postMessage(createBridgeMessage(type as never, payload, requestId), targetOrigin);
@@ -257,7 +268,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
-      data: event.data,
+      data: {
+        type: _.get(event.data, 'type'),
+        requestId: _.get(event.data, 'requestId'),
+      },
     });
     if (event.source !== iframe.contentWindow) return;
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
@@ -273,7 +287,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const isProjectMutation =
       actionType === 'bridge:install-project' ||
       actionType === 'bridge:uninstall-project' ||
-      actionType === 'bridge:confirm-project-update';
+      actionType === 'bridge:confirm-project-update' ||
+      actionType === 'bridge:repair:project';
 
     if (isProjectMutation && actionProjectId) {
       if (projectMutationInFlight.has(actionProjectId)) {
@@ -404,6 +419,44 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             event.data.requestId,
           );
           break;
+        case 'bridge:repair:scan': {
+          const requestedWorldbookNames = Array.isArray(event.data.payload?.worldbookNames)
+            ? event.data.payload?.worldbookNames.filter(_.isString).map(String)
+            : undefined;
+          const report = await scanCreativeWorkshopRepairCandidates({ worldbookNames: requestedWorldbookNames });
+          await post('bridge:repair:scan-result', report, event.data.requestId);
+          break;
+        }
+        case 'bridge:repair:project': {
+          const result = await repairCreativeWorkshopProject({
+            candidateId: _.isString(_.get(event.data, 'payload.candidateId')) ? String(event.data.payload?.candidateId) : '',
+            projectId: _.isString(_.get(event.data, 'payload.projectId')) ? String(event.data.payload?.projectId) : '',
+            projectVersion: _.isString(_.get(event.data, 'payload.projectVersion')) ? String(event.data.payload?.projectVersion) : null,
+            worldbookName: _.isString(_.get(event.data, 'payload.worldbookName')) ? String(event.data.payload?.worldbookName) : '',
+            entryUids: Array.isArray(event.data.payload?.entryUids)
+              ? (event.data.payload?.entryUids as Array<string | number>)
+              : [],
+            regexIds: Array.isArray(event.data.payload?.regexIds)
+              ? event.data.payload?.regexIds.filter(_.isString).map(String)
+              : [],
+            expectedEntryCount: _.isNumber(_.get(event.data, 'payload.expectedEntryCount'))
+              ? Number(event.data.payload?.expectedEntryCount)
+              : undefined,
+            expectedRegexCount: _.isNumber(_.get(event.data, 'payload.expectedRegexCount'))
+              ? Number(event.data.payload?.expectedRegexCount)
+              : undefined,
+            sourceProjectIds: Array.isArray(event.data.payload?.sourceProjectIds)
+              ? event.data.payload?.sourceProjectIds.filter(_.isString).map(String)
+              : [],
+          });
+          await post(
+            'bridge:repair:project-result',
+            { ...result, projects: await listInstalledCreativeWorkshopProjects() },
+            event.data.requestId,
+          );
+          await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
+          break;
+        }
         case 'bridge:close-workshop':
           onClose?.();
           break;

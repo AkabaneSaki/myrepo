@@ -1,4 +1,4 @@
-import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget } from '../types';
+import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
@@ -258,6 +258,7 @@ export const projectDb = {
       visibility?: boolean;
       isPublished?: boolean;
       latestApprovedAt?: string | null;
+      status?: ProjectStatus;
     },
   ): Promise<void> => {
     const db = c.env.DB;
@@ -283,7 +284,7 @@ export const projectDb = {
         project.authorId,
         project.authorName,
         project.authorAvatar,
-        'pending', // 默认状态为待审核
+        project.status || 'pending',
         project.downloadUrl || null,
         project.fileSize || null,
         project.hasEjs ? 1 : 0,
@@ -587,8 +588,8 @@ export const projectDb = {
 
     if (project?.published_project_id) {
       await db
-        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ?`)
-        .bind(now(), project.published_project_id)
+        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`)
+        .bind(now(), project.published_project_id, projectId)
         .run();
     }
 
@@ -660,7 +661,15 @@ export const projectDb = {
       values.push(tagPattern, tagPattern, tagPattern, tag);
     });
 
-    const searchTerm = options.search?.trim();
+    const rawSearchTerm = options.search?.trim();
+    const normalizedSearchTerm = rawSearchTerm
+      ? rawSearchTerm
+          .replace(/[\u0000-\u001f\u007f]/g, ' ')
+          .replace(/[%_]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : '';
+    const searchTerm = Array.from(normalizedSearchTerm).slice(0, 20).join('');
     if (searchTerm) {
       conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
       const searchPattern = `%${searchTerm}%`;
@@ -789,36 +798,52 @@ export const projectDb = {
     projectId: string,
     reviewerId: string,
     action: 'approve' | 'reject',
-    rejectReason?: string,
-  ): Promise<string> => {
+    rejectReason: string | undefined,
+    expectedRevision: number,
+  ): Promise<string | null> => {
     const db = c.env.DB;
     const reviewedAt = now();
 
-    if (action === 'approve') {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, reviewedAt, projectId)
-        .run();
+    const result = action === 'approve'
+      ? await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
+                 latest_approved_at = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, projectId, expectedRevision)
+          .run()
+      : await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
+          .run();
 
-      await db.prepare(`UPDATE projects SET latest_approved_at = ? WHERE id = ?`).bind(reviewedAt, projectId).run();
-    } else {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId)
-        .run();
-    }
+    return Number(result.meta?.changes || 0) === 1 ? reviewedAt : null;
+  },
 
-    return reviewedAt;
+  restoreApprovedReviewToPending: async (
+    c: AppContext,
+    projectId: string,
+    reviewerId: string,
+    expectedRevision: number,
+    reviewedAt: string,
+    previousLatestApprovedAt: string | null,
+  ): Promise<boolean> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects
+       SET status = 'pending', reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL,
+           latest_approved_at = ?, updated_at = ?
+       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ?`,
+    )
+      .bind(previousLatestApprovedAt, now(), projectId, expectedRevision, reviewerId, reviewedAt)
+      .run();
+
+    return Number(result.meta?.changes || 0) === 1;
   },
 
   /**
@@ -911,13 +936,17 @@ export const projectDb = {
             }
           : project;
 
+      const currentDraft = publishedProject?.draftProjectId
+        ? projects.find(project => project.id === publishedProject.draftProjectId)
+        : null;
+      if (currentDraft) return withPublishedVersion(currentDraft);
+      if (publishedProject) return publishedProject;
+
       const pendingDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'pending');
       if (pendingDraft) return withPublishedVersion(pendingDraft);
 
       const rejectedDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'rejected');
       if (rejectedDraft) return withPublishedVersion(rejectedDraft);
-
-      if (publishedProject) return publishedProject;
 
       return (
         [...projects].sort((left, right) => {
@@ -1014,13 +1043,13 @@ export const projectDb = {
     return projectDb.setSubscribe(c, projectId, userId, !existing);
   },
 
-  findDraftByPublishedId: async (c: AppContext, publishedProjectId: string) => {
+  listDraftIdsByPublishedId: async (c: AppContext, publishedProjectId: string): Promise<string[]> => {
     const result = await c.env.DB.prepare(
-      `SELECT p.*, u.global_name FROM projects p LEFT JOIN users u ON p.author_id = u.id WHERE p.published_project_id = ? AND p.review_target = 'draft' ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, p.updated_at DESC LIMIT 1`,
+      `SELECT id FROM projects WHERE published_project_id = ? AND review_target = 'draft'`,
     )
       .bind(publishedProjectId)
-      .first<Record<string, unknown>>();
-    return result ? parseProjectRow(result) : null;
+      .all<{ id: string }>();
+    return (result.results || []).map(row => row.id);
   },
 
   createDraftFromPublished: async (
@@ -1053,7 +1082,7 @@ export const projectDb = {
   ) => {
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
-    const existingDraft = await projectDb.findDraftByPublishedId(c, publishedProjectId);
+    const existingDraft = published.draftProjectId ? await projectDb.get(c, published.draftProjectId) : null;
     if (existingDraft) {
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
@@ -1359,7 +1388,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     authorName: row.author_name as string,
     authorGlobalName: ((row.global_name as string | null) || (row.author_name as string)) as string,
     authorAvatar: row.author_avatar as string | null,
-    status: row.status as 'pending' | 'approved' | 'rejected',
+    status: row.status as 'drafting' | 'pending' | 'approved' | 'rejected',
     downloadUrl: row.download_url as string | null,
     fileSize: row.file_size as number | null,
     downloadsCount: Number(row.downloads_count ?? 0),

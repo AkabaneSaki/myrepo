@@ -254,6 +254,68 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   }
 }
 
+function normalizeRepairProjectName(value) {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function buildRepairSearchTerm(value) {
+  const cleaned = String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[%_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(cleaned).slice(0, 20).join('');
+}
+
+function isWorkshopUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
+async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
+  const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
+  const detectedIds = detectedProjectId && isWorkshopUuid(detectedProjectId) ? [detectedProjectId] : [];
+
+  if (!manualQuery && detectedIds.length) {
+    try {
+      const exactData = await apiFetch('/api/projects/batch', {
+        method: 'POST',
+        body: JSON.stringify({ projectIds: detectedIds.slice(0, 50) }),
+      });
+      const exactProjects = Array.isArray(exactData.projects) ? exactData.projects : [];
+      if (exactProjects.length === 1) {
+        return { status: 'unique', method: 'project_id', projects: exactProjects };
+      }
+      if (exactProjects.length > 1) {
+        return { status: 'ambiguous', method: 'project_id', projects: exactProjects };
+      }
+    } catch (error) {
+      console.warn('[CreativeWorkshop] repair project-id match failed', { candidate, error });
+    }
+  }
+
+  const query = String(manualQuery || candidate?.name || candidate?.legacyProjectName || '').trim();
+  if (!query) return { status: 'none', method: 'none', projects: [] };
+  const searchTerm = buildRepairSearchTerm(query);
+  if (!searchTerm) return { status: 'none', method: 'none', projects: [] };
+
+  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: searchTerm });
+  const data = await apiFetch('/api/projects?' + params.toString());
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const normalizedQuery = normalizeRepairProjectName(query);
+  const exactNameMatches = projects.filter(project => normalizeRepairProjectName(project?.name) === normalizedQuery);
+
+  if (exactNameMatches.length === 1) {
+    return { status: 'candidates', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
+  }
+  if (exactNameMatches.length > 1) {
+    return { status: 'ambiguous', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
+  }
+  if (projects.length > 0) {
+    return { status: 'candidates', method: manualQuery ? 'manual_search' : 'name_search', projects };
+  }
+  return { status: 'none', method: manualQuery ? 'manual_search' : 'name_search', projects: [] };
+}
+
 async function fetchInstalledProjectDetails() {
   const installedProjectIds = Array.from(new Set(
     state.tavern.installedProjects

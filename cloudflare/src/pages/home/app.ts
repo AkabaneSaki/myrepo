@@ -5,6 +5,7 @@ import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
 import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
+import { homeRepairScript } from './repair-ui';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
 import { homeUploadPreviewScript } from './upload-preview';
@@ -31,6 +32,7 @@ export const homeScript = String.raw`
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
   ${homeModalsScript}
+  ${homeRepairScript}
   ${homePresentationScript}
 
   const isEmbedded = window.parent !== window;
@@ -404,6 +406,7 @@ export const homeScript = String.raw`
     const addAdminBtn = document.getElementById('addAdminBtn');
     const adminLogsBtn = document.getElementById('adminLogsBtn');
     const installedToggle = document.getElementById('installedProjectsToggle');
+    const dlcRepairBtn = document.getElementById('dlcRepairBtn');
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const fontMenuTrigger = document.getElementById('fontMenuTrigger');
@@ -423,6 +426,7 @@ export const homeScript = String.raw`
     const mobileLoginBtn = document.getElementById('mobileLoginBtn');
     const mobileLocalAdminLoginBtn = document.getElementById('mobileLocalAdminLoginBtn');
     const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
+    const mobileDlcRepairBtn = document.getElementById('mobileDlcRepairBtn');
     const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
     const mobileUploadBtn = document.getElementById('mobileUploadBtn');
     const mobileAdminPanelBtn = document.getElementById('mobileAdminPanelBtn');
@@ -486,6 +490,30 @@ export const homeScript = String.raw`
         event.stopPropagation();
         openMobileTool(button.dataset.mobileTool || 'search');
       });
+    });
+    document.querySelectorAll('.discover-shelf').forEach(shelf => {
+      const track = shelf.querySelector('[data-shelf-track]');
+      if (!track) return;
+      const buttons = shelf.querySelectorAll('[data-shelf-scroll]');
+      const updateShelfButtons = () => {
+        const maxScrollLeft = Math.max(0, track.scrollWidth - track.clientWidth);
+        buttons.forEach(button => {
+          const direction = Number(button.dataset.shelfScroll || 0);
+          button.disabled = direction < 0 ? track.scrollLeft <= 2 : track.scrollLeft >= maxScrollLeft - 2;
+        });
+      };
+      buttons.forEach(button => {
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const direction = Number(button.dataset.shelfScroll || 0);
+          if (!direction) return;
+          const distance = Math.max(240, Math.round(track.clientWidth * 0.82));
+          track.scrollBy({ left: direction * distance, behavior: 'smooth' });
+        });
+      });
+      track.addEventListener('scroll', updateShelfButtons, { passive: true });
+      requestAnimationFrame(updateShelfButtons);
     });
     document.querySelectorAll('[data-return-all-projects]').forEach(button => {
       button.addEventListener('click', event => {
@@ -558,6 +586,16 @@ export const homeScript = String.raw`
       });
     });
     if (workshopCloseBtn) workshopCloseBtn.onclick = requestCloseWorkshop;
+    if (dlcRepairBtn) dlcRepairBtn.onclick = event => {
+      event.stopPropagation();
+      state.userMenuOpen = false;
+      openDlcRepairModal();
+    };
+    if (mobileDlcRepairBtn) mobileDlcRepairBtn.onclick = event => {
+      event.stopPropagation();
+      state.mobileToolMode = '';
+      openDlcRepairModal();
+    };
     if (logoutBtn) logoutBtn.onclick = logout;
     if (uploadBtn) uploadBtn.onclick = event => {
       event.stopPropagation();
@@ -1122,20 +1160,29 @@ export const homeScript = String.raw`
         const project = filteredProjects.find(item => item.id === projectId);
         if (!projectId || !project) return;
         const isReviewDraft = Boolean(project.reviewTarget === 'draft' && project.publishedProjectId);
+        const isPendingReviewDraft = Boolean(isReviewDraft && project.status === 'pending');
         const isPublishedWithDraft = Boolean(project.isPublished && (project.hasPendingDraft || project.draftProjectId));
-        const confirmText = isReviewDraft
-          ? '确定撤回这次更新吗？已发布版本会继续保留。'
-          : isPublishedWithDraft
-            ? '确定删除这个正式项目吗？正在审核/被退回的更新草稿也会一并删除。'
-            : '确定要删除该项目吗？';
+        const confirmText = isPendingReviewDraft
+          ? '继续编辑会保留当前审核快照，并从它创建一份新的编辑草稿。继续吗？'
+          : isReviewDraft
+            ? '确定撤回这次更新吗？已发布版本会继续保留。'
+            : isPublishedWithDraft
+              ? '确定删除这个正式项目吗？当前编辑草稿也会一并删除。'
+              : '确定要删除该项目吗？';
         if (!confirm(confirmText)) return;
-        const restore = setButtonLoading(button, isReviewDraft ? '撤回中' : '删除中');
+        const restore = setButtonLoading(button, isPendingReviewDraft ? '准备草稿' : isReviewDraft ? '撤回中' : '删除中');
         try {
-          await deleteProject(projectId);
-          await fetchProjects();
-          showToast(isReviewDraft ? '更新草稿已撤回，已发布版本保持不变' : '项目已删除');
+          const result = await deleteProject(projectId);
+          await fetchProjects(true);
+          if (result?.continuedDraftProjectId) {
+            showToast('审核快照已保留，可以继续编辑新草稿');
+            const nextDetail = await fetchProjectEntries(result.continuedDraftProjectId, { forceRefresh: true });
+            if (nextDetail?.project) openEditProjectModal(nextDetail.project);
+          } else {
+            showToast(isReviewDraft ? '更新草稿已撤回，已发布版本保持不变' : '项目已删除');
+          }
         } catch (error) {
-          showToast((isReviewDraft ? '撤回失败: ' : '删除失败: ') + error.message, 'error');
+          showToast((isPendingReviewDraft ? '继续编辑失败: ' : isReviewDraft ? '撤回失败: ' : '删除失败: ') + error.message, 'error');
         } finally {
           restore();
         }

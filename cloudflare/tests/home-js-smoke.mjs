@@ -30,6 +30,7 @@ const fragments = {
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
+  homeRepairScript: await evaluateStandalone('src/pages/home/repair-ui.ts', 'homeRepairScript'),
   homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
 };
 
@@ -37,6 +38,19 @@ for (const [name, script] of Object.entries(fragments)) {
   assert.equal(typeof script, 'string', `${name} must evaluate to JavaScript text`);
   new Function(script);
 }
+
+assert.doesNotMatch(
+  fragments.homeTavernBridgeScript,
+  /event\.source !== window\.parent/,
+  'embedded bridge must not reject valid host replies from a script-runner iframe context',
+);
+assert.match(
+  fragments.homeTavernBridgeScript,
+  /data\.namespace !== TAVERN_BRIDGE_NAMESPACE/,
+  'embedded bridge must still reject messages outside its namespace',
+);
+
+
 
 const safeLinkUtils = Function(`${fragments.homeUtilsScript}; return { escapeHtml, normalizeExternalHttpUrl };`)();
 const safeMarkdownUi = Function(
@@ -281,6 +295,7 @@ assert.doesNotMatch(fragments.homeModalsScript, /function copyTextCompat\(text\)
 assert.doesNotMatch(fragments.homeModalsScript, /window\.prompt\("复制最新版 Creative Workshop 导入代码"/);
 assert.doesNotMatch(fragments.homeModalsScript, /versionBump|Patch|Minor|Major/);
 assert.match(fragments.homeCardsRenderScript, /撤回更新/);
+assert.match(fragments.homeCardsRenderScript, /继续编辑/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /tag-system-ejs/);
 assert.match(fragments.homeCardsRenderScript, /card-quality-signal/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /icon-stat-btn/);
@@ -296,7 +311,7 @@ assert.match(fragments.homeCardsRenderScript, /fa-images/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /creatorTagsHtml/);
 assert.match(fragments.homeCardsRenderScript, /getProjectTypeDisplayLabel\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /delete-project-btn/);
-assert.match(fragments.homeCardsRenderScript, /editButtonHtml = isReviewDraftProject && isPendingProject/);
+assert.match(fragments.homeCardsRenderScript, /editButtonHtml = isPendingProject \|\| hasCurrentDraft/);
 assert.match(fragments.homeCardsRenderScript, /role=\"button\" tabindex=\"0\"/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /detail-btn/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /审核中的项目暂不可删除/);
@@ -602,7 +617,7 @@ assert.match(contentPolicyUi.getProjectContentRequirementText('扩展'), /世界
 assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: project\?\.draftRevision \|\| reviewProjectData\?\.draftRevision/);
 assert.match(homeScript, /确定撤回这次更新吗/);
-assert.match(homeScript, /正在审核\/被退回的更新草稿也会一并删除/);
+assert.match(homeScript, /当前编辑草稿也会一并删除/);
 assert.match(homeScript, /document\.querySelectorAll\('\.project-card, \.discover-card'\)/);
 const discoverCardRenderer = fragments.homeCardsRenderScript.match(/function renderDiscoverCard[\s\S]*?function renderProjectCard/)?.[0] || '';
 assert.match(discoverCardRenderer, /discover-card-cover/);
