@@ -295,7 +295,7 @@ function formatDateTime(value) {
 
 function parseWorkshopVersion(value) {
   if (typeof value !== 'string') return null;
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(value.trim());
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
