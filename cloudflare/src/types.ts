@@ -12,6 +12,14 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>;
 export const ProjectReviewTarget = z.enum(['project', 'draft']);
 export type ProjectReviewTarget = z.infer<typeof ProjectReviewTarget>;
 
+export const ProjectCompatibilityStatus = z.enum([
+  'compatible_latest',
+  'pending_latest',
+  'based_on_older',
+  'known_incompatible',
+]);
+export type ProjectCompatibilityStatus = z.infer<typeof ProjectCompatibilityStatus>;
+
 export const ProjectCategory = z.enum(PROJECT_TYPES);
 export type ProjectCategory = z.infer<typeof ProjectCategory>;
 
@@ -147,6 +155,14 @@ export const Project = z.object({
   draftRevision: z.number().int().min(1).default(1).describe('草稿修订号'),
 
   latestApprovedAt: z.string().optional().describe('最近审核通过时间'),
+  characterReferenceId: z.string().nullable().optional().describe('Workshop 角色卡 Reference ID'),
+  builtForReferenceVersionId: z.string().nullable().optional().describe('DLC 制作基准角色卡版本'),
+  testedThroughReferenceVersionId: z.string().nullable().optional().describe('Creator 已确认兼容至的角色卡版本'),
+  compatibilityStatus: ProjectCompatibilityStatus.nullable().optional().describe('角色卡兼容状态'),
+  compatibilityKnownIncompatible: z.boolean().default(false).describe('是否已明确确认不兼容'),
+  compatibilityNote: z.string().nullable().optional().describe('兼容性说明'),
+  compatibilityGraceUntil: z.string().nullable().optional().describe('最新版兼容维护宽限期截止时间'),
+  compatibilityUpdatedAt: z.string().nullable().optional().describe('兼容性 metadata 最近更新时间'),
 });
 
 // ============ API 请求/响应类型 ============
@@ -168,6 +184,7 @@ export const ProjectCreateRequest = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
+  builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   projectType: ProjectCategory.optional().describe('项目基础分类；旧客户端可继续只发送 tags'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
@@ -185,6 +202,7 @@ export const ProjectUpdateRequest = z.object({
   name: z.string().optional().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
+  builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   projectType: ProjectCategory.optional().describe('项目基础分类'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),

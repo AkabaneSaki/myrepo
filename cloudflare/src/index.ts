@@ -48,6 +48,12 @@ import {
 } from './endpoints/admin';
 
 import { AdminDiscoverBannerUpdate, AdminDiscoverBannerUpload, DiscoverBannerGet } from './endpoints/site-settings';
+import {
+  AdminCharacterReferenceCreate,
+  AdminCharacterReferenceVersionCreate,
+  CharacterReferenceList,
+  ProjectCompatibilityUpdate,
+} from './endpoints/character-references';
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -172,12 +178,14 @@ openapi.get('/api/projects', ProjectList);
 openapi.post('/api/projects/batch', ProjectBatchFetch);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 openapi.get('/api/site/discover-banner', DiscoverBannerGet);
+openapi.get('/api/character-references', CharacterReferenceList);
 
 // ============ 项目接口 (需要登录) ============
 openapi.get('/api/my/projects', MyProjects);
 openapi.get('/api/my/subscriptions', MySubscriptions);
 openapi.post('/api/projects', ProjectCreate);
 openapi.put('/api/projects/:projectId', ProjectUpdate);
+openapi.put('/api/projects/:projectId/compatibility', ProjectCompatibilityUpdate);
 openapi.put('/api/projects/:projectId/visibility', ProjectVisibilityUpdate);
 openapi.delete('/api/projects/:projectId', ProjectDelete);
 openapi.post('/api/projects/:projectId/entries/remove', ProjectEntryRemove);
@@ -253,6 +261,8 @@ openapi.post('/api/admin/review/:projectId', AdminReview);
 openapi.get('/api/admin/projects', AdminProjectList);
 openapi.get('/api/admin/list', AdminList);
 openapi.post('/api/admin/set-admin', AdminSetAdmin);
+openapi.post('/api/admin/character-references', AdminCharacterReferenceCreate);
+openapi.post('/api/admin/character-references/:referenceId/versions', AdminCharacterReferenceVersionCreate);
 openapi.put('/api/admin/discover-banner', AdminDiscoverBannerUpdate);
 openapi.post('/api/admin/discover-banner/upload', AdminDiscoverBannerUpload);
 

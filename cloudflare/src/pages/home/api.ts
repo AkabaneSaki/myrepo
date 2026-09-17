@@ -618,6 +618,33 @@ async function fetchAdminLogs() {
   return apiFetch('/api/admin/logs');
 }
 
+async function fetchCharacterReferences() {
+  return apiFetch('/api/character-references', { method: 'GET', cache: 'no-store' });
+}
+
+async function createCharacterReference(payload) {
+  return apiFetch('/api/admin/character-references', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function createCharacterReferenceVersion(referenceId, payload) {
+  return apiFetch('/api/admin/character-references/' + encodeURIComponent(referenceId) + '/versions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function updateProjectCompatibility(projectId, payload) {
+  const result = await apiFetch('/api/projects/' + projectId + '/compatibility', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  invalidateProjectDetailCache(projectId);
+  return result;
+}
+
 async function setAdmin(userId, isAdmin) {
   return apiFetch('/api/admin/set-admin', {
     method: 'POST',

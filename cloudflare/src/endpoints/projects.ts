@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../types';
 import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../utils/db';
+import { resolveProjectCompatibilitySelection } from '../utils/character-reference.ts';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import {
   removeProjectEntryFromJson,
@@ -373,6 +374,7 @@ export class ProjectCreate extends OpenAPIRoute {
               name: Str({ description: 'Project name' }),
               description: Str({ required: false }).describe('Project description'),
               versionLabel: z.string().max(80).nullable().optional(),
+              builtForReferenceVersionId: z.string().max(120).nullable().optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -416,6 +418,17 @@ export class ProjectCreate extends OpenAPIRoute {
         return c.json({ error: 'Version label must be text' }, 400);
       }
       const versionLabel = typeof rawVersionLabel === 'string' ? rawVersionLabel.trim() || null : rawVersionLabel;
+      const rawBuiltForReferenceVersionId = rawBody.builtForReferenceVersionId;
+      if (
+        rawBuiltForReferenceVersionId !== undefined
+        && rawBuiltForReferenceVersionId !== null
+        && typeof rawBuiltForReferenceVersionId !== 'string'
+      ) {
+        return c.json({ error: 'Built for reference version must be text' }, 400);
+      }
+      const builtForReferenceVersionId = typeof rawBuiltForReferenceVersionId === 'string'
+        ? rawBuiltForReferenceVersionId.trim() || null
+        : rawBuiltForReferenceVersionId;
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
 
       const taxonomyResult = normalizeProjectTaxonomyInput(rawBody as Record<string, unknown>, {
@@ -437,6 +450,15 @@ export class ProjectCreate extends OpenAPIRoute {
         return c.json({ error: 'Version label must be 80 characters or fewer' }, 400);
       }
 
+      let compatibilitySelection;
+      try {
+        compatibilitySelection = await resolveProjectCompatibilitySelection(c, {
+          builtForReferenceVersionId,
+        });
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : 'Invalid character reference version' }, 400);
+      }
+
       const projectId = generateId();
       const existingUser = await userDb.get(c, payload.userId);
 
@@ -456,6 +478,13 @@ export class ProjectCreate extends OpenAPIRoute {
         description,
         version: '1.0.0',
         versionLabel,
+        characterReferenceId: compatibilitySelection.characterReferenceId,
+        builtForReferenceVersionId: compatibilitySelection.builtForReferenceVersionId,
+        testedThroughReferenceVersionId: compatibilitySelection.testedThroughReferenceVersionId,
+        compatibilityStatus: compatibilitySelection.compatibilityStatus,
+        compatibilityKnownIncompatible: false,
+        compatibilityGraceUntil: compatibilitySelection.compatibilityGraceUntil,
+        compatibilityUpdatedAt: compatibilitySelection.builtForReferenceVersionId ? new Date().toISOString() : null,
         authorId: payload.userId,
         authorName: payload.username,
         authorAvatar: payload.avatar || '',
@@ -910,6 +939,7 @@ export class ProjectUpdate extends OpenAPIRoute {
               name: Str({ required: false }),
               description: Str({ required: false }),
               versionLabel: z.string().max(80).nullable().optional(),
+              builtForReferenceVersionId: z.string().max(120).nullable().optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -994,8 +1024,33 @@ export class ProjectUpdate extends OpenAPIRoute {
       return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
     }
     const taxonomy = taxonomyResult.value;
+    let compatibilityUpdates: Record<string, unknown> = {};
+    if (
+      data.body.builtForReferenceVersionId !== undefined
+      && data.body.builtForReferenceVersionId !== project.builtForReferenceVersionId
+    ) {
+      try {
+        const selection = await resolveProjectCompatibilitySelection(c, {
+          builtForReferenceVersionId: data.body.builtForReferenceVersionId,
+        });
+        compatibilityUpdates = {
+          characterReferenceId: selection.characterReferenceId,
+          builtForReferenceVersionId: selection.builtForReferenceVersionId,
+          testedThroughReferenceVersionId: null,
+          compatibilityStatus: selection.compatibilityStatus,
+          compatibilityKnownIncompatible: false,
+          compatibilityNote: null,
+          compatibilityGraceUntil: selection.compatibilityGraceUntil,
+          compatibilityUpdatedAt: selection.builtForReferenceVersionId ? new Date().toISOString() : null,
+        };
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : 'Invalid character reference version' }, 400);
+      }
+    }
+
     const updates = {
       ...data.body,
+      ...compatibilityUpdates,
       projectType: taxonomy.projectType,
       extensionType: taxonomy.extensionType,
       facets: taxonomy.facets,

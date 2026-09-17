@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS projects (
     visibility INTEGER DEFAULT 1,
     is_published INTEGER DEFAULT 0,
     latest_approved_at TEXT,
+    character_reference_id TEXT,
+    built_for_reference_version_id TEXT,
+    tested_through_reference_version_id TEXT,
+    compatibility_status TEXT,
+    compatibility_known_incompatible INTEGER NOT NULL DEFAULT 0,
+    compatibility_note TEXT,
+    compatibility_grace_until TEXT,
+    compatibility_updated_at TEXT,
     FOREIGN KEY (author_id) REFERENCES users(id)
 );
 
@@ -73,7 +81,82 @@ CREATE INDEX IF NOT EXISTS idx_projects_public_type_published
     ON projects(status, is_published, visibility, project_type, latest_approved_at DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_author_status_reviewed
     ON projects(author_id, status, reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_character_reference
+    ON projects(character_reference_id);
+CREATE INDEX IF NOT EXISTS idx_projects_built_for_reference_version
+    ON projects(built_for_reference_version_id);
+CREATE INDEX IF NOT EXISTS idx_projects_tested_through_reference_version
+    ON projects(tested_through_reference_version_id);
 CREATE INDEX IF NOT EXISTS idx_users_guilds ON users(guilds);
+
+CREATE TABLE IF NOT EXISTS character_references (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_character_references_name
+    ON character_references(name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS character_reference_versions (
+    id TEXT PRIMARY KEY,
+    character_reference_id TEXT NOT NULL,
+    version_label TEXT NOT NULL,
+    version_ordinal INTEGER NOT NULL,
+    grace_until TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (character_reference_id) REFERENCES character_references(id) ON DELETE CASCADE,
+    UNIQUE (character_reference_id, version_label),
+    UNIQUE (character_reference_id, version_ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_reference_versions_latest
+    ON character_reference_versions(character_reference_id, version_ordinal DESC);
+
+CREATE TABLE IF NOT EXISTS character_reference_items (
+    id TEXT PRIMARY KEY,
+    reference_version_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('worldbook', 'regex')),
+    source_key TEXT,
+    display_name TEXT NOT NULL,
+    exact_hash TEXT NOT NULL,
+    normalized_content_hash TEXT NOT NULL,
+    name_hash TEXT NOT NULL,
+    keys_hash TEXT,
+    structure_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reference_version_id) REFERENCES character_reference_versions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_reference_items_version_kind
+    ON character_reference_items(reference_version_id, kind);
+CREATE INDEX IF NOT EXISTS idx_character_reference_items_exact
+    ON character_reference_items(kind, exact_hash);
+CREATE INDEX IF NOT EXISTS idx_character_reference_items_content
+    ON character_reference_items(kind, normalized_content_hash);
+CREATE INDEX IF NOT EXISTS idx_character_reference_items_name
+    ON character_reference_items(kind, name_hash);
+CREATE INDEX IF NOT EXISTS idx_character_reference_items_structure
+    ON character_reference_items(kind, structure_hash);
+
+CREATE TABLE IF NOT EXISTS project_metadata_audit_logs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    actor_name TEXT NOT NULL,
+    before_value TEXT,
+    after_value TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_metadata_audit_project_created
+    ON project_metadata_audit_logs(project_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS project_rank_snapshots (
     kind TEXT NOT NULL CHECK (kind IN ('discover', 'rating')),
