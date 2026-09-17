@@ -361,7 +361,7 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
 ;// ./src/CreativeWorkshop/services/project-type.ts
 const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
 const CREATIVE_WORKSHOP_EXTENSION_TYPES = (/* unused pure expression or super */ null && (['规则', '内容']));
-const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 2;
+const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 3;
 function normalizeProjectType(value) {
     if (typeof value !== 'string')
         return null;
@@ -427,19 +427,36 @@ function readLeadingBracketSegment(value, offset) {
         return null;
     return { value: match[1], end: offset + match[0].length };
 }
+function getExistingDlcCategory(entryName) {
+    const dlc = readLeadingBracketSegment(entryName, 0);
+    if (!dlc || dlc.value !== 'DLC')
+        return null;
+    return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
+}
 function stripExistingDlcHeader(entryName) {
     const dlc = readLeadingBracketSegment(entryName, 0);
     if (!dlc || dlc.value !== 'DLC')
         return entryName;
     const category = readLeadingBracketSegment(entryName, dlc.end);
-    const packageName = category ? readLeadingBracketSegment(entryName, category.end) : null;
-    // A complete DLC header owns the first three segments. For a partial header,
-    // strip only [DLC] and preserve the remaining author text.
-    let contentStart = packageName ? packageName.end : dlc.end;
-    const sourceMarker = readLeadingBracketSegment(entryName, contentStart);
-    if (sourceMarker?.value === 'WS')
-        contentStart = sourceMarker.end;
-    return entryName.slice(contentStart);
+    if (!category)
+        return entryName.slice(dlc.end);
+    const third = readLeadingBracketSegment(entryName, category.end);
+    if (!third)
+        return entryName.slice(category.end);
+    // v3: [DLC][category][WS]author content
+    if (third.value === 'WS')
+        return entryName.slice(third.end);
+    const fourth = readLeadingBracketSegment(entryName, third.end);
+    // v2: [DLC][category][project][WS]author content
+    if (fourth?.value === 'WS') {
+        const authorContent = entryName.slice(fourth.end);
+        // Some already-damaged v2 names contain no author suffix. Preserve the old
+        // third segment as a human-readable fallback rather than returning blank.
+        return authorContent || `[${third.value}]`;
+    }
+    // Source/legacy entries commonly use the third segment as the actual entry
+    // title, e.g. [DLC][扩展][种族-地精]. Preserve it instead of eating it.
+    return entryName.slice(category.end);
 }
 function stripLegacyCorePrefix(entryName) {
     if (entryName.startsWith('命定系统-'))
@@ -448,13 +465,13 @@ function stripLegacyCorePrefix(entryName) {
         return entryName.slice('[命定系统]'.length);
     return entryName;
 }
-function formatCreativeWorkshopEntryName(entryName, project, projectName) {
+function formatCreativeWorkshopEntryName(entryName, project, _projectName) {
     const projectType = resolveCreativeWorkshopProjectType(project);
     let authorContent = stripExistingDlcHeader(entryName);
     if (projectType === '系统核心')
         authorContent = stripLegacyCorePrefix(authorContent);
-    const category = getCreativeWorkshopDlcCategory(project);
-    return `[DLC][${category}][${projectName}][WS]${authorContent}`;
+    const category = getExistingDlcCategory(entryName) || getCreativeWorkshopDlcCategory(project);
+    return `[DLC][${category}][WS]${authorContent}`;
 }
 
 ;// ./src/CreativeWorkshop/services/regex-name.ts
@@ -1218,7 +1235,6 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
 
 
 const CREATIVE_WORKSHOP_REPAIR_QUEUE_KEY = 'creative_workshop_repair_queue';
-const DLC_ENTRY_NAME_PATTERN = /^\[DLC\]\[([^\]]+)\]\[([^\]]+)\](?:\[WS\])?/;
 const WORKSHOP_METADATA_FIELDS = [
     'cw_project_id',
     'cw_project_name_display',
@@ -1310,13 +1326,30 @@ function getCreativeWorkshopPendingRepairs() {
 function parseDlcEntryName(name) {
     if (!_.isString(name))
         return null;
-    const match = String(name).match(DLC_ENTRY_NAME_PATTERN);
-    if (!match)
+    const value = String(name);
+    const v3 = value.match(/^\[DLC\]\[([^\]]+)\]\[WS\]/);
+    if (v3) {
+        return {
+            category: v3[1],
+            projectName: null,
+            workshopSourceMarker: true,
+        };
+    }
+    const v2 = value.match(/^\[DLC\]\[([^\]]+)\]\[([^\]]+)\]\[WS\]/);
+    if (v2) {
+        return {
+            category: v2[1],
+            projectName: v2[2],
+            workshopSourceMarker: true,
+        };
+    }
+    const legacy = value.match(/^\[DLC\]\[([^\]]+)\](?:\[([^\]]+)\])?/);
+    if (!legacy)
         return null;
     return {
-        category: match[1],
-        projectName: match[2],
-        workshopSourceMarker: String(name).startsWith(`[DLC][${match[1]}][${match[2]}][WS]`),
+        category: legacy[1],
+        projectName: legacy[2] || null,
+        workshopSourceMarker: false,
     };
 }
 function readStringMetadata(entry, field) {
@@ -1434,20 +1467,20 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
         }
     }
     const grouped = _.groupBy(entryRows, row => {
-        const name = row.header?.projectName ||
-            readStringMetadata(row.entry, 'cw_project_name_display') ||
+        const name = readStringMetadata(row.entry, 'cw_project_name_display') ||
             readStringMetadata(row.entry, 'fate_project_name') ||
             readStringMetadata(row.entry, 'cw_project_id') ||
+            row.header?.projectName ||
             String(row.entry.name || '未命名 DLC');
         return candidateIdFor(row.worldbookName, name);
     });
     const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
     const candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
         const entries = candidateRows.map(row => row.entry);
-        const name = candidateRows[0]?.header?.projectName ||
-            entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
+        const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
             entries.map(entry => readStringMetadata(entry, 'fate_project_name')).find(Boolean) ||
             entries.map(entry => readStringMetadata(entry, 'cw_project_id')).find(Boolean) ||
+            candidateRows[0]?.header?.projectName ||
             String(entries[0]?.name || '未命名 DLC');
         const category = candidateRows.map(row => row.header?.category || null).find(Boolean) || null;
         const worldbookName = candidateRows[0].worldbookName;

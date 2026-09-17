@@ -244,6 +244,39 @@ officialBaseline.entries = [
 }
 
 {
+  const v3Entries = [
+    {
+      uid: 301,
+      name: '[DLC][角色][WS]姚（圣堂,廿廿）',
+      extra: {
+        cw_project_id: 'saint-project',
+        cw_project_name_display: '圣堂',
+        cw_project_version: '1.0.0',
+        cw_entry_key: 'saint-project:uid:0',
+        cw_name_format_version: '3',
+      },
+    },
+    {
+      uid: 302,
+      name: '[DLC][势力][WS][圣堂]势力介绍',
+      extra: {
+        cw_project_id: 'saint-project',
+        cw_project_name_display: '圣堂',
+        cw_project_version: '1.0.0',
+        cw_entry_key: 'saint-project:uid:1',
+        cw_name_format_version: '3',
+      },
+    },
+  ];
+  const harness = createHarness({ worldbooks: { DLC: v3Entries } });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(report.candidates.length, 1, 'v3 entries with different visible categories must still group by Workshop metadata');
+  assert.equal(report.candidates[0].name, '圣堂');
+  assert.equal(report.candidates[0].entryCount, 2);
+  assert.equal(report.candidates[0].workshopSourceMarkerCount, 2);
+}
+
+{
   const harness = createHarness({
     worldbooks: {
       EnabledDLC: brokenEntries,

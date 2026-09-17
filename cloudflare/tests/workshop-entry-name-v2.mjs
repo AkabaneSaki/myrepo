@@ -17,95 +17,102 @@ const cases = [
     source: '爱丽丝',
     project: project('角色'),
     projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS]爱丽丝',
+    expected: '[DLC][角色][WS]爱丽丝',
   },
   {
     name: '角色：作者路径标签原样保留',
     source: '[角色][变量]初始变量',
     project: project('角色'),
     projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS][角色][变量]初始变量',
+    expected: '[DLC][角色][WS][角色][变量]初始变量',
   },
   {
-    name: '角色：错误类别与错误包名 Header 被当前项目覆盖',
-    source: '[DLC][扩展核心][BBB][角色][变量]初始变量',
-    project: project('角色'),
-    projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS][角色][变量]初始变量',
+    name: '真实扩展源：第三段就是条目标题，绝不能当项目名吃掉',
+    source: '[DLC][扩展][种族-地精]',
+    project: project('扩展'),
+    projectName: '【种族扩展】地精与哥布林',
+    expected: '[DLC][扩展][WS][种族-地精]',
   },
   {
-    name: '角色：已有 WS Header 幂等',
-    source: '[DLC][角色][AAA][WS][角色]爱丽丝',
-    project: project('角色'),
-    projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS][角色]爱丽丝',
+    name: '真实扩展源：规则条目名称保留',
+    source: '[DLC][扩展][哥布林繁衍规则]',
+    project: project('扩展'),
+    projectName: '【种族扩展】地精与哥布林',
+    expected: '[DLC][扩展][WS][哥布林繁衍规则]',
   },
   {
-    name: '角色：Header 后重复作者标签不去重',
-    source: '[DLC][角色][AAA][WS][角色][角色]爱丽丝',
-    project: project('角色'),
-    projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS][角色][角色]爱丽丝',
+    name: '真实角色源：作者原始短名称保留',
+    source: '[DLC][角色]姚（圣堂,廿廿）',
+    project: project('扩展'),
+    projectName: '（9.13，适配4.3.3，看详情）穿越者势力+多位角色DLC：圣堂，堂堂登场！',
+    expected: '[DLC][角色][WS]姚（圣堂,廿廿）',
   },
   {
-    name: '角色：关系标签属于作者内容并保留',
-    source: '[>梅林核心][角色]爱丽丝',
+    name: 'v2 旧格式迁移到 v3，不保留超长项目名',
+    source: '[DLC][角色][很长很长的旧项目营销标题][WS][角色]爱丽丝',
     project: project('角色'),
-    projectName: 'AAA',
-    expected: '[DLC][角色][AAA][WS][>梅林核心][角色]爱丽丝',
+    projectName: '新的更长营销标题',
+    expected: '[DLC][角色][WS][角色]爱丽丝',
+  },
+  {
+    name: 'v2 已损坏且没有条目尾名时保留旧第三段作为 fallback',
+    source: '[DLC][扩展][地精与哥布林][WS]',
+    project: project('扩展'),
+    projectName: '【种族扩展】地精与哥布林',
+    expected: '[DLC][扩展][WS][地精与哥布林]',
+  },
+  {
+    name: 'v3 已有 Header 幂等',
+    source: '[DLC][角色][WS][角色]爱丽丝',
+    project: project('角色'),
+    projectName: '任何项目名都不应写进可见名称',
+    expected: '[DLC][角色][WS][角色]爱丽丝',
   },
   {
     name: '事件：类别正确',
     source: '王都庆典',
     project: project('事件'),
     projectName: '秋日祭',
-    expected: '[DLC][事件][秋日祭][WS]王都庆典',
+    expected: '[DLC][事件][WS]王都庆典',
   },
   {
     name: '规则扩展：协议类别统一为扩展',
     source: '[规则]战斗协议',
     project: project('扩展', '规则'),
     projectName: '战斗包',
-    expected: '[DLC][扩展][战斗包][WS][规则]战斗协议',
+    expected: '[DLC][扩展][WS][规则]战斗协议',
   },
   {
     name: '内容扩展：协议类别统一为扩展',
     source: '[内容]新区域',
     project: project('扩展', '内容'),
     projectName: '区域包',
-    expected: '[DLC][扩展][区域包][WS][内容]新区域',
+    expected: '[DLC][扩展][WS][内容]新区域',
   },
   {
     name: '命定系统：普通名称',
     source: '梅林核心',
     project: project('系统核心'),
     projectName: '梅林核心',
-    expected: '[DLC][命定系统][梅林核心][WS]梅林核心',
+    expected: '[DLC][命定系统][WS]梅林核心',
   },
   {
     name: '命定系统：剥离旧命定系统-前缀',
     source: '命定系统-梅林核心',
     project: project('系统核心'),
     projectName: '梅林核心',
-    expected: '[DLC][命定系统][梅林核心][WS]梅林核心',
+    expected: '[DLC][命定系统][WS]梅林核心',
   },
   {
     name: '命定系统：剥离旧[命定系统]前缀',
     source: '[命定系统]梅林核心',
     project: project('系统核心'),
     projectName: '梅林核心',
-    expected: '[DLC][命定系统][梅林核心][WS]梅林核心',
-  },
-  {
-    name: '已有 WS 但项目名改变时第三段使用当前 project.name',
-    source: '[DLC][角色][旧包名][WS][角色]爱丽丝',
-    project: project('角色'),
-    projectName: '新包名',
-    expected: '[DLC][角色][新包名][WS][角色]爱丽丝',
+    expected: '[DLC][命定系统][WS]梅林核心',
   },
 ];
 
-assert.equal(CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, 2);
+assert.equal(CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, 3);
 assert.equal(getCreativeWorkshopDlcCategory(project('系统核心')), '命定系统');
 assert.equal(getCreativeWorkshopDlcCategory(project('角色')), '角色');
 assert.equal(getCreativeWorkshopDlcCategory(project('事件')), '事件');
@@ -128,4 +135,4 @@ for (const testCase of cases) {
   assert.equal(normalizedAgain, testCase.expected, `${testCase.name}：重复标准化必须幂等`);
 }
 
-console.log(`Creative Workshop entry-name v2 matrix OK (${cases.length} cases)`);
+console.log(`Creative Workshop entry-name v3 matrix OK (${cases.length} cases)`);

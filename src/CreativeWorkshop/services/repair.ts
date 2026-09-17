@@ -17,7 +17,6 @@ import {
 } from './worldbook';
 
 const CREATIVE_WORKSHOP_REPAIR_QUEUE_KEY = 'creative_workshop_repair_queue';
-const DLC_ENTRY_NAME_PATTERN = /^\[DLC\]\[([^\]]+)\]\[([^\]]+)\](?:\[WS\])?/;
 const WORKSHOP_METADATA_FIELDS = [
   'cw_project_id',
   'cw_project_name_display',
@@ -101,7 +100,7 @@ type CreativeWorkshopRepairRegistry = Record<string, Record<string, CreativeWork
 type CandidateEntryRow = {
   worldbookName: string;
   entry: WorldbookEntry;
-  header: { category: string; projectName: string; workshopSourceMarker: boolean } | null;
+  header: { category: string; projectName: string | null; workshopSourceMarker: boolean } | null;
 };
 
 export type CreativeWorkshopModifiedOfficialBaselineEntry = {
@@ -195,12 +194,32 @@ export function getCreativeWorkshopPendingRepairs(): CreativeWorkshopRepairRecor
 
 function parseDlcEntryName(name: unknown): CandidateEntryRow['header'] {
   if (!_.isString(name)) return null;
-  const match = String(name).match(DLC_ENTRY_NAME_PATTERN);
-  if (!match) return null;
+  const value = String(name);
+
+  const v3 = value.match(/^\[DLC\]\[([^\]]+)\]\[WS\]/);
+  if (v3) {
+    return {
+      category: v3[1],
+      projectName: null,
+      workshopSourceMarker: true,
+    };
+  }
+
+  const v2 = value.match(/^\[DLC\]\[([^\]]+)\]\[([^\]]+)\]\[WS\]/);
+  if (v2) {
+    return {
+      category: v2[1],
+      projectName: v2[2],
+      workshopSourceMarker: true,
+    };
+  }
+
+  const legacy = value.match(/^\[DLC\]\[([^\]]+)\](?:\[([^\]]+)\])?/);
+  if (!legacy) return null;
   return {
-    category: match[1],
-    projectName: match[2],
-    workshopSourceMarker: String(name).startsWith(`[DLC][${match[1]}][${match[2]}][WS]`),
+    category: legacy[1],
+    projectName: legacy[2] || null,
+    workshopSourceMarker: false,
   };
 }
 
@@ -326,10 +345,10 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   }
 
   const grouped = _.groupBy(entryRows, row => {
-    const name = row.header?.projectName ||
-      readStringMetadata(row.entry, 'cw_project_name_display') ||
+    const name = readStringMetadata(row.entry, 'cw_project_name_display') ||
       readStringMetadata(row.entry, 'fate_project_name') ||
       readStringMetadata(row.entry, 'cw_project_id') ||
+      row.header?.projectName ||
       String(row.entry.name || '未命名 DLC');
     return candidateIdFor(row.worldbookName, name);
   });
@@ -337,10 +356,10 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
   const candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
     const entries = candidateRows.map(row => row.entry);
-    const name = candidateRows[0]?.header?.projectName ||
-      entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
+    const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
       entries.map(entry => readStringMetadata(entry, 'fate_project_name')).find(Boolean) ||
       entries.map(entry => readStringMetadata(entry, 'cw_project_id')).find(Boolean) ||
+      candidateRows[0]?.header?.projectName ||
       String(entries[0]?.name || '未命名 DLC');
     const category = candidateRows.map(row => row.header?.category || null).find(Boolean) || null;
     const worldbookName = candidateRows[0].worldbookName;
