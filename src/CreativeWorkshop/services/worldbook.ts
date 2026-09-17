@@ -30,7 +30,7 @@ function getCurrentWorldbookName(): string {
   return charWorldbooks.primary;
 }
 
-async function ensureTargetWorldbook(worldbookName: string): Promise<string> {
+export async function ensureCreativeWorkshopTargetWorldbook(worldbookName: string): Promise<string> {
   const target = worldbookName.trim();
   if (!target) throw new Error('请选择安装目标世界书');
 
@@ -80,7 +80,7 @@ function getRecursionDelayUntil(entry: Record<string, any>) {
   return null;
 }
 
-type PreparedEntry = {
+export type CreativeWorkshopPreparedWorldbookEntry = {
   entry: Record<string, any>;
   index: number;
   entryKey: string;
@@ -94,7 +94,7 @@ type PreparedEntry = {
   scanDepth: WorldbookEntry['strategy']['scan_depth'];
 };
 
-async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKeys?: string[], expectedVersion?: string) {
+export async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKeys?: string[], expectedVersion?: string) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
   const sourceEntries = await fetchCreativeWorkshopProjectWorldbookSource(detail);
   const entries = sourceEntries.length > 0 ? sourceEntries : detail.worldbookEntriesPreview || [];
@@ -103,7 +103,7 @@ async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKe
   const prepared = entries
     .map((entry, index) => ({ entry, index, entryKey: getCreativeWorkshopWorldbookEntryKey(entry, index) }))
     .filter(item => !selected || selected.has(item.entryKey))
-    .map(({ entry, index, entryKey }): PreparedEntry => {
+    .map(({ entry, index, entryKey }): CreativeWorkshopPreparedWorldbookEntry => {
       try {
         const positionType = getCreativeWorkshopPositionType(entry);
         return {
@@ -128,10 +128,10 @@ async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKe
   return { detail, prepared };
 }
 
-async function applyPreparedProject(
+export async function applyPreparedCreativeWorkshopProject(
   projectId: string,
   detail: Record<string, any>,
-  prepared: PreparedEntry[],
+  prepared: CreativeWorkshopPreparedWorldbookEntry[],
   worldbookName: string,
   options: { pruneMissing?: boolean; legacyProjectName?: string } = {},
 ) {
@@ -269,9 +269,9 @@ export async function installCreativeWorkshopProject(
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
   if (prepared.length === 0) return detail;
   const worldbookName = requestedWorldbookName
-    ? await ensureTargetWorldbook(requestedWorldbookName)
+    ? await ensureCreativeWorkshopTargetWorldbook(requestedWorldbookName)
     : getCurrentWorldbookName();
-  await applyPreparedProject(projectId, detail, prepared, worldbookName);
+  await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
   setCreativeWorkshopInstallRecord(projectId, {
     worldbookName,
     installedVersion: detail.project.version || expectedVersion || null,
@@ -297,9 +297,9 @@ export async function updateCreativeWorkshopProject(
   const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
   let worldbookName: string | null = installedWorldbookName;
   if (installedWorldbookName) {
-    worldbookName = await ensureTargetWorldbook(installedWorldbookName);
+    worldbookName = await ensureCreativeWorkshopTargetWorldbook(installedWorldbookName);
     await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName, worldbookName);
-    await applyPreparedProject(projectId, detail, prepared, worldbookName, {
+    await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName, {
       pruneMissing: true,
       legacyProjectName,
     });
@@ -312,7 +312,7 @@ export async function updateCreativeWorkshopProject(
     }
   } else if (prepared.length > 0) {
     worldbookName = getCurrentWorldbookName();
-    await applyPreparedProject(projectId, detail, prepared, worldbookName);
+    await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
   }
   if (legacyProjectName && legacyProjectName !== projectId) {
     deleteCreativeWorkshopInstallRecord(legacyProjectName);

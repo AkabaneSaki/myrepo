@@ -1,5 +1,5 @@
 import { setCreativeWorkshopInstallRecord } from './install-registry';
-import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
+import { fetchCreativeWorkshopProjectDetail, type CreativeWorkshopProjectDetail } from './project-fetch';
 import {
   getCreativeWorkshopManagedRegexId,
   getCreativeWorkshopRegexEntryKey,
@@ -7,26 +7,32 @@ import {
   getReadableRegexName,
 } from './regex-name';
 
-export async function installCreativeWorkshopRegex(
-  projectId: string,
+export type CreativeWorkshopPreparedRegexEntry = {
+  entry: Record<string, any>;
+  originalIndex: number;
+  entryKey: string;
+};
+
+export function prepareCreativeWorkshopRegexEntries(
+  detail: CreativeWorkshopProjectDetail,
   selectedEntryKeys?: string[],
-  expectedVersion?: string,
-  legacyProjectName?: string,
-) {
-  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+): CreativeWorkshopPreparedRegexEntry[] {
   const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
-  const regexEntries = (detail.regexEntriesPreview || [])
+  return (detail.regexEntriesPreview || [])
     .map((entry, originalIndex) => ({
       entry,
       originalIndex,
       entryKey: getCreativeWorkshopRegexEntryKey(entry, originalIndex),
     }))
     .filter(({ entryKey }) => !selected || selected.has(entryKey));
+}
 
-  if (regexEntries.length === 0) {
-    return [];
-  }
-
+export async function applyPreparedCreativeWorkshopRegex(
+  projectId: string,
+  detail: CreativeWorkshopProjectDetail,
+  regexEntries: CreativeWorkshopPreparedRegexEntry[],
+  legacyProjectName?: string,
+) {
   const result = await updateTavernRegexesWith(
     regexes => {
       const filtered = regexes.filter(regex => {
@@ -65,6 +71,23 @@ export async function installCreativeWorkshopRegex(
     },
     { scope: 'character' },
   );
+  return result;
+}
+
+export async function installCreativeWorkshopRegex(
+  projectId: string,
+  selectedEntryKeys?: string[],
+  expectedVersion?: string,
+  legacyProjectName?: string,
+) {
+  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+  const regexEntries = prepareCreativeWorkshopRegexEntries(detail, selectedEntryKeys);
+
+  if (regexEntries.length === 0) {
+    return [];
+  }
+
+  const result = await applyPreparedCreativeWorkshopRegex(projectId, detail, regexEntries, legacyProjectName);
   setCreativeWorkshopInstallRecord(projectId, {
     installedVersion: detail.project.version || expectedVersion || null,
   });

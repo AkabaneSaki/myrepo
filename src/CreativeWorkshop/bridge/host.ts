@@ -4,6 +4,7 @@ import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
+import { repairCreativeWorkshopProject, scanCreativeWorkshopRepairCandidates } from '../services/repair';
 import {
   installCreativeWorkshopRegex,
   uninstallCreativeWorkshopRegex,
@@ -286,7 +287,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const isProjectMutation =
       actionType === 'bridge:install-project' ||
       actionType === 'bridge:uninstall-project' ||
-      actionType === 'bridge:confirm-project-update';
+      actionType === 'bridge:confirm-project-update' ||
+      actionType === 'bridge:repair:project';
 
     if (isProjectMutation && actionProjectId) {
       if (projectMutationInFlight.has(actionProjectId)) {
@@ -417,6 +419,41 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             event.data.requestId,
           );
           break;
+        case 'bridge:repair:scan': {
+          const report = await scanCreativeWorkshopRepairCandidates();
+          await post('bridge:repair:scan-result', report, event.data.requestId);
+          break;
+        }
+        case 'bridge:repair:project': {
+          const result = await repairCreativeWorkshopProject({
+            candidateId: _.isString(_.get(event.data, 'payload.candidateId')) ? String(event.data.payload?.candidateId) : '',
+            projectId: _.isString(_.get(event.data, 'payload.projectId')) ? String(event.data.payload?.projectId) : '',
+            projectVersion: _.isString(_.get(event.data, 'payload.projectVersion')) ? String(event.data.payload?.projectVersion) : null,
+            worldbookName: _.isString(_.get(event.data, 'payload.worldbookName')) ? String(event.data.payload?.worldbookName) : '',
+            entryUids: Array.isArray(event.data.payload?.entryUids)
+              ? (event.data.payload?.entryUids as Array<string | number>)
+              : [],
+            regexIds: Array.isArray(event.data.payload?.regexIds)
+              ? event.data.payload?.regexIds.filter(_.isString).map(String)
+              : [],
+            expectedEntryCount: _.isNumber(_.get(event.data, 'payload.expectedEntryCount'))
+              ? Number(event.data.payload?.expectedEntryCount)
+              : undefined,
+            expectedRegexCount: _.isNumber(_.get(event.data, 'payload.expectedRegexCount'))
+              ? Number(event.data.payload?.expectedRegexCount)
+              : undefined,
+            sourceProjectIds: Array.isArray(event.data.payload?.sourceProjectIds)
+              ? event.data.payload?.sourceProjectIds.filter(_.isString).map(String)
+              : [],
+          });
+          await post(
+            'bridge:repair:project-result',
+            { ...result, projects: await listInstalledCreativeWorkshopProjects() },
+            event.data.requestId,
+          );
+          await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
+          break;
+        }
         case 'bridge:close-workshop':
           onClose?.();
           break;

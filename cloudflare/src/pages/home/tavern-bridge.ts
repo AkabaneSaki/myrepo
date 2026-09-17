@@ -2,7 +2,9 @@ export const homeTavernBridgeScript = String.raw`
 const TAVERN_BRIDGE_NAMESPACE = 'creative-workshop-bridge';
 const TAVERN_OAUTH_RESULT_EVENT = 'creative-workshop:oauth-result';
 const PROJECT_DIFF_TIMEOUT_MS = 10000;
+const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
+const pendingRepairRequests = new Map();
 const installSubscriptionSyncChains = new Map();
 
 function createBridgeRequest(type, payload) {
@@ -31,6 +33,17 @@ function settleProjectDiffRequest(requestId, error, diff) {
     return true;
   }
   pending.resolve(diff);
+  return true;
+}
+
+function settleRepairRequest(requestId, error, payload) {
+  if (!requestId) return false;
+  const pending = pendingRepairRequests.get(requestId);
+  if (!pending) return false;
+  clearTimeout(pending.timeoutId);
+  pendingRepairRequests.delete(requestId);
+  if (error) pending.reject(error);
+  else pending.resolve(payload || {});
   return true;
 }
 
@@ -151,6 +164,15 @@ function handleBridgeMessage(event) {
       settleProjectDiffRequest(data.requestId, null, syncDiffFromBridge(data.payload || {}));
       renderApp();
       break;
+    case 'bridge:repair:scan-result':
+      settleRepairRequest(data.requestId, null, data.payload || {});
+      break;
+    case 'bridge:repair:project-result':
+      if (Array.isArray(data.payload?.projects)) {
+        syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'merge' });
+      }
+      settleRepairRequest(data.requestId, null, data.payload || {});
+      break;
     case 'bridge:oauth:result':
       dispatchOAuthResult(data.payload || {});
       break;
@@ -160,12 +182,17 @@ function handleBridgeMessage(event) {
         new Error(data.payload?.message || '更新差异加载失败'),
         null,
       );
+      const handledRepairError = settleRepairRequest(
+        data.requestId,
+        new Error(data.payload?.message || 'DLC 修复请求失败'),
+        null,
+      );
       const isProjectDiffError = data.payload?.action === 'bridge:get-project-diff';
       if (projectId) {
         setProjectPendingAction(projectId, null);
         renderApp();
       }
-      if (!handledProjectDiffError && !isProjectDiffError) {
+      if (!handledProjectDiffError && !handledRepairError && !isProjectDiffError) {
         showToast(data.payload?.message || '酒馆桥接错误', 'error');
       }
       break;
@@ -235,6 +262,26 @@ function confirmProjectUpdate(projectId, projectVersion = null) {
     ...(projectVersion ? { projectVersion } : {}),
     ...(legacyProjectName ? { legacyProjectName } : {}),
   });
+}
+
+function requestRepairBridge(type, payload = {}) {
+  const requestId = postBridgeMessage(type, payload);
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      if (!pendingRepairRequests.has(requestId)) return;
+      pendingRepairRequests.delete(requestId);
+      reject(new Error('DLC 诊断 / 修复请求超时，请重试'));
+    }, REPAIR_REQUEST_TIMEOUT_MS);
+    pendingRepairRequests.set(requestId, { resolve, reject, timeoutId, type });
+  });
+}
+
+function requestDlcRepairScan() {
+  return requestRepairBridge('bridge:repair:scan');
+}
+
+function requestDlcRepairProject(target) {
+  return requestRepairBridge('bridge:repair:project', target || {});
 }
 
 function requestOAuthLogin(authUrl, state) {

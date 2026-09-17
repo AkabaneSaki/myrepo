@@ -30,6 +30,7 @@ const fragments = {
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
+  homeRepairScript: await evaluateStandalone('src/pages/home/repair-ui.ts', 'homeRepairScript'),
   homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
 };
 

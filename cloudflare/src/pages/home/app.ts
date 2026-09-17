@@ -5,6 +5,7 @@ import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
 import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
+import { homeRepairScript } from './repair-ui';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
 import { homeUploadPreviewScript } from './upload-preview';
@@ -31,6 +32,7 @@ export const homeScript = String.raw`
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}
   ${homeModalsScript}
+  ${homeRepairScript}
   ${homePresentationScript}
 
   const isEmbedded = window.parent !== window;
@@ -404,6 +406,7 @@ export const homeScript = String.raw`
     const addAdminBtn = document.getElementById('addAdminBtn');
     const adminLogsBtn = document.getElementById('adminLogsBtn');
     const installedToggle = document.getElementById('installedProjectsToggle');
+    const dlcRepairBtn = document.getElementById('dlcRepairBtn');
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const fontMenuTrigger = document.getElementById('fontMenuTrigger');
@@ -423,6 +426,7 @@ export const homeScript = String.raw`
     const mobileLoginBtn = document.getElementById('mobileLoginBtn');
     const mobileLocalAdminLoginBtn = document.getElementById('mobileLocalAdminLoginBtn');
     const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
+    const mobileDlcRepairBtn = document.getElementById('mobileDlcRepairBtn');
     const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
     const mobileUploadBtn = document.getElementById('mobileUploadBtn');
     const mobileAdminPanelBtn = document.getElementById('mobileAdminPanelBtn');
@@ -582,6 +586,16 @@ export const homeScript = String.raw`
       });
     });
     if (workshopCloseBtn) workshopCloseBtn.onclick = requestCloseWorkshop;
+    if (dlcRepairBtn) dlcRepairBtn.onclick = event => {
+      event.stopPropagation();
+      state.userMenuOpen = false;
+      openDlcRepairModal();
+    };
+    if (mobileDlcRepairBtn) mobileDlcRepairBtn.onclick = event => {
+      event.stopPropagation();
+      state.mobileToolMode = '';
+      openDlcRepairModal();
+    };
     if (logoutBtn) logoutBtn.onclick = logout;
     if (uploadBtn) uploadBtn.onclick = event => {
       event.stopPropagation();
