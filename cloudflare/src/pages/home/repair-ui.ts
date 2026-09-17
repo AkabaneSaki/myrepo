@@ -63,6 +63,15 @@ function initializeRepairItems(report) {
   ]));
 }
 
+function closeDlcRepairModal() {
+  const overlay = dlcRepairUiState.overlay;
+  dlcRepairUiState.overlay = null;
+  dlcRepairUiState.report = null;
+  dlcRepairUiState.items = new Map();
+  dlcRepairUiState.busy = false;
+  if (overlay?.isConnected) overlay.remove();
+}
+
 function buildRepairMetadataHtml(candidate) {
   const metadata = Array.isArray(candidate?.metadata) ? candidate.metadata : [];
   if (!metadata.length) return '<p class="repair-muted">没有 Workshop metadata 记录</p>';
@@ -83,12 +92,14 @@ function buildRepairMatchProjectsHtml(item) {
   if (!match || match.status === 'unique') return '';
   const projects = Array.isArray(match.projects) ? match.projects.slice(0, 8) : [];
   if (!projects.length) return '';
-  return '<div class="repair-project-candidates">' + projects.map(project => {
+  return '<p class="repair-project-choice-hint"><i class="fas fa-hand-pointer"></i> 点击下方卡片，确认这是对应的 Workshop 项目</p>'
+    + '<div class="repair-project-candidates">' + projects.map(project => {
     const author = project.authorGlobalName || project.authorName || project.authorId || '未知作者';
     return '<button type="button" class="repair-project-choice" data-repair-pick-project="' + escapeHtml(item.candidate.candidateId) + '" data-project-id="' + escapeHtml(project.id || '') + '">'
-      + '<strong>' + escapeHtml(project.name || '未命名项目') + '</strong>'
+      + '<span class="repair-project-choice-copy"><strong>' + escapeHtml(project.name || '未命名项目') + '</strong>'
       + '<small>' + escapeHtml(author) + ' · v' + escapeHtml(project.version || '?') + '</small>'
-      + '<code>' + escapeHtml(project.id || '') + '</code>'
+      + '<code>' + escapeHtml(project.id || '') + '</code></span>'
+      + '<span class="repair-project-choice-action"><i class="fas fa-circle-check"></i> 选择此项目</span>'
       + '</button>';
   }).join('') + '</div>';
 }
@@ -220,6 +231,8 @@ function renderDlcRepairModal() {
   const scannedWorldbooks = Array.isArray(report.scannedWorldbookNames) ? report.scannedWorldbookNames : [];
   const unreadable = Array.isArray(report.unreadableWorldbookNames) ? report.unreadableWorldbookNames : [];
   const selectedItems = Array.from(dlcRepairUiState.items.values()).filter(item => item.selected);
+  const selectableItems = Array.from(dlcRepairUiState.items.values()).filter(item => item.status !== 'completed');
+  const allSelected = selectableItems.length > 0 && selectableItems.every(item => item.selected);
   const readyItems = selectedItems.filter(item => item.match?.status === 'unique' && isRepairCandidateSafe(item.candidate) && !['repairing', 'completed'].includes(item.status));
   const candidateHtml = dlcRepairUiState.items.size
     ? Array.from(dlcRepairUiState.items.values()).map(buildRepairCandidateHtml).join('')
@@ -237,7 +250,7 @@ function renderDlcRepairModal() {
     + baselineInfoHtml
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 无法读取世界书：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
     + '<div class="repair-worldbook-picker"><div><strong>扫描世界书</strong><small>默认只扫描当前已启用 / 已绑定的世界书。当前扫描：' + escapeHtml(scannedLabel) + '</small><small>当前启用：' + escapeHtml(enabledLabel) + '</small></div><div class="repair-worldbook-controls"><input id="dlcRepairWorldbookInput" list="dlcRepairWorldbookOptions" placeholder="输入或选择其他世界书"><datalist id="dlcRepairWorldbookOptions">' + worldbookOptions + '</datalist><button type="button" class="btn btn-outline" id="dlcRepairScanBookBtn"><i class="fas fa-book"></i> 扫描这本</button><button type="button" class="btn btn-outline" id="dlcRepairScanEnabledBtn"><i class="fas fa-link"></i> 扫描已启用</button></div></div>'
-    + '<div class="repair-toolbar"><div><strong>选择玩家报告有问题的 DLC</strong><small>可以一次选择 A / B / C / D。匹配可并行，实际修改会逐个执行。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重扫当前</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制报告</button></div></div>'
+    + '<div class="repair-toolbar"><div><strong>选择玩家报告有问题的 DLC</strong><small>勾选要处理的 DLC；候选 Workshop 项目需要点击「选择此项目」确认。匹配可并行，实际修改会逐个执行。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairSelectAllBtn" ' + (!selectableItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas ' + (allSelected ? 'fa-square-minus' : 'fa-square-check') + '"></i> ' + (allSelected ? '取消全选' : '全选') + '</button><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重扫当前</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制报告</button></div></div>'
     + '<div class="repair-candidate-list">' + candidateHtml + '</div>'
     + '<div class="repair-footer"><div><strong>' + selectedItems.length + '</strong> 个已选择 · <strong>' + readyItems.length + '</strong> 个可直接重装</div><div><button type="button" class="btn btn-outline" id="dlcRepairAnalyzeBtn" ' + (!selectedItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas fa-database"></i> 匹配 Workshop</button><button type="button" class="btn btn-primary" id="dlcRepairRunBtn" ' + (!readyItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas fa-screwdriver-wrench"></i> 重装所选最新版</button></div></div>';
 
@@ -248,6 +261,14 @@ function renderDlcRepairModal() {
       item.selected = Boolean(input.checked);
       renderDlcRepairModal();
     });
+  });
+
+  const selectAllBtn = root.querySelector('#dlcRepairSelectAllBtn');
+  if (selectAllBtn) selectAllBtn.addEventListener('click', () => {
+    const items = Array.from(dlcRepairUiState.items.values()).filter(item => item.status !== 'completed');
+    const shouldSelect = !items.length ? false : !items.every(item => item.selected);
+    items.forEach(item => { item.selected = shouldSelect; });
+    renderDlcRepairModal();
   });
 
   root.querySelectorAll('[data-repair-search]').forEach(button => {
@@ -360,16 +381,18 @@ async function runSelectedDlcRepairs() {
         sourceProjectIds: item.candidate.detectedProjectIds || [],
       });
       item.status = 'completed';
+      dlcRepairUiState.items.delete(item.candidate.candidateId);
       completed += 1;
     } catch (error) {
       item.status = 'failed';
       item.error = error?.message || String(error);
       failed += 1;
     }
-    renderDlcRepairModal();
+    if (dlcRepairUiState.items.size > 0) renderDlcRepairModal();
   }
   dlcRepairUiState.busy = false;
-  renderDlcRepairModal();
+  if (dlcRepairUiState.items.size === 0) closeDlcRepairModal();
+  else renderDlcRepairModal();
   if (failed) showToast('DLC 修复完成：' + completed + ' 成功，' + failed + ' 失败；失败项可直接重试', 'warning');
   else showToast('已重装 ' + completed + ' 个 DLC 的 Workshop 最新版');
 }
@@ -383,6 +406,8 @@ async function retryPendingDlcRepair(repairId) {
     await requestDlcRepairProject(record.target);
     showToast('未完成的 DLC 修复已继续并完成');
     await loadDlcRepairScan();
+    const hasPending = Array.isArray(dlcRepairUiState.report?.pending) && dlcRepairUiState.report.pending.length > 0;
+    if (dlcRepairUiState.items.size === 0 && !hasPending) closeDlcRepairModal();
   } catch (error) {
     showToast('继续修复失败：' + (error?.message || String(error)), 'error');
   } finally {
@@ -434,7 +459,7 @@ function openDlcRepairModal() {
   dlcRepairUiState.busy = false;
   const closeBtn = overlay.querySelector('.close-btn');
   if (closeBtn) closeBtn.addEventListener('click', () => {
-    if (dlcRepairUiState.overlay === overlay) dlcRepairUiState.overlay = null;
+    if (dlcRepairUiState.overlay === overlay) closeDlcRepairModal();
   }, { once: true });
   renderDlcRepairModal();
   void loadDlcRepairScan();

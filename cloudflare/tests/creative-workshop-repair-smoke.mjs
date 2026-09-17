@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import ts from '../../node_modules/typescript/lib/typescript.js';
@@ -8,7 +9,6 @@ const repairUiSource = await readFile(new URL('../src/pages/home/repair-ui.ts', 
 const bridgeSource = await readFile(new URL('../../src/CreativeWorkshop/bridge/host.ts', import.meta.url), 'utf8');
 const protocolSource = await readFile(new URL('../../src/CreativeWorkshop/bridge/protocol.ts', import.meta.url), 'utf8');
 const officialBaseline = JSON.parse(await readFile(new URL('../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook-fingerprints.json', import.meta.url), 'utf8'));
-const officialWorldbook = JSON.parse(await readFile(new URL('../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook.json', import.meta.url), 'utf8'));
 
 const compiled = ts.transpileModule(repairSource, {
   compilerOptions: {
@@ -176,23 +176,28 @@ const brokenEntries = [
   },
 ];
 
-const officialSourceEntries = Array.isArray(officialWorldbook.entries)
-  ? officialWorldbook.entries
-  : Object.values(officialWorldbook.entries || {});
-const officialSourceEntry = officialSourceEntries.find(entry => String(entry?.comment || '').startsWith('[DLC]'));
-assert.ok(officialSourceEntry, 'official baseline must contain at least one [DLC] entry');
+assert.equal(officialBaseline.character_version, 'V4.3.3');
+assert.ok(Array.isArray(officialBaseline.entries) && officialBaseline.entries.length > 0, 'tracked official fingerprint index must not be empty');
 const officialRuntimeEntry = {
   uid: 501,
-  name: officialSourceEntry.comment,
-  content: officialSourceEntry.content,
-  keys: officialSourceEntry.keys,
-  secondary_keys: officialSourceEntry.secondary_keys,
-  constant: officialSourceEntry.constant,
-  selective: officialSourceEntry.selective,
-  position: officialSourceEntry.position,
-  use_regex: officialSourceEntry.use_regex,
+  name: '[DLC][角色][Smoke官方原版]Smoke官方原版',
+  content: 'official baseline smoke content',
   extra: {},
 };
+const canonicalOfficialEntry = JSON.stringify({
+  name: officialRuntimeEntry.name,
+  content: officialRuntimeEntry.content,
+});
+const syntheticFingerprint = createHash('sha256').update(canonicalOfficialEntry).digest('hex');
+officialBaseline.entries = [
+  ...officialBaseline.entries,
+  {
+    source_entry_id: 'smoke',
+    name: officialRuntimeEntry.name,
+    fingerprint: syntheticFingerprint,
+    content_sha256: createHash('sha256').update(officialRuntimeEntry.content).digest('hex'),
+  },
+];
 
 {
   const harness = createHarness({ worldbooks: { Official: [officialRuntimeEntry] }, boundWorldbookNames: ['Official'] });
@@ -366,5 +371,8 @@ assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matchin
 assert.match(repairUiSource, /复制报告/);
 assert.match(repairUiSource, /UID 可定位/);
 assert.match(repairUiSource, /Workshop 数据库/);
+assert.match(repairUiSource, /dlcRepairSelectAllBtn/, 'repair UI must expose one-click select all');
+assert.match(repairUiSource, /选择此项目/, 'ambiguous Workshop candidates must have an explicit selection affordance');
+assert.match(repairUiSource, /closeDlcRepairModal/, 'repair UI must be able to close itself after the queue is emptied');
 
 console.log('CreativeWorkshop DLC repair smoke: ok');

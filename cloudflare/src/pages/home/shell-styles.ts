@@ -1590,10 +1590,12 @@ export const homeShellStyles = String.raw`
 .repair-pending-row > div { display:flex; flex-direction:column; min-width:0; }
 .repair-pending-row small { color:#aaa39a; overflow-wrap:anywhere; }
 .repair-candidate-list { display:flex; flex-direction:column; gap:12px; padding:16px 18px 24px; }
-.repair-candidate { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(255,255,255,.025); padding:14px; }
-.repair-candidate.selected { border-color:rgba(162,139,107,.48); background:rgba(162,139,107,.07); }
+.repair-candidate { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(255,255,255,.025); padding:14px; transition:border-color .14s ease,background .14s ease,box-shadow .14s ease; }
+.repair-candidate.selected { border-color:rgba(122,116,255,.78); background:rgba(99,88,255,.13); box-shadow:inset 4px 0 0 rgba(122,116,255,.9),0 0 0 1px rgba(122,116,255,.12); }
 .repair-candidate-head { display:flex; align-items:center; gap:10px; }
-.repair-select input { width:18px; height:18px; }
+.repair-select { flex:none; display:grid; place-items:center; width:28px; height:28px; border-radius:8px; background:rgba(255,255,255,.045); cursor:pointer; }
+.repair-select input { width:18px; height:18px; accent-color:#766dff; cursor:pointer; }
+.repair-candidate.selected .repair-select { background:rgba(118,109,255,.18); box-shadow:0 0 0 1px rgba(118,109,255,.42); }
 .repair-candidate-title { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
 .repair-candidate-title strong { font-size:1rem; }
 .repair-candidate-title small,.repair-muted,.repair-evidence { color:#99928a; }
@@ -1616,10 +1618,16 @@ export const homeShellStyles = String.raw`
 .repair-match-box.unique { border-color:rgba(96,166,116,.28); background:rgba(96,166,116,.06); }
 .repair-match-project { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; margin-top:8px; }
 .repair-match-project code { grid-column:1/-1; }
-.repair-project-candidates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
-.repair-project-choice { display:flex; flex-direction:column; gap:3px; padding:10px; text-align:left; border:1px solid rgba(255,255,255,.08); border-radius:9px; background:rgba(255,255,255,.03); color:inherit; cursor:pointer; }
-.repair-project-choice:hover { border-color:rgba(162,139,107,.45); }
-.repair-project-choice small { color:#99928a; }
+.repair-project-choice-hint { margin:10px 0 0; padding:8px 10px; border-radius:9px; background:rgba(118,109,255,.12); color:#c8c4ff; font-size:.8rem; font-weight:650; }
+.repair-project-choice-hint i { margin-right:6px; }
+.repair-project-candidates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:8px; }
+.repair-project-choice { display:flex; align-items:stretch; justify-content:space-between; gap:10px; padding:0; overflow:hidden; text-align:left; border:1px solid rgba(118,109,255,.42); border-radius:10px; background:rgba(118,109,255,.08); color:inherit; cursor:pointer; transition:border-color .14s ease,background .14s ease,transform .14s ease,box-shadow .14s ease; }
+.repair-project-choice:hover { border-color:rgba(143,135,255,.9); background:rgba(118,109,255,.16); transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,.2); }
+.repair-project-choice:focus-visible { outline:2px solid #8a82ff; outline-offset:2px; }
+.repair-project-choice-copy { min-width:0; display:flex; flex:1; flex-direction:column; gap:3px; padding:11px 12px; }
+.repair-project-choice small { color:#a9a3b8; }
+.repair-project-choice-action { flex:none; display:flex; align-items:center; justify-content:center; gap:6px; min-width:118px; padding:10px 12px; background:rgba(118,109,255,.2); color:#ddd9ff; font-size:.78rem; font-weight:750; border-left:1px solid rgba(118,109,255,.28); }
+.repair-project-choice:hover .repair-project-choice-action { background:rgba(118,109,255,.3); }
 .repair-manual-search { display:flex; gap:8px; margin-top:10px; }
 .repair-manual-search input { min-width:0; flex:1; border:1px solid rgba(255,255,255,.1); border-radius:9px; background:rgba(0,0,0,.18); color:#eee8df; padding:9px 10px; }
 
@@ -1634,6 +1642,8 @@ export const homeShellStyles = String.raw`
   .repair-metadata-row { grid-template-columns:20px minmax(0,1fr) 52px; }
   .repair-metadata-values { grid-column:2/-1; }
   .repair-project-candidates { grid-template-columns:1fr; }
+  .repair-project-choice { flex-direction:column; }
+  .repair-project-choice-action { min-width:0; border-left:0; border-top:1px solid rgba(118,109,255,.28); }
   .repair-pending-row { align-items:stretch; flex-direction:column; }
   .repair-manual-search { flex-direction:column; }
 }

@@ -294,7 +294,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .project-form-footer-note { display:none; }
   .project-form .form-submit-btn { width:100%; min-width:0; min-height:48px; }
 }
-.toast-viewport { position:fixed; right:18px; bottom:18px; z-index:10150; width:min(360px,calc(100vw - 36px)); display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+.toast-viewport { position:fixed; left:50%; top:max(18px,env(safe-area-inset-top)); right:auto; bottom:auto; transform:translateX(-50%); z-index:2147483000; width:min(420px,calc(100vw - 36px)); display:flex; flex-direction:column; gap:10px; pointer-events:none; }
 .toast { position:relative; width:100%; display:grid; grid-template-columns:18px minmax(0,1fr) 28px; align-items:start; gap:10px; padding:12px 12px 14px; overflow:hidden; pointer-events:auto; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(33,34,38,.94); color:#d9d8d4; box-shadow:0 18px 40px rgba(0,0,0,.28); backdrop-filter:blur(18px); opacity:0; transform:translateY(8px) scale(.98); animation:toast-in .18s ease forwards; }
 .toast::before { content:""; position:absolute; left:0; top:10px; bottom:10px; width:3px; border-radius:999px; background:rgba(140,154,176,.95); }
 .toast[data-type="success"]::before { background:rgba(106,181,126,.95); }
@@ -320,7 +320,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 @keyframes toast-out { from { opacity:1; transform:translateY(0) scale(1); } to { opacity:0; transform:translateY(6px) scale(.98); } }
 @keyframes toast-progress { from { transform:scaleX(1); } to { transform:scaleX(0); } }
 @media (max-width:1023px) {
-  .toast-viewport { left:12px; right:12px; bottom:calc(max(8px,env(safe-area-inset-bottom)) + 72px); width:auto; }
+  .toast-viewport { left:50%; right:auto; top:calc(max(8px,env(safe-area-inset-top)) + 8px); bottom:auto; width:min(calc(100vw - 24px),420px); transform:translateX(-50%); }
 }
 @media (prefers-reduced-motion:reduce) {
   .toast,.toast--leaving { animation-duration:.01ms; }
