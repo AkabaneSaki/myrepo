@@ -465,9 +465,12 @@ export const homeScript = String.raw`
 
     const closeMobileTool = () => {
       if (!mobileToolSheet || !mobileToolBackdrop) return;
+      const activeElement = document.activeElement;
+      if (activeElement && mobileToolSheet.contains(activeElement) && typeof activeElement.blur === 'function') activeElement.blur();
       state.mobileToolMode = '';
       mobileToolSheet.classList.remove('show');
       mobileToolBackdrop.classList.remove('show');
+      mobileToolSheet.inert = true;
       mobileToolSheet.setAttribute('aria-hidden', 'true');
       document.querySelectorAll('[data-mobile-tool]').forEach(button => button.classList.remove('active'));
     };
@@ -482,6 +485,7 @@ export const homeScript = String.raw`
       });
       mobileToolSheet.classList.add('show');
       mobileToolBackdrop.classList.add('show');
+      mobileToolSheet.inert = false;
       mobileToolSheet.setAttribute('aria-hidden', 'false');
       document.querySelectorAll('[data-mobile-tool]').forEach(button => button.classList.toggle('active', button.dataset.mobileTool === mode));
       if (mode === 'search') setTimeout(() => mobileSearchInput?.focus(), 120);
@@ -602,7 +606,7 @@ export const homeScript = String.raw`
     };
     if (mobileDlcRepairBtn) mobileDlcRepairBtn.onclick = event => {
       event.stopPropagation();
-      state.mobileToolMode = '';
+      closeMobileTool();
       openDlcRepairModal();
     };
     if (logoutBtn) logoutBtn.onclick = logout;
@@ -636,21 +640,21 @@ export const homeScript = String.raw`
     if (myProjectsMenuBtn) myProjectsMenuBtn.onclick = toggleMyProjectsView;
     if (mobileMyProjectsBtn) mobileMyProjectsBtn.onclick = toggleMyProjectsView;
     if (adminPanelBtn) adminPanelBtn.onclick = openAdminPanel;
-    if (mobileAdminPanelBtn) mobileAdminPanelBtn.onclick = () => { state.mobileToolMode = ''; openAdminPanel(); };
+    if (mobileAdminPanelBtn) mobileAdminPanelBtn.onclick = () => { closeMobileTool(); openAdminPanel(); };
     if (bannerSettingsBtn) bannerSettingsBtn.onclick = event => {
       event.stopPropagation();
       state.userMenuOpen = false;
       openDiscoverBannerSettingsModal();
     };
     if (addAdminBtn) addAdminBtn.onclick = openAddAdminModal;
-    if (mobileAddAdminBtn) mobileAddAdminBtn.onclick = () => { state.mobileToolMode = ''; openAddAdminModal(); };
+    if (mobileAddAdminBtn) mobileAddAdminBtn.onclick = () => { closeMobileTool(); openAddAdminModal(); };
     if (adminLogsBtn) adminLogsBtn.onclick = openAdminLogsModal;
-    if (mobileAdminLogsBtn) mobileAdminLogsBtn.onclick = () => { state.mobileToolMode = ''; openAdminLogsModal(); };
-    if (mobileBannerSettingsBtn) mobileBannerSettingsBtn.onclick = event => { event.stopPropagation(); state.mobileToolMode = ''; openDiscoverBannerSettingsModal(); };
+    if (mobileAdminLogsBtn) mobileAdminLogsBtn.onclick = () => { closeMobileTool(); openAdminLogsModal(); };
+    if (mobileBannerSettingsBtn) mobileBannerSettingsBtn.onclick = event => { event.stopPropagation(); closeMobileTool(); openDiscoverBannerSettingsModal(); };
     if (mobileLogoutBtn) mobileLogoutBtn.onclick = logout;
     if (mobileUploadBtn) mobileUploadBtn.onclick = event => {
       event.stopPropagation();
-      state.mobileToolMode = '';
+      closeMobileTool();
       try { openUploadModal(); }
       catch (error) { console.error('[CreativeWorkshop] failed to open upload modal', error); showToast('无法打开上传窗口: ' + (error?.message || String(error)), 'error'); }
     };

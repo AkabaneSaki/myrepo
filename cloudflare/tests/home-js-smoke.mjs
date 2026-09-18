@@ -43,8 +43,13 @@ for (const [name, script] of Object.entries(fragments)) {
 }
 
 assert.match(homePageSource, /theme-color\" content=\"#0f1012/);
+assert.match(homePageSource, /rel=\"icon\" href=\"data:,/);
 assert.match(homePageSource, /html,body\{margin:0;min-height:100%;background:#0f1012/);
 assert.match(homeStylesSource, /body \{[^}]*background:#0f1012/);
+assert.match(homeAppSource, /mobileToolSheet\.inert = true/);
+assert.match(homeAppSource, /mobileToolSheet\.inert = false/);
+assert.match(homeAppSource, /mobileToolSheet\.contains\(activeElement\).*activeElement\.blur/);
+assert.match(fragments.homeLayoutRenderScript, /aria-hidden=.*inert/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.detail-keywords-block/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.keyword-chip/);
 assert.doesNotMatch(homeStylesSource, /\.upload-preview-summary \{[^}]*rgba\(99,102,241/);
