@@ -17,6 +17,14 @@ assert.match(reviewSource, /draft_revision = \?/, 'review mutation must atomical
 assert.match(reviewSource, /meta\?\.changes|meta\.changes/, 'review mutation must verify that exactly one row changed');
 assert.match(adminSource, /if \(!reviewedAt\)[\s\S]{0,180}409/, 'stale/already-completed reviews must return conflict');
 assert.match(adminSource, /restoreApprovedReviewToPending/, 'failed draft publication must restore the review to pending');
+
+const pendingEndpointStart = adminSource.indexOf('export class AdminPendingList');
+const reviewDetailEndpointStart = adminSource.indexOf('export class AdminReviewDetail');
+assert.ok(pendingEndpointStart >= 0 && reviewDetailEndpointStart > pendingEndpointStart, 'admin pending endpoint source must be readable');
+const pendingEndpointSource = adminSource.slice(pendingEndpointStart, reviewDetailEndpointStart);
+assert.doesNotMatch(pendingEndpointSource, /readReviewContentText|readDirectReviewContentText|buildProjectReviewDiff|parseWorldbookEntriesPreview|parseRegexEntriesPreview|R2_BUCKET/, 'queue sorting/listing must not read or parse full project content');
+assert.match(pendingEndpointSource, /result\.projects\.map/, 'queue listing should map lightweight database metadata only');
+
 assert.match(r2Source, /rollback:/, 'published R2 replacement must expose a rollback operation');
 assert.match(r2Source, /mutatedKeys/, 'R2 rollback must track only keys changed by the current publication attempt');
 

@@ -590,6 +590,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-description summary { color:#c8c6c1; }
 .admin-review-description-hint { color:#6f6d68; font-size:.69rem; }
 .admin-review-description-body { max-height:none; overflow:visible; color:#aaa8a3; line-height:1.6; }
+.admin-review-original-conflicts { padding:14px 0 0; border-top:1px solid rgba(255,255,255,.07); }
+.admin-review-section-title { display:flex; align-items:center; gap:8px; color:#d8d7d3; font-weight:760; }
+.admin-review-section-title i { color:#d5b57d; }
+.admin-review-section-title strong { margin-left:auto; color:#c9ae87; font-size:.72rem; }
+.admin-review-original-conflicts p { margin:10px 0 0; color:#8f8d88; font-size:.74rem; line-height:1.55; }
 .admin-review-detail-main .detail-section,.admin-review-detail-main .external-links-section,.admin-review-detail-main .admin-review-diff-section { padding-top:22px; border-top:1px solid rgba(255,255,255,.07); }
 .admin-review-detail-main .entry-content.open { max-height:none; overflow:visible; }
 .admin-review-sticky-actions { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:0; border:0; border-radius:0; background:transparent; backdrop-filter:none; box-shadow:none; }
@@ -730,17 +735,17 @@ button.detail-stat:disabled { cursor:not-allowed; opacity:.55; }
 .external-links-note { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(245,158,11,.11); border:1px solid rgba(251,191,36,.38); color:#FDE68A; font-size:.78rem; font-weight:600; line-height:1.45; }
 .external-links-note i { margin-top:2px; flex:none; color:#FBBF24; }
 .external-link-groups { display:flex; flex-direction:column; gap:8px; }
-.external-link-domain { overflow:hidden; border:1px solid rgba(148,163,184,.14); border-radius:12px; background:rgba(15,23,42,.6); }
-.external-link-domain > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; color:#E2E8F0; font-size:.82rem; font-weight:650; }
+.external-link-domain { overflow:hidden; border:1px solid rgba(190,164,125,.16); border-radius:12px; background:#151619; }
+.external-link-domain > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; color:#d8d7d3; font-size:.82rem; font-weight:650; }
 .external-link-domain > summary::-webkit-details-marker { display:none; }
 .external-link-domain > summary span { display:inline-flex; align-items:center; gap:7px; min-width:0; }
 .external-link-domain > summary span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.external-link-domain > summary span:last-child { flex:none; color:rgba(226,232,240,.55); font-size:.72rem; }
+.external-link-domain > summary span:last-child { flex:none; color:#77756f; font-size:.72rem; }
 .external-link-list { display:flex; flex-direction:column; gap:8px; padding:0 10px 10px; }
-.external-link-item { min-width:0; padding:10px; border-radius:10px; background:rgba(2,6,23,.48); border:1px solid rgba(255,255,255,.05); }
-.external-link-item code { display:block; max-width:100%; overflow-wrap:anywhere; white-space:pre-wrap; color:#BFDBFE; font-size:.76rem; line-height:1.45; user-select:text; }
+.external-link-item { min-width:0; padding:10px; border-radius:10px; background:#111214; border:1px solid rgba(255,255,255,.06); }
+.external-link-item code { display:block; max-width:100%; overflow-wrap:anywhere; white-space:pre-wrap; color:#cdbb9f; font-size:.76rem; line-height:1.45; user-select:text; }
 .external-link-sources { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-.external-link-sources span { display:inline-flex; max-width:100%; padding:3px 7px; border-radius:999px; background:rgba(255,255,255,.05); color:rgba(226,232,240,.62); font-size:.68rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.external-link-sources span { display:inline-flex; max-width:100%; padding:3px 7px; border-radius:999px; background:rgba(190,164,125,.06); color:#9b958c; font-size:.68rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .external-link-copy-trigger { width:100%; display:block; padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
 .external-link-copy-trigger:hover code { color:#d8c39f; text-decoration:underline; text-underline-offset:3px; }
 .external-link-warning-modal { z-index:10020; }
