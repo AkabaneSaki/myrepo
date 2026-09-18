@@ -418,6 +418,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 }
 .admin-review-modal,.admin-review-detail-modal { max-width:1040px; }
 .admin-review-queue { display:flex; flex-direction:column; gap:14px; }
+.admin-review-overlay.is-refreshing .admin-review-list { opacity:.58; pointer-events:none; transition:opacity .15s ease; }
+.admin-review-overlay.is-refreshing .admin-review-toolbar { opacity:.78; }
 .admin-review-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; border:1px solid rgba(148,163,184,.14); border-radius:14px; background:rgba(15,23,42,.42); }
 .admin-review-sort-control { display:inline-flex; align-items:center; gap:8px; color:rgba(226,232,240,.72); font-size:.8rem; }
 .admin-review-sort-control select { min-width:118px; padding:7px 30px 7px 10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; background:#111827; color:#E5E7EB; }
