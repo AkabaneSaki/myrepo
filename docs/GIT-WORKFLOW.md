@@ -341,12 +341,8 @@ C:\Project\myrepo-git\.cotel\local\CHECK_PRODUCTION.cmd
 C:\Project\myrepo-git\.cotel\local\DEPLOY_PRODUCTION.cmd
 ```
 
-These shortcuts wrap the same composable deploy engine. The default production source is refreshed `upstream/main`. When an explicitly authorized release exception is active, the same helper can select an owner `release/*` branch or owner release tag without creating another deploy script:
+These shortcuts wrap the same composable deploy engine. The normal production source is refreshed `upstream/main` after Master staging acceptance and owner-main promotion. A stable owner semver tag should anchor each released version. The helper may still select an explicitly authorized owner `release/*` branch or owner release tag for exceptional recovery work, but historical release branches are temporary workspaces rather than long-term backups.
 
-```text
-DEPLOY_PRODUCTION.cmd -ReleaseBranch release/2.0.15
-DEPLOY_PRODUCTION.cmd -ReleaseTag 2.0.15
-```
 
 The production profile accepts only source selectors allowed by policy (currently `upstream/main`, `upstream/release/*`, or an owner semver release tag). The engine fetches and resolves that exact source, temporarily locks the checkout to the exact commit, verifies the expected production Cloudflare account/Worker/D1/KV/R2, checks/applies migrations, performs a Wrangler dry-run, deploys only after all checks pass, and restores the original checkout afterward. `CHECK_PRODUCTION.cmd` performs the same preflight without applying migrations or deploying.
 

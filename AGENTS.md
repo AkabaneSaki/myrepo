@@ -13,20 +13,15 @@ These rules apply to all agents and automated sessions working in this repositor
 - `origin/main` should be kept synchronized with `upstream/main`; do not use the fork `main` as a task-development branch.
 - `origin/staging` is the long-lived integration branch used for Master staging validation before any owner PR.
 
-### Temporary production exception — P2/P3 recovery
+### Release transition — 2.1
 
-This repository is currently in a temporary exception state because P2 work was merged into `upstream/main` earlier than intended.
+The temporary 2.0.15 recovery exception is retired for active development. The immutable `2.0.15` release tag remains the historical production backup; do not keep old hotfix/release branches merely as archives.
 
-- Current `upstream/main` contains P2 work, including taxonomy/data-model changes that are not intended for the old production UI, plus ongoing P3 UI work.
-- P2/P3 development may continue normally through task branches -> `origin/staging` -> Master staging acceptance -> owner PR / `upstream/main`. **Merging accepted P2/P3 work into `upstream/main` does not authorize a production deployment while this exception is active.**
-- **Do not deploy current `upstream/main` to production until Master explicitly declares the P2/P3 UI line production-ready.** Do not pressure or accelerate P3 merely to make `main` deployable again.
-- The last clean stable production base before the accidental P2 merge is tag `2.0.14`, commit `2ab714e011dfd6f93f0801b1567e9ac2d5d62358`.
-- For the current hotfix cycle, create/use `release/2.0.15` from the `2.0.14` stable base and apply only the required 2.0.15 hotfixes. The stable `2.0.15` tag / its exact release commit is the temporary production source.
-- Before promoting the P2/P3 staging line into owner `main`, verify that every still-required 2.0.15 reliability fix has been forward-ported into the P2/P3 line. During the 2026-09-11 recovery audit, the forward line was still missing equivalent behavior for version/cache freshness, worldbook duplicate/install-identity handling, and per-project install/update/uninstall mutation locking; re-check current code rather than assuming this list remains exhaustive.
-- Keep equivalent hotfix fixes in the forward P2/P3 code line as needed so the later release does not regress.
-- Do **not** rewrite, reset, force-push, or otherwise replace `upstream/main` merely to restore its old production role.
-- Once P2/P3 and the new UI are complete and accepted by Master, production may return to the normal rule: release from the exact accepted `upstream/main` commit and a stable tag. At that point this temporary exception should be removed or archived.
-- Until then, any instruction elsewhere in this file saying production must come from `upstream/main` is overridden by this temporary exception.
+- The forward development line already contains the required 2.0.15 reliability protections for project/cache freshness, worldbook update reconciliation/install identity, and per-project install/update/uninstall mutation serialization. Preserve equivalent protections during later refactors.
+- `origin/main` remains a synchronized mirror of `upstream/main`; never reset or force-push either main branch back to 2.0.15.
+- 2.1 follows the normal release flow: task branch -> `origin/staging` -> Master staging acceptance -> owner PR / `upstream/main` -> stable 2.1 tag -> production deployment.
+- Until Master explicitly accepts the 2.1 staging build and the exact accepted changes are present in `upstream/main`, do not deploy 2.1 to production or treat a newer main commit as an approved release.
+- After 2.1 is released, production source returns fully to the normal rule: the exact accepted `upstream/main` commit plus its stable release tag. No 2.0.15 branch exception remains.
 
 Before the first Git remote operation in every session, verify both actual remote URLs. Never infer ownership from a remote name alone.
 
