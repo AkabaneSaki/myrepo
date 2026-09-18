@@ -1,6 +1,6 @@
 export const homeLayoutRenderScript = [
-  'const WORKSHOP_RELEASE_VERSION = "2.0.15";',
-  'const WORKSHOP_RELEASE_IMPORT = "import \\\'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.15/test-dist/CreativeWorkshop/index.js\\\'";',
+  'const WORKSHOP_RELEASE_VERSION = "2.1.0";',
+  'const WORKSHOP_RELEASE_IMPORT = "import \\\'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@2.1.0/test-dist/CreativeWorkshop/index.js\\\'";',
   'function isDesktopWorkshopLayout() {',
   '  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;',
   '}',

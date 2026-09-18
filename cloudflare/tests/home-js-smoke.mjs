@@ -174,6 +174,7 @@ assert.ok(advertisedVersionMatch, 'Workshop advertised release version must be r
 assert.ok(advertisedImportMatch, 'Workshop advertised release import tag must be readable');
 
 assert.equal(advertisedImportMatch[1], advertisedVersionMatch[1], 'Advertised Workshop import tag must match advertised stable release');
+assert.equal(clientVersionMatch[1], advertisedVersionMatch[1], 'Creative Workshop client version must match advertised stable release');
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" multiple/);

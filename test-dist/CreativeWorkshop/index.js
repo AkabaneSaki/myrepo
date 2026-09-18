@@ -63,7 +63,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.1.0-dev';
+const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.1.0';
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
