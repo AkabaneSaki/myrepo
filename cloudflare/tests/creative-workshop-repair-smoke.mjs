@@ -401,11 +401,16 @@ assert.match(bridgeSource, /repairCreativeWorkshopProject/);
 assert.match(repairUiSource, /buildDlcRepairReportText/);
 assert.match(repairUiSource, /Promise\.all\(selected\.map/);
 assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matching may run in parallel, but local replacement must be sequential');
-assert.match(repairUiSource, /复制报告/);
+assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
-assert.match(repairUiSource, /Workshop 数据库/);
+assert.match(repairUiSource, /对应工坊项目/);
 assert.match(repairUiSource, /dlcRepairSelectAllBtn/, 'repair UI must expose one-click select all');
 assert.match(repairUiSource, /选择此项目/, 'ambiguous Workshop candidates must have an explicit selection affordance');
+assert.match(repairUiSource, /dlcRepairWorldbookSelect/, 'repair UI must allow choosing another worldbook when automatic scan misses it');
+assert.match(repairUiSource, /重新扫描/, 'repair UI must expose one simple rescan action');
+assert.doesNotMatch(repairUiSource, /dlcRepairAnalyzeBtn/, 'Workshop matching should happen automatically after selection');
+assert.doesNotMatch(repairUiSource, /dlcRepairScanEnabledBtn/, 'enabled worldbooks should be scanned automatically');
+assert.doesNotMatch(repairUiSource, /dlcRepairScanBookBtn/, 'choosing another worldbook should trigger scanning without a second button');
 assert.match(repairUiSource, /closeDlcRepairModal/, 'repair UI must be able to close itself after the queue is emptied');
 
 console.log('CreativeWorkshop DLC repair smoke: ok');
