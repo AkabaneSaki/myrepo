@@ -182,7 +182,7 @@ assert.equal(advertisedImportMatch[1], advertisedVersionMatch[1], 'Advertised Wo
 assert.equal(clientVersionMatch[1], advertisedVersionMatch[1], 'Creative Workshop client version must match advertised stable release');
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
-assert.match(fragments.homeModalsScript, /id=\"regexInput\" accept=\"\.json\" multiple/);
+assert.match(fragments.homeModalsScript, /id=\"regexInput\"[^>]*accept=\"\.json\"[^>]*multiple/);
 assert.doesNotMatch(fragments.homeModalsScript, /!payload\.name \|\| !fileInput\.files\[0\]/);
 assert.match(fragments.homeModalsScript, /validateProjectTaxonomySelection\(payload\)/);
 assert.match(fragments.homeModalsScript, /validateProjectContentSelection\(payload\.projectType, hasWorldbook, hasRegex\)/);
@@ -396,6 +396,9 @@ assert.match(fragments.homeModalsScript, /label for="customTags"/);
 assert.match(fragments.homeModalsScript, /worldbookFileLabel" for="fileInput"/);
 assert.match(fragments.homeModalsScript, /regexFileLabel" for="regexInput"/);
 assert.match(fragments.homeModalsScript, /label for="coverInput"/);
+assert.match(fragments.homeModalsScript, /name="worldbookFile" aria-label="世界书文件"/);
+assert.match(fragments.homeModalsScript, /name="regexFiles" aria-label="正则文件"/);
+assert.match(fragments.homeModalsScript, /name="coverImage" aria-label="封面图"/);
 assert.match(fragments.homeModalsScript, /overlay\.style\.zIndex = String\(9999 \+ document\.querySelectorAll\("\.modal-overlay"\)\.length\)/);
 assert.match(fragments.homeModalsScript, /compatibility-modal/);
 assert.match(fragments.homeModalsScript, /compatibility-section-head/);
