@@ -2361,14 +2361,14 @@ function showAgreementPopup() {
         backdropFilter: 'blur(6px)',
     });
     const $card = $('<div>').css({
-        background: 'linear-gradient(145deg, #1E293B, #0F172A)',
+        background: '#18191c',
         borderRadius: '20px',
         padding: '36px 32px 28px',
         width: 'min(520px, 92vw)',
         maxHeight: '85vh',
         overflowY: 'auto',
         boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
-        color: '#E2E8F0',
+        color: '#ececea',
         fontFamily: 'system-ui, -apple-system, sans-serif',
     });
     const $title = $('<h2>')
@@ -2383,7 +2383,7 @@ function showAgreementPopup() {
         justifyContent: 'center',
         gap: '10px',
     })
-        .html('<i class="fas fa-shield-alt" style="color:#60A5FA"></i> 免责声明');
+        .html('<i class="fas fa-shield-alt" style="color:#b89d76"></i> 免责声明');
     const disclaimerItems = [
         {
             icon: 'fa-user-edit',
@@ -2424,7 +2424,7 @@ function showAgreementPopup() {
             alignItems: 'center',
             gap: '8px',
         })
-            .html(`<i class="fas ${item.icon}" style="color:#60A5FA;font-size:0.85rem"></i> ${index + 1}. ${item.title}`);
+            .html(`<i class="fas ${item.icon}" style="color:#b89d76;font-size:0.85rem"></i> ${index + 1}. ${item.title}`);
         const $itemText = $('<div>')
             .css({
             fontSize: '0.88rem',
@@ -2547,7 +2547,7 @@ function openCreativeWorkshop() {
         width: '100%',
         height: '100%',
         borderRadius: '20px',
-        background: '#0F172A',
+        background: '#0f1012',
         boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
     });
     const $closeButton = host$('<button type="button">退出</button>').css({
