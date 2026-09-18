@@ -1349,10 +1349,10 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
 /* Mobile creator form follows the fixed overlay instead of dynamic viewport units.
    Android/Tauri can keep a stale 100dvh after a tap or keyboard resize. */
 @media (max-width:640px) {
-  .project-form-modal { padding:0 !important; overflow:hidden; }
-  .project-form-modal .modal-content { width:100%; height:100%; min-height:0; max-height:none; border:0; border-radius:0; box-shadow:none; }
-  .project-form-modal .modal-body { min-height:0; overflow:hidden; padding:0; }
-  .project-form { min-height:0; }
+  .project-form-modal { position:fixed; inset:0; padding:0 !important; overflow:hidden; align-items:stretch; justify-content:stretch; }
+  .project-form-modal .modal-content { position:absolute; inset:0; width:auto; height:auto; min-height:0; max-width:none; max-height:none; margin:0; border:0; border-radius:0; box-shadow:none; }
+  .project-form-modal .modal-body { flex:1 1 auto; min-height:0; overflow:hidden; padding:0; }
+  .project-form { height:100%; min-height:0; }
   .project-form-layout { min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
   .project-form-footer { position:relative; flex:none; }
 }
