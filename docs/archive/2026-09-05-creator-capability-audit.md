@@ -1,6 +1,9 @@
 # Creative Workshop Creator Capability Audit — 2026-09-05
 
-Status: **historical audit record with 2026-09-08 current-status addendum**
+Status: **archived historical audit record**  
+Archived: **2026-09-19**  
+
+> 下面的 current-status / remaining-issue 描述只代表当时状态。判断当前实现时以 live code、tests 与 GitHub issues 为准。
 
 ## 2026-09-08 Current-status addendum
 

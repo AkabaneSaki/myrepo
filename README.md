@@ -113,12 +113,13 @@ D1 的基础表结构定义在 [`cloudflare/schema.sql`](cloudflare/schema.sql)�
 
 这些表用于支撑用户体系、项目管理、互动行为与后台审核功能。
 
-当前 Workshop 开发状态与架构边界优先看：
+开发文档从 [`docs/README.md`](docs/README.md) 进入。主要长期资料：
 
-- [`docs/plans/workshop-p2.md`](docs/plans/workshop-p2.md)：当前 P2 / 本地 WIP / staging 状态；
-- [`docs/audits/workshop-policy-architecture-reference-20260908.md`](docs/audits/workshop-policy-architecture-reference-20260908.md)：taxonomy、内容规则与维护边界；
+- [`docs/audits/workshop-architecture.md`](docs/audits/workshop-architecture.md)：taxonomy、内容规则与维护边界；
 - [`cloudflare/README.md`](cloudflare/README.md)：Worker 目录、验证脚本与审核流程；
 - [`docs/GIT-WORKFLOW.md`](docs/GIT-WORKFLOW.md)：Git、staging Worker 与 production 的发布 SOP。
+
+未实现设计放在 `docs/plans/`；已经完成或被取代的阶段记录放在 `docs/archive/`，不要从 archive 推断当前运行状态。
 
 ## 使用说明
 

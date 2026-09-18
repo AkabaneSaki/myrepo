@@ -1,5 +1,8 @@
 # 封面图交付方案
 
+Status: **active plan — wsrv fallback implemented; direct public asset delivery pending revalidation**  
+Updated: **2026-09-19**
+
 ## 当前止血方案
 
 - 前端封面优先使用 `wsrv.nl` 代理 URL。

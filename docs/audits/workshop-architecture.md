@@ -1,9 +1,11 @@
-# Creative Workshop — Policy / Architecture Reference
+# Creative Workshop — Architecture / Policy Reference
 
-Status: **reference / audit**  
-Updated: **2026-09-08**
+Status: **maintained reference**  
+Updated: **2026-09-19**
 
 > 用途：给未来维护者 / AI session 快速判断「规则在哪里、哪些值得集中、哪些不要动」，减少每次重新全仓扫描。
+>
+> 本文件只记录相对稳定的架构边界与维护原则，不记录当前分支、SHA、部署状态或本地 WIP。阶段性状态与已完成工作应进入 `docs/archive/`。
 >
 > 本文件不是重构计划，也不代表下面所有技术债都应该立即处理。
 
@@ -37,7 +39,7 @@ Creative Workshop 目前不需要 repo-wide reconstruction。
 
 结构化分类 / 标签规则由 `cloudflare/src/config/project-taxonomy.ts` 维护，包括 `projectType`、`extensionType`、角色官方 facets、`customTags` 与 `displayTags`。
 
-2026-09-08 当前 staging 代码线已经包含上述 content policy 与 taxonomy 实现；旧版“#22 尚为本地 WIP、#21 尚未实现”的说明已失效。当前本地未进入 staging 的工作是 `feature/admin-review-continuous-flow` 审核 UX follow-up。
+这些规则已经由对应实现文件与 contract/smoke test 承担。维护时应先验证当前代码，不要从历史计划推断现状。
 
 ---
 
@@ -113,7 +115,7 @@ src/CreativeWorkshop/
 | Release 版本 | Tavern version + Web advertised version；已有 smoke test | **当前方法可接受** | release tooling 再成熟时自动生成 |
 | URL / CSP / 协议安全 | inspection / CSP 中 | **不要变成玩法 config** | 安全需求变化时 |
 | R2 key / D1 schema / storage key | 各模块内部 | **不要集中到“万能 config”** | 对应存储迁移时 |
-| CSS / UI magic number | UI 层 | **P2 不碰** | 对应 UI 工作时 |
+| CSS / UI magic number | UI 层 | **不在架构整理中顺手处理** | 对应 UI 工作时 |
 
 ---
 
@@ -256,7 +258,7 @@ cloudflare/src/utils/db.ts
 - 因重复限制造成真实 bug；
 - 新功能需要新增多组共享 limits。
 
-仅仅因为“现在重复了”不构成当前审核 UX / P2 收尾阶段的重构理由。
+仅仅因为“现在重复了”不构成立即重构的理由。
 
 ---
 
@@ -367,7 +369,7 @@ DB ORDER BY
 legacy compatibility
 ```
 
-不要在 #22 顺手清理。
+不要在无关功能里顺手清理。
 
 ---
 
@@ -501,54 +503,21 @@ DB / R2 存储结构
 | Bridge install/update/uninstall | `src/CreativeWorkshop/bridge/host.ts` |
 | Client release version | `src/CreativeWorkshop/version.ts` |
 | Web advertised release | `cloudflare/src/pages/home/render/layout.ts` |
-| P2 当前任务 | `docs/plans/workshop-p2.md` |
+
 | Git / staging / production SOP | `AGENTS.md`, `docs/GIT-WORKFLOW.md` |
 
 ---
 
-## 13. 当前 P2 的边界
+## 13. 文档边界
 
-#22 regex-only 与 #21 taxonomy 已经进入当前 staging 代码线；现在不要再按旧顺序重复实现。当前未进入 staging 的工作是连续审核 UX follow-up。
+本文件不承担任务追踪职责。以下信息不要写进这里：
 
-当前方向：
+- 当前 task branch / worktree；
+- 当前 staging 或 production SHA；
+- “尚未 commit / 尚未 deploy”之类 session 状态；
+- 某次临时验收剩余步骤；
+- 已经完成但仍以 TODO 形式存在的阶段计划。
 
-```text
-staging baseline: #22 regex-only + #21 taxonomy/displayTags
-current local WIP: admin review continuous flow
-↓
-update smoke assertions + CSS / diff review + tests
-↓
-commit → integrate/push origin/staging → deploy exact SHA
-↓
-Master staging acceptance → owner PR only after acceptance
-```
+当前任务状态使用 GitHub issue / PR 或当前 session handoff；完成后的阶段记录如有保留价值，移动到 `docs/archive/`。
 
-当前审核 UX follow-up 不要顺手做：
-
-- limits 重构
-- OAuth 重构
-- sort cleanup
-- permission architecture
-- lifecycle 全面拆分
-- repo-wide directory reconstruction
-
-这些信息已经记录在这里，未来对应功能触发时再处理。
-
----
-
-## 14. 本次扫描时的工作区提醒
-
-2026-09-08 当前文档同步时，主 worktree 为审核 UX 任务分支：
-
-```text
-feature/admin-review-continuous-flow
-```
-
-代码 WIP 目前集中在 `cloudflare/src/endpoints/admin.ts` 与 `cloudflare/src/pages/home/modals.ts`；本次文档同步又修改了 live docs。Master 另外提出的角色标签继续优化应保持为后续独立 commit，不与审核 UX 混合。
-
-因此未来提交 P2 时：
-
-- 只 stage 明确的 P2 文件；
-- 不使用 `git add .`；
-- 不把后续角色标签调整或其他并行 UI 工作意外混进审核 UX commit；
-- `origin/staging` 与 staging Worker 仍需分别验证 exact SHA。
+仍未实现、且已经形成稳定行为契约的设计，可以放在 `docs/plans/`。实现完成后应归档或删除，不让 `plans/` 变成历史堆积区。
