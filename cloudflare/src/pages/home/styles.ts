@@ -208,8 +208,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .project-form-modal .modal-header h2 i { color:#b89d76; }
 .project-form-modal .close-btn { width:38px; height:38px; border-radius:9px; color:#aaa8a3; }
 .project-form-modal .close-btn:hover { background:rgba(255,255,255,.05); color:#ececea; }
-.project-form-modal .modal-body { min-height:0; padding:0; overflow:hidden; }
-.project-form { height:100%; min-height:0; display:flex; flex-direction:column; }
+.project-form-modal .modal-body { min-height:0; padding:0; overflow:hidden; display:flex; flex-direction:column; }
+.project-form { flex:1 1 auto; width:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
 .project-form-layout { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1.08fr) minmax(340px,.92fr); overflow-y:auto; }
 .project-form-column { min-width:0; padding:28px 30px 32px; }
 .project-form-column--main { display:flex; flex-direction:column; gap:28px; }
@@ -1349,12 +1349,13 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
 /* Mobile creator form follows the fixed overlay instead of dynamic viewport units.
    Android/Tauri can keep a stale 100dvh after a tap or keyboard resize. */
 @media (max-width:640px) {
-  .project-form-modal { position:fixed; inset:0; padding:0 !important; overflow:hidden; align-items:stretch; justify-content:stretch; }
-  .project-form-modal .modal-content { position:absolute; inset:0; width:auto; height:auto; min-height:0; max-width:none; max-height:none; margin:0; border:0; border-radius:0; box-shadow:none; }
-  .project-form-modal .modal-body { flex:1 1 auto; min-height:0; overflow:hidden; padding:0; }
-  .project-form { height:100%; min-height:0; }
-  .project-form-layout { min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
-  .project-form-footer { position:relative; flex:none; }
+  .project-form-modal { position:fixed; inset:0; padding:0 !important; overflow:hidden; background:#18191c; }
+  .project-form-modal .modal-content { position:fixed; inset:0; width:auto; height:auto; min-height:0; max-width:none; max-height:none; margin:0; border:0; border-radius:0; box-shadow:none; overflow:hidden; }
+  .project-form-modal .modal-header { position:absolute; top:0; left:0; right:0; z-index:5; height:56px; min-height:56px; }
+  .project-form-modal .modal-body { position:absolute; top:56px; right:0; bottom:0; left:0; display:block; min-height:0; overflow:hidden; padding:0; }
+  .project-form { position:absolute; inset:0; display:block; width:auto; height:auto; min-height:0; overflow:hidden; }
+  .project-form-layout { position:absolute; top:0; right:0; bottom:calc(72px + env(safe-area-inset-bottom)); left:0; display:block; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  .project-form-footer { position:absolute; right:0; bottom:0; left:0; z-index:4; height:calc(72px + env(safe-area-inset-bottom)); min-height:72px; flex:none; }
 }
 
 `;
