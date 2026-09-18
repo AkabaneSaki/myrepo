@@ -28,13 +28,197 @@ async function getAuthenticatedCoverObjectUrl(url) {
   return objectUrl;
 }
 
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
+const TOAST_MAX_VISIBLE = 3;
+const TOAST_DURATION = {
+  success: 3000,
+  info: 3000,
+  warning: 4200,
+  error: 5200,
+};
+const toastState = { active: [], queue: [] };
+const toastTimers = new Map();
+let toastSequence = 0;
+
+function normalizeToastType(type) {
+  return ['success', 'info', 'warning', 'error'].includes(type) ? type : 'info';
+}
+
+function getToastViewport() {
+  let viewport = document.getElementById('workshopToastViewport');
+  if (viewport) return viewport;
+  viewport = document.createElement('div');
+  viewport.id = 'workshopToastViewport';
+  viewport.className = 'toast-viewport';
+  viewport.setAttribute('aria-live', 'polite');
+  viewport.setAttribute('aria-relevant', 'additions text');
+  document.body.appendChild(viewport);
+  return viewport;
+}
+
+function getToastTitle(type) {
+  if (type === 'success') return '操作完成';
+  if (type === 'warning') return '请注意';
+  if (type === 'error') return '操作失败';
+  return '提示';
+}
+
+function getToastIconClass(type) {
+  if (type === 'success') return 'fa-circle-check';
+  if (type === 'warning') return 'fa-triangle-exclamation';
+  if (type === 'error') return 'fa-circle-xmark';
+  return 'fa-circle-info';
+}
+
+function updateToastCount(item) {
+  if (!item.element) return;
+  const count = item.element.querySelector('.toast__count');
+  if (!count) return;
+  if (item.count > 1) {
+    count.textContent = '×' + item.count;
+    count.hidden = false;
+  } else {
+    count.textContent = '';
+    count.hidden = true;
+  }
+}
+
+function restartToastProgress(item) {
+  if (!item.element) return;
+  const progress = item.element.querySelector('.toast__progress > span');
+  if (!progress) return;
+  progress.style.animation = 'none';
+  void progress.offsetWidth;
+  progress.style.animation = 'toast-progress ' + item.duration + 'ms linear forwards';
+}
+
+function clearToastTimer(id) {
+  const timer = toastTimers.get(id);
+  if (timer) clearTimeout(timer);
+  toastTimers.delete(id);
+}
+
+function startToastTimer(item) {
+  clearToastTimer(item.id);
+  toastTimers.set(item.id, setTimeout(() => dismissToast(item.id), item.duration));
+  restartToastProgress(item);
+}
+
+function mountToast(item) {
+  const viewport = getToastViewport();
+  const toast = document.createElement('section');
   toast.className = 'toast';
-  toast.dataset.type = type;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+  toast.dataset.type = item.type;
+  toast.dataset.toastId = item.id;
+  toast.setAttribute('role', item.type === 'error' ? 'alert' : 'status');
+
+  const icon = document.createElement('div');
+  icon.className = 'toast__icon';
+  const iconGlyph = document.createElement('i');
+  iconGlyph.className = 'fas ' + getToastIconClass(item.type);
+  icon.appendChild(iconGlyph);
+
+  const body = document.createElement('div');
+  body.className = 'toast__body';
+  const title = document.createElement('div');
+  title.className = 'toast__title';
+  const titleText = document.createElement('span');
+  titleText.textContent = getToastTitle(item.type);
+  const count = document.createElement('span');
+  count.className = 'toast__count';
+  count.hidden = true;
+  title.append(titleText, count);
+  const messageNode = document.createElement('div');
+  messageNode.className = 'toast__message';
+  messageNode.textContent = item.message;
+  body.append(title, messageNode);
+
+  const close = document.createElement('button');
+  close.className = 'toast__close';
+  close.type = 'button';
+  close.setAttribute('aria-label', '关闭通知');
+  const closeIcon = document.createElement('i');
+  closeIcon.className = 'fas fa-xmark';
+  close.appendChild(closeIcon);
+  close.addEventListener('click', () => dismissToast(item.id));
+
+  const progress = document.createElement('div');
+  progress.className = 'toast__progress';
+  progress.appendChild(document.createElement('span'));
+
+  toast.append(icon, body, close, progress);
+  item.element = toast;
+  viewport.appendChild(toast);
+  updateToastCount(item);
+  startToastTimer(item);
+}
+
+function removeToastNow(id) {
+  const index = toastState.active.findIndex(item => item.id === id);
+  if (index === -1) return;
+  const item = toastState.active[index];
+  clearToastTimer(id);
+  item.element?.remove();
+  toastState.active.splice(index, 1);
+
+  if (toastState.queue.length > 0) {
+    const next = toastState.queue.shift();
+    toastState.active.push(next);
+    mountToast(next);
+  }
+}
+
+function dismissToast(id) {
+  const item = toastState.active.find(activeItem => activeItem.id === id);
+  if (!item || item.leaving) return;
+  item.leaving = true;
+  clearToastTimer(id);
+  if (!item.element) {
+    removeToastNow(id);
+    return;
+  }
+  item.element.classList.add('toast--leaving');
+  setTimeout(() => removeToastNow(id), 170);
+}
+
+function showToast(message, type = 'info') {
+  const normalizedType = normalizeToastType(type);
+  const normalizedMessage = String(message ?? '').trim();
+  if (!normalizedMessage) return null;
+  const key = normalizedType + '::' + normalizedMessage;
+
+  const activeDuplicate = toastState.active.find(item => item.key === key && !item.leaving);
+  if (activeDuplicate) {
+    activeDuplicate.count += 1;
+    updateToastCount(activeDuplicate);
+    startToastTimer(activeDuplicate);
+    return activeDuplicate.id;
+  }
+
+  const queuedDuplicate = toastState.queue.find(item => item.key === key);
+  if (queuedDuplicate) {
+    queuedDuplicate.count += 1;
+    return queuedDuplicate.id;
+  }
+
+  toastSequence += 1;
+  const item = {
+    id: 'toast-' + toastSequence,
+    key,
+    type: normalizedType,
+    message: normalizedMessage,
+    duration: TOAST_DURATION[normalizedType],
+    count: 1,
+    element: null,
+    leaving: false,
+  };
+
+  if (toastState.active.length < TOAST_MAX_VISIBLE) {
+    toastState.active.push(item);
+    mountToast(item);
+  } else {
+    toastState.queue.push(item);
+  }
+  return item.id;
 }
 
 function escapeHtml(unsafe) {
@@ -47,6 +231,45 @@ function escapeHtml(unsafe) {
     if (char === "'") return '&#39;';
     return char;
   });
+}
+
+function normalizeExternalHttpUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw.length > 4096) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    if (!parsed.hostname || parsed.username || parsed.password) return '';
+    return parsed.href;
+  } catch {
+    return '';
+  }
+}
+
+async function copyTextToClipboard(value) {
+  const text = String(value || '');
+  if (!text) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      console.warn('Clipboard API unavailable', error);
+    }
+  }
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  field.style.pointerEvents = 'none';
+  document.body.appendChild(field);
+  field.focus();
+  field.select();
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch (error) { console.warn('Fallback copy failed', error); }
+  field.remove();
+  return copied;
 }
 
 function formatDate(value) {
@@ -72,7 +295,7 @@ function formatDateTime(value) {
 
 function parseWorkshopVersion(value) {
   if (typeof value !== 'string') return null;
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(value.trim());
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
@@ -208,8 +431,24 @@ function encodeWsrvSource(url) {
   }
 }
 
+function isPrivateLocalPreviewHost() {
+  const hostname = String(globalThis.location?.hostname || '').toLowerCase();
+  if (hostname === '127.0.0.1' || hostname === 'localhost') return true;
+  const octets = hostname.split('.').map(part => Number(part));
+  if (octets.length !== 4 || octets.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return octets[0] === 10
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
+}
+
+function isLocalDiscoverPreviewHost() {
+  const hostname = String(globalThis.location?.hostname || '').toLowerCase();
+  return isPrivateLocalPreviewHost() || hostname.endsWith('.trycloudflare.com');
+}
+
 function getWsrvUrl(url) {
   if (!url) return url;
+  if (isLocalDiscoverPreviewHost()) return url;
   return 'https://wsrv.nl/?url=' + encodeWsrvSource(url) + '&w=640&output=webp';
 }
 
@@ -263,7 +502,26 @@ function getCoverImageSources(project) {
 
 function setCoverBackground(element, url) {
   if (!element || !url) return;
+  element.classList.remove('discover-card-cover--title');
+  if (element.dataset.coverTitle) element.replaceChildren();
   element.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
+  const x = Math.min(100, Math.max(0, Number(element.dataset.coverPositionX ?? 50)));
+  const y = Math.min(100, Math.max(0, Number(element.dataset.coverPositionY ?? 50)));
+  const zoom = Math.min(3, Math.max(1, Number(element.dataset.coverZoom ?? 1)));
+  element.style.backgroundPosition = x + '% ' + y + '%';
+  element.style.transform = 'scale(' + zoom + ')';
+  element.style.transformOrigin = x + '% ' + y + '%';
+}
+
+function setCoverTitleFallback(element, title) {
+  if (!element || !title) return false;
+  element.style.backgroundImage = 'none';
+  element.classList.add('discover-card-cover--title');
+  element.replaceChildren();
+  const label = document.createElement('span');
+  label.textContent = title;
+  element.appendChild(label);
+  return true;
 }
 
 function bindCoverImageFallbacks(root) {
@@ -279,17 +537,21 @@ function bindCoverImageFallbacks(root) {
     const fallback = element.dataset.coverFallbackSrc || '';
     const placeholder = element.dataset.coverPlaceholderSrc || '';
     const authenticated = element.dataset.coverAuthSrc || '';
+    const coverTitle = element.dataset.coverTitle || '';
+    const showFallback = () => {
+      if (!setCoverTitleFallback(element, coverTitle)) setCoverBackground(element, placeholder);
+    };
 
     if (authenticated) {
-      setCoverBackground(element, placeholder);
+      showFallback();
       void getAuthenticatedCoverObjectUrl(authenticated)
         .then(url => setCoverBackground(element, url))
-        .catch(() => setCoverBackground(element, placeholder));
+        .catch(showFallback);
       return;
     }
 
     if (!primary || primary === placeholder) {
-      setCoverBackground(element, placeholder);
+      showFallback();
       return;
     }
 
@@ -297,13 +559,13 @@ function bindCoverImageFallbacks(root) {
     probe.onload = () => setCoverBackground(element, primary);
     probe.onerror = () => {
       if (!fallback) {
-        setCoverBackground(element, placeholder);
+        showFallback();
         return;
       }
 
       const directProbe = new Image();
       directProbe.onload = () => setCoverBackground(element, fallback);
-      directProbe.onerror = () => setCoverBackground(element, placeholder);
+      directProbe.onerror = showFallback;
       directProbe.src = fallback;
     };
     probe.src = primary;

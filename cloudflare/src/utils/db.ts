@@ -1,4 +1,4 @@
-import type { AppContext, ProjectReviewTarget } from '../types';
+import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
@@ -12,6 +12,7 @@ import {
   type ProjectType,
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
+import { getReadyProjectRankingBoard } from './project-daily-rankings';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
@@ -222,8 +223,19 @@ export const projectDb = {
       id: string;
       name: string;
       description?: string;
+      precautions?: string | null;
       version: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -234,6 +246,9 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
       downloadUrl?: string;
       fileSize?: number;
       hasEjs?: boolean;
@@ -246,6 +261,7 @@ export const projectDb = {
       visibility?: boolean;
       isPublished?: boolean;
       latestApprovedAt?: string | null;
+      status?: ProjectStatus;
     },
   ): Promise<void> => {
     const db = c.env.DB;
@@ -253,22 +269,26 @@ export const projectDb = {
       .prepare(
         `
 			INSERT INTO projects (
-				id, name, description, version, version_label, author_id, author_name, author_avatar,
-				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, root_project_id, published_project_id,
-				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				id, name, description, precautions, version, version_label, author_id, author_name, author_avatar,
+				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, cover_position_x, cover_position_y, cover_zoom, root_project_id, published_project_id,
+				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
+				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
+				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
+				conflicts_with_original, original_conflict_reference_item_ids, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
         project.id,
         project.name,
         project.description || null,
+        project.precautions || null,
         project.version,
         project.versionLabel || null,
         project.authorId,
         project.authorName,
         project.authorAvatar,
-        'pending', // 默认状态为待审核
+        project.status || 'pending',
         project.downloadUrl || null,
         project.fileSize || null,
         project.hasEjs ? 1 : 0,
@@ -280,6 +300,9 @@ export const projectDb = {
         JSON.stringify(project.displayTags || []),
         JSON.stringify(project.tags || []),
         project.coverImage || null,
+        project.coverPositionX ?? 50,
+        project.coverPositionY ?? 50,
+        project.coverZoom ?? 1,
         project.rootProjectId || project.id,
         project.publishedProjectId || null,
         project.draftProjectId || null,
@@ -288,6 +311,16 @@ export const projectDb = {
         project.visibility === false ? 0 : 1,
         project.isPublished ? 1 : 0,
         project.latestApprovedAt || null,
+        project.characterReferenceId || null,
+        project.builtForReferenceVersionId || null,
+        project.testedThroughReferenceVersionId || null,
+        project.compatibilityStatus || null,
+        project.compatibilityKnownIncompatible ? 1 : 0,
+        project.compatibilityNote || null,
+        project.compatibilityGraceUntil || null,
+        project.compatibilityUpdatedAt || null,
+        project.conflictsWithOriginal ? 1 : 0,
+        JSON.stringify(project.originalConflictReferenceItemIds || []),
         now(),
         now(),
       )
@@ -317,6 +350,27 @@ export const projectDb = {
   },
 
   /**
+   * 批量获取指定项目摘要。用于本地已安装项目补全，避免逐项目 HTTP/D1 查询。
+   */
+  getMany: async (c: AppContext, projectIds: string[], currentUser?: JWTPayload | null) => {
+    const uniqueProjectIds = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 50);
+    if (uniqueProjectIds.length === 0) return [];
+
+    const results = await c.env.DB
+      .prepare(
+        `
+          SELECT p.*
+          FROM json_each(?1) requested
+          JOIN projects p ON p.id = requested.value
+        `,
+      )
+      .bind(JSON.stringify(uniqueProjectIds))
+      .all<Record<string, unknown>>();
+
+    return enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser);
+  },
+
+  /**
    * 更新项目
    */
   update: async (
@@ -325,8 +379,19 @@ export const projectDb = {
     updates: {
       name?: string;
       description?: string;
+      precautions?: string | null;
       version?: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -334,6 +399,9 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
       downloadUrl?: string;
       fileSize?: number;
       hasEjs?: boolean;
@@ -360,6 +428,10 @@ export const projectDb = {
       setClauses.push('description = ?');
       values.push(updates.description);
     }
+    if (updates.precautions !== undefined) {
+      setClauses.push('precautions = ?');
+      values.push(updates.precautions);
+    }
     if (updates.version !== undefined) {
       setClauses.push('version = ?');
       values.push(updates.version);
@@ -367,6 +439,46 @@ export const projectDb = {
     if (updates.versionLabel !== undefined) {
       setClauses.push('version_label = ?');
       values.push(updates.versionLabel);
+    }
+    if (updates.characterReferenceId !== undefined) {
+      setClauses.push('character_reference_id = ?');
+      values.push(updates.characterReferenceId);
+    }
+    if (updates.builtForReferenceVersionId !== undefined) {
+      setClauses.push('built_for_reference_version_id = ?');
+      values.push(updates.builtForReferenceVersionId);
+    }
+    if (updates.testedThroughReferenceVersionId !== undefined) {
+      setClauses.push('tested_through_reference_version_id = ?');
+      values.push(updates.testedThroughReferenceVersionId);
+    }
+    if (updates.compatibilityStatus !== undefined) {
+      setClauses.push('compatibility_status = ?');
+      values.push(updates.compatibilityStatus);
+    }
+    if (updates.compatibilityKnownIncompatible !== undefined) {
+      setClauses.push('compatibility_known_incompatible = ?');
+      values.push(updates.compatibilityKnownIncompatible ? 1 : 0);
+    }
+    if (updates.compatibilityNote !== undefined) {
+      setClauses.push('compatibility_note = ?');
+      values.push(updates.compatibilityNote);
+    }
+    if (updates.compatibilityGraceUntil !== undefined) {
+      setClauses.push('compatibility_grace_until = ?');
+      values.push(updates.compatibilityGraceUntil);
+    }
+    if (updates.compatibilityUpdatedAt !== undefined) {
+      setClauses.push('compatibility_updated_at = ?');
+      values.push(updates.compatibilityUpdatedAt);
+    }
+    if (updates.conflictsWithOriginal !== undefined) {
+      setClauses.push('conflicts_with_original = ?');
+      values.push(updates.conflictsWithOriginal ? 1 : 0);
+    }
+    if (updates.originalConflictReferenceItemIds !== undefined) {
+      setClauses.push('original_conflict_reference_item_ids = ?');
+      values.push(JSON.stringify(updates.originalConflictReferenceItemIds));
     }
     if (updates.projectType !== undefined) {
       setClauses.push('project_type = ?');
@@ -395,6 +507,18 @@ export const projectDb = {
     if (updates.coverImage !== undefined) {
       setClauses.push('cover_image = ?');
       values.push(updates.coverImage);
+    }
+    if (updates.coverPositionX !== undefined) {
+      setClauses.push('cover_position_x = ?');
+      values.push(updates.coverPositionX);
+    }
+    if (updates.coverPositionY !== undefined) {
+      setClauses.push('cover_position_y = ?');
+      values.push(updates.coverPositionY);
+    }
+    if (updates.coverZoom !== undefined) {
+      setClauses.push('cover_zoom = ?');
+      values.push(updates.coverZoom);
     }
     if (updates.downloadUrl !== undefined) {
       setClauses.push('download_url = ?');
@@ -485,8 +609,8 @@ export const projectDb = {
 
     if (project?.published_project_id) {
       await db
-        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ?`)
-        .bind(now(), project.published_project_id)
+        .prepare(`UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`)
+        .bind(now(), project.published_project_id, projectId)
         .run();
     }
 
@@ -516,8 +640,9 @@ export const projectDb = {
       authorId?: string;
       projectType?: ProjectType;
       tag?: string;
+      tags?: string[];
       search?: string;
-      sort?: 'published' | 'updated' | 'likes' | 'subscribes' | 'downloads';
+      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads';
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
     },
@@ -547,13 +672,25 @@ export const projectDb = {
       values.push(options.projectType);
     }
 
-    if (options.tag) {
-      conditions.push('(p.facets LIKE ? OR p.custom_tags LIKE ? OR p.tags LIKE ?)');
-      const tagPattern = `%"${options.tag}"%`;
-      values.push(tagPattern, tagPattern, tagPattern);
-    }
+    const tagFilters = Array.from(new Set([
+      ...(Array.isArray(options.tags) ? options.tags : []),
+      ...(options.tag ? [options.tag] : []),
+    ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
+    tagFilters.forEach(tag => {
+      conditions.push('(p.facets LIKE ? OR p.custom_tags LIKE ? OR p.tags LIKE ? OR p.extension_type = ?)');
+      const tagPattern = `%"${tag}"%`;
+      values.push(tagPattern, tagPattern, tagPattern, tag);
+    });
 
-    const searchTerm = options.search?.trim();
+    const rawSearchTerm = options.search?.trim();
+    const normalizedSearchTerm = rawSearchTerm
+      ? rawSearchTerm
+          .replace(/[\u0000-\u001f\u007f]/g, ' ')
+          .replace(/[%_]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : '';
+    const searchTerm = Array.from(normalizedSearchTerm).slice(0, 20).join('');
     if (searchTerm) {
       conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
       const searchPattern = `%${searchTerm}%`;
@@ -568,36 +705,96 @@ export const projectDb = {
 
 
     const sortMode = options.sort || 'published';
+    const hasRankingSearchFilters = Boolean(options.authorId || searchTerm || tagFilters.length > 0);
+    const rankingKind: 'discover' | 'rating' | null =
+      options.approvedOnly !== false && !hasRankingSearchFilters && (sortMode === 'discover' || sortMode === 'rating')
+        ? sortMode
+        : null;
     const orderBy = (() => {
       switch (sortMode) {
         case 'updated':
           return 'p.updated_at DESC, p.created_at DESC';
         case 'downloads':
-          return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+          return 'p.downloads_count DESC, p.created_at DESC';
         case 'likes':
-          return 'COALESCE(p.likes_count, 0) DESC, p.created_at DESC';
+          return 'p.likes_count DESC, p.created_at DESC';
         case 'subscribes':
           // Legacy clients may still request this sort. Subscription is now an install/update-notification state,
           // not a public popularity metric, so use downloads as the closest cheap fallback.
-          return 'COALESCE(p.downloads_count, 0) DESC, p.created_at DESC';
+          return 'p.downloads_count DESC, p.created_at DESC';
         case 'published':
         default:
           return 'p.latest_approved_at DESC, p.updated_at DESC';
       }
     })();
-    // 获取当前页，并多取 1 条用于判断是否还有下一批；无需额外 COUNT(*)。
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
+
+    if (rankingKind) {
+      const board = await getReadyProjectRankingBoard(c);
+      if (board) {
+        const totalCount = options.projectType
+          ? Number(board.typeCounts[options.projectType] || 0)
+          : board.projectCount;
+        const startRank = options.page * options.pageSize + 1;
+        const endRank = startRank + options.pageSize - 1;
+        if (totalCount === 0 || startRank > totalCount) {
+          return {
+            hasMore: false,
+            page: options.page,
+            pageSize: options.pageSize,
+            projects: [],
+          };
+        }
+
+        const rankColumn = rankingKind === 'discover'
+          ? options.projectType ? 'discover_type_rank' : 'discover_rank'
+          : options.projectType ? 'rating_type_rank' : 'rating_rank';
+        const typeClause = options.projectType ? 'AND r.project_type = ?' : '';
+        const rankValues: unknown[] = [board.rankingDay];
+        if (options.projectType) rankValues.push(options.projectType);
+        rankValues.push(startRank, endRank);
+
+        // Page jumps read one bounded indexed rank range. Hidden/deleted projects may
+        // leave a temporary hole; hasMore is based on immutable board counts instead.
+        const rankingResults = await db
+          .prepare(
+            `SELECT p.*, u.global_name
+             FROM project_daily_rankings r
+             JOIN projects p ON p.id = r.project_id
+             LEFT JOIN users u ON p.author_id = u.id
+             WHERE r.ranking_day = ?
+               ${typeClause}
+               AND r.${rankColumn} BETWEEN ? AND ?
+               AND p.status = 'approved'
+               AND p.is_published = 1
+               AND p.visibility = 1
+             ORDER BY r.${rankColumn} ASC`,
+          )
+          .bind(...rankValues)
+          .all<Record<string, unknown>>();
+        return {
+          hasMore: endRank < totalCount,
+          page: options.page,
+          pageSize: options.pageSize,
+          projects: await enrichProjects(c, (rankingResults.results || []).map(parseProjectRow), options.currentUser),
+        };
+      }
+    }
+
+    // Search/tag/author filters intentionally bypass the ranking board. Keeping
+    // wildcard filtering off the rank hot path prevents a ranked page request
+    // from turning into a whole-board scan.
     const results = await db
       .prepare(
         `
-			SELECT p.*, u.global_name
-			FROM projects p
-			LEFT JOIN users u ON p.author_id = u.id
-			${listWhereClause}
-			ORDER BY ${orderBy}
-			LIMIT ? OFFSET ?
-		`,
+          SELECT p.*, u.global_name
+          FROM projects p
+          LEFT JOIN users u ON p.author_id = u.id
+          ${listWhereClause}
+          ORDER BY ${orderBy}
+          LIMIT ? OFFSET ?
+        `,
       )
       .bind(...values, fetchLimit, offset)
       .all<Record<string, unknown>>();
@@ -622,36 +819,52 @@ export const projectDb = {
     projectId: string,
     reviewerId: string,
     action: 'approve' | 'reject',
-    rejectReason?: string,
-  ): Promise<string> => {
+    rejectReason: string | undefined,
+    expectedRevision: number,
+  ): Promise<string | null> => {
     const db = c.env.DB;
     const reviewedAt = now();
 
-    if (action === 'approve') {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, reviewedAt, projectId)
-        .run();
+    const result = action === 'approve'
+      ? await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
+                 latest_approved_at = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, projectId, expectedRevision)
+          .run()
+      : await db
+          .prepare(
+            `UPDATE projects
+             SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+          )
+          .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
+          .run();
 
-      await db.prepare(`UPDATE projects SET latest_approved_at = ? WHERE id = ?`).bind(reviewedAt, projectId).run();
-    } else {
-      await db
-        .prepare(
-          `
-				UPDATE projects SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-				WHERE id = ?
-			`,
-        )
-        .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId)
-        .run();
-    }
+    return Number(result.meta?.changes || 0) === 1 ? reviewedAt : null;
+  },
 
-    return reviewedAt;
+  restoreApprovedReviewToPending: async (
+    c: AppContext,
+    projectId: string,
+    reviewerId: string,
+    expectedRevision: number,
+    reviewedAt: string,
+    previousLatestApprovedAt: string | null,
+  ): Promise<boolean> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects
+       SET status = 'pending', reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL,
+           latest_approved_at = ?, updated_at = ?
+       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ?`,
+    )
+      .bind(previousLatestApprovedAt, now(), projectId, expectedRevision, reviewerId, reviewedAt)
+      .run();
+
+    return Number(result.meta?.changes || 0) === 1;
   },
 
   /**
@@ -735,16 +948,26 @@ export const projectDb = {
       const publishedProject = projects.find(project => project.isPublished);
       const withPublishedVersion = (project: (typeof enrichedProjects)[number] | undefined) =>
         project && project.reviewTarget === 'draft' && publishedProject
-          ? { ...project, publishedVersion: publishedProject.version }
+          ? {
+              ...project,
+              publishedVersion: publishedProject.version,
+              likesCount: publishedProject.likesCount,
+              downloadsCount: publishedProject.downloadsCount,
+              userLiked: publishedProject.userLiked,
+            }
           : project;
+
+      const currentDraft = publishedProject?.draftProjectId
+        ? projects.find(project => project.id === publishedProject.draftProjectId)
+        : null;
+      if (currentDraft) return withPublishedVersion(currentDraft);
+      if (publishedProject) return publishedProject;
 
       const pendingDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'pending');
       if (pendingDraft) return withPublishedVersion(pendingDraft);
 
       const rejectedDraft = projects.find(project => project.reviewTarget === 'draft' && project.status === 'rejected');
       if (rejectedDraft) return withPublishedVersion(rejectedDraft);
-
-      if (publishedProject) return publishedProject;
 
       return (
         [...projects].sort((left, right) => {
@@ -769,6 +992,19 @@ export const projectDb = {
     await c.env.DB.prepare(`UPDATE projects SET cover_image = ?, updated_at = ? WHERE id = ?`)
       .bind(coverImage, now(), projectId)
       .run();
+  },
+
+  setCoverPresentation: async (
+    c: AppContext,
+    projectIds: string[],
+    presentation: { coverPositionX: number; coverPositionY: number; coverZoom: number },
+  ): Promise<void> => {
+    const ids = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 2);
+    for (const id of ids) {
+      await c.env.DB.prepare(`UPDATE projects SET cover_position_x = ?, cover_position_y = ?, cover_zoom = ? WHERE id = ?`)
+        .bind(presentation.coverPositionX, presentation.coverPositionY, presentation.coverZoom, id)
+        .run();
+    }
   },
 
   toggleLike: async (c: AppContext, projectId: string, userId: string) => {
@@ -828,13 +1064,13 @@ export const projectDb = {
     return projectDb.setSubscribe(c, projectId, userId, !existing);
   },
 
-  findDraftByPublishedId: async (c: AppContext, publishedProjectId: string) => {
+  listDraftIdsByPublishedId: async (c: AppContext, publishedProjectId: string): Promise<string[]> => {
     const result = await c.env.DB.prepare(
-      `SELECT p.*, u.global_name FROM projects p LEFT JOIN users u ON p.author_id = u.id WHERE p.published_project_id = ? AND p.review_target = 'draft' ORDER BY CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, p.updated_at DESC LIMIT 1`,
+      `SELECT id FROM projects WHERE published_project_id = ? AND review_target = 'draft'`,
     )
       .bind(publishedProjectId)
-      .first<Record<string, unknown>>();
-    return result ? parseProjectRow(result) : null;
+      .all<{ id: string }>();
+    return (result.results || []).map(row => row.id);
   },
 
   createDraftFromPublished: async (
@@ -843,8 +1079,19 @@ export const projectDb = {
     updates: {
       name?: string;
       description?: string;
+      precautions?: string | null;
       version?: string;
       versionLabel?: string | null;
+      characterReferenceId?: string | null;
+      builtForReferenceVersionId?: string | null;
+      testedThroughReferenceVersionId?: string | null;
+      compatibilityStatus?: ProjectCompatibilityStatus | null;
+      compatibilityKnownIncompatible?: boolean;
+      compatibilityNote?: string | null;
+      compatibilityGraceUntil?: string | null;
+      compatibilityUpdatedAt?: string | null;
+      conflictsWithOriginal?: boolean;
+      originalConflictReferenceItemIds?: string[];
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -852,18 +1099,32 @@ export const projectDb = {
       displayTags?: string[];
       tags?: string[];
       coverImage?: string;
+      coverPositionX?: number;
+      coverPositionY?: number;
+      coverZoom?: number;
     },
   ) => {
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
-    const existingDraft = await projectDb.findDraftByPublishedId(c, publishedProjectId);
+    const existingDraft = published.draftProjectId ? await projectDb.get(c, published.draftProjectId) : null;
     if (existingDraft) {
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
         name: updates.name ?? existingDraft.name,
         description: updates.description ?? existingDraft.description ?? '',
+        precautions: updates.precautions !== undefined ? updates.precautions : existingDraft.precautions,
         version: nextVersion,
         versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : existingDraft.versionLabel,
+        characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : existingDraft.characterReferenceId,
+        builtForReferenceVersionId: updates.builtForReferenceVersionId !== undefined ? updates.builtForReferenceVersionId : existingDraft.builtForReferenceVersionId,
+        testedThroughReferenceVersionId: updates.testedThroughReferenceVersionId !== undefined ? updates.testedThroughReferenceVersionId : existingDraft.testedThroughReferenceVersionId,
+        compatibilityStatus: updates.compatibilityStatus !== undefined ? updates.compatibilityStatus : existingDraft.compatibilityStatus,
+        compatibilityKnownIncompatible: updates.compatibilityKnownIncompatible !== undefined ? updates.compatibilityKnownIncompatible : existingDraft.compatibilityKnownIncompatible,
+        compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : existingDraft.compatibilityNote,
+        compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : existingDraft.compatibilityGraceUntil,
+        compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
+        conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : existingDraft.conflictsWithOriginal,
+        originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : existingDraft.originalConflictReferenceItemIds,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
@@ -871,6 +1132,9 @@ export const projectDb = {
         displayTags: updates.displayTags ?? existingDraft.displayTags,
         tags: updates.tags ?? existingDraft.tags,
         coverImage: updates.coverImage ?? existingDraft.coverImage ?? undefined,
+        coverPositionX: updates.coverPositionX ?? existingDraft.coverPositionX,
+        coverPositionY: updates.coverPositionY ?? existingDraft.coverPositionY,
+        coverZoom: updates.coverZoom ?? existingDraft.coverZoom,
       });
       await projectDb.bumpDraftRevision(c, existingDraft.id);
       return existingDraft.id;
@@ -881,8 +1145,19 @@ export const projectDb = {
       id: draftId,
       name: updates.name ?? published.name,
       description: updates.description ?? published.description ?? undefined,
+      precautions: updates.precautions !== undefined ? updates.precautions : published.precautions,
       version: updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch'),
       versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : published.versionLabel,
+      characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : published.characterReferenceId,
+      builtForReferenceVersionId: updates.builtForReferenceVersionId !== undefined ? updates.builtForReferenceVersionId : published.builtForReferenceVersionId,
+      testedThroughReferenceVersionId: updates.testedThroughReferenceVersionId !== undefined ? updates.testedThroughReferenceVersionId : published.testedThroughReferenceVersionId,
+      compatibilityStatus: updates.compatibilityStatus !== undefined ? updates.compatibilityStatus : published.compatibilityStatus,
+      compatibilityKnownIncompatible: updates.compatibilityKnownIncompatible !== undefined ? updates.compatibilityKnownIncompatible : published.compatibilityKnownIncompatible,
+      compatibilityNote: updates.compatibilityNote !== undefined ? updates.compatibilityNote : published.compatibilityNote,
+      compatibilityGraceUntil: updates.compatibilityGraceUntil !== undefined ? updates.compatibilityGraceUntil : published.compatibilityGraceUntil,
+      compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
+      conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : published.conflictsWithOriginal,
+      originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -893,6 +1168,9 @@ export const projectDb = {
       displayTags: updates.displayTags ?? published.displayTags,
       tags: updates.tags ?? published.tags,
       coverImage: updates.coverImage ?? published.coverImage ?? undefined,
+      coverPositionX: updates.coverPositionX ?? published.coverPositionX,
+      coverPositionY: updates.coverPositionY ?? published.coverPositionY,
+      coverZoom: updates.coverZoom ?? published.coverZoom,
       downloadUrl: published.downloadUrl || undefined,
       fileSize: published.fileSize || undefined,
       hasEjs: published.hasEjs,
@@ -1013,6 +1291,20 @@ async function enrichProjects(
     }
   }
 
+  const requestHostname = new URL(c.req.url).hostname.toLowerCase();
+  const previewHostOctets = requestHostname.split('.').map(part => Number(part));
+  const isPrivateLanHost = previewHostOctets.length === 4
+    && previewHostOctets.every(part => Number.isInteger(part) && part >= 0 && part <= 255)
+    && (previewHostOctets[0] === 10
+      || (previewHostOctets[0] === 172 && previewHostOctets[1] >= 16 && previewHostOctets[1] <= 31)
+      || (previewHostOctets[0] === 192 && previewHostOctets[1] === 168));
+  const isLocalDiscoverPreview = requestHostname === '127.0.0.1'
+    || requestHostname === 'localhost'
+    || requestHostname.endsWith('.trycloudflare.com')
+    || isPrivateLanHost;
+  const previewFileBaseRaw = String(c.env.LOCAL_PREVIEW_FILE_BASE || '').trim();
+  const previewFileBase = previewFileBaseRaw ? previewFileBaseRaw.replace(/\/?$/, '/') : '';
+
   return projects.map(project => ({
     ...project,
     downloadUrl: project.downloadUrl
@@ -1022,10 +1314,17 @@ async function enrichProjects(
         )
       : null,
     coverImage: project.coverImage
-      ? withProjectReleaseCacheIdentity(
-          r2Storage.getProxyUrl(c, project.coverImage.replace(/^.*\/api\/files\//, '')),
-          project.version,
-        )
+      ? isLocalDiscoverPreview && previewFileBase
+        ? withProjectReleaseCacheIdentity(
+            /^https?:\/\//i.test(project.coverImage)
+              ? project.coverImage
+              : `${previewFileBase}${project.coverImage.replace(/^.*\/api\/files\//, '').replace(/^\/+/, '')}`,
+            project.version,
+          )
+        : withProjectReleaseCacheIdentity(
+            r2Storage.getProxyUrl(c, project.coverImage.replace(/^.*\/api\/files\//, '')),
+            project.version,
+          )
       : null,
     downloadsCount: Number(project.downloadsCount || 0),
     likesCount: Number(project.likesCount || 0),
@@ -1112,6 +1411,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     draftProjectId: row.draft_project_id as string | null,
     name: row.name as string,
     description: row.description as string | null,
+    precautions: row.precautions as string | null,
     version,
     versionLabel,
     publishedVersion: rawPublishedVersion ? normalizeProjectVersionBase(rawPublishedVersion) : null,
@@ -1119,7 +1419,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     authorName: row.author_name as string,
     authorGlobalName: ((row.global_name as string | null) || (row.author_name as string)) as string,
     authorAvatar: row.author_avatar as string | null,
-    status: row.status as 'pending' | 'approved' | 'rejected',
+    status: row.status as 'drafting' | 'pending' | 'approved' | 'rejected',
     downloadUrl: row.download_url as string | null,
     fileSize: row.file_size as number | null,
     downloadsCount: Number(row.downloads_count ?? 0),
@@ -1132,6 +1432,9 @@ function parseProjectRow(row: Record<string, unknown>) {
     displayTags,
     tags: parsedTags,
     coverImage: row.cover_image as string | null,
+    coverPositionX: Math.min(100, Math.max(0, Number(row.cover_position_x ?? 50))),
+    coverPositionY: Math.min(100, Math.max(0, Number(row.cover_position_y ?? 50))),
+    coverZoom: Math.min(3, Math.max(1, Number(row.cover_zoom ?? 1))),
     worldbookEntriesPreview: [],
     regexEntriesPreview: [],
     likesCount: Number(row.likes_count ?? 0),
@@ -1149,5 +1452,22 @@ function parseProjectRow(row: Record<string, unknown>) {
     hasPendingDraft: Boolean(row.draft_project_id),
     draftRevision: Math.max(1, Number(row.draft_revision ?? 1)),
     latestApprovedAt: row.latest_approved_at as string | null,
+    characterReferenceId: row.character_reference_id as string | null,
+    builtForReferenceVersionId: row.built_for_reference_version_id as string | null,
+    testedThroughReferenceVersionId: row.tested_through_reference_version_id as string | null,
+    compatibilityStatus: row.compatibility_status as ProjectCompatibilityStatus | null,
+    compatibilityKnownIncompatible: Number(row.compatibility_known_incompatible ?? 0) === 1,
+    compatibilityNote: row.compatibility_note as string | null,
+    compatibilityGraceUntil: row.compatibility_grace_until as string | null,
+    compatibilityUpdatedAt: row.compatibility_updated_at as string | null,
+    conflictsWithOriginal: Number(row.conflicts_with_original ?? 0) === 1,
+    originalConflictReferenceItemIds: (() => {
+      try {
+        const value = JSON.parse(String(row.original_conflict_reference_item_ids || '[]'));
+        return Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 500) : [];
+      } catch {
+        return [];
+      }
+    })(),
   };
 }

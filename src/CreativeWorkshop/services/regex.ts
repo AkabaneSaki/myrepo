@@ -1,27 +1,38 @@
 import { setCreativeWorkshopInstallRecord } from './install-registry';
-import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
-import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
+import { fetchCreativeWorkshopProjectDetail, type CreativeWorkshopProjectDetail } from './project-fetch';
+import {
+  getCreativeWorkshopManagedRegexId,
+  getCreativeWorkshopRegexEntryKey,
+  getCreativeWorkshopRegexId,
+  getReadableRegexName,
+} from './regex-name';
 
-export async function installCreativeWorkshopRegex(
-  projectId: string,
+export type CreativeWorkshopPreparedRegexEntry = {
+  entry: Record<string, any>;
+  originalIndex: number;
+  entryKey: string;
+};
+
+export function prepareCreativeWorkshopRegexEntries(
+  detail: CreativeWorkshopProjectDetail,
   selectedEntryKeys?: string[],
-  expectedVersion?: string,
-  legacyProjectName?: string,
-) {
-  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+): CreativeWorkshopPreparedRegexEntry[] {
   const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
-  const regexEntries = (detail.regexEntriesPreview || [])
+  return (detail.regexEntriesPreview || [])
     .map((entry, originalIndex) => ({
       entry,
       originalIndex,
-      entryKey: entry.entryKey || (entry.id !== undefined ? `id:${entry.id}` : `index:${originalIndex}`),
+      entryKey: getCreativeWorkshopRegexEntryKey(entry, originalIndex),
     }))
     .filter(({ entryKey }) => !selected || selected.has(entryKey));
+}
 
-  if (regexEntries.length === 0) {
-    return [];
-  }
-
+export async function applyPreparedCreativeWorkshopRegex(
+  projectId: string,
+  detail: CreativeWorkshopProjectDetail,
+  regexEntries: CreativeWorkshopPreparedRegexEntry[],
+  legacyProjectName?: string,
+) {
   const result = await updateTavernRegexesWith(
     regexes => {
       const filtered = regexes.filter(regex => {
@@ -32,7 +43,7 @@ export async function installCreativeWorkshopRegex(
       const appended = regexEntries.map(
         ({ entry, originalIndex, entryKey }) =>
           ({
-            id: `creative_workshop:${projectId}:${entryKey}`,
+            id: getCreativeWorkshopManagedRegexId(projectId, { ...entry, entryKey }, originalIndex),
             script_name: getReadableRegexName(detail.project.name || '未命名项目', entry, originalIndex),
             enabled: !entry.disabled,
             scope: 'character' as const,
@@ -60,6 +71,23 @@ export async function installCreativeWorkshopRegex(
     },
     { scope: 'character' },
   );
+  return result;
+}
+
+export async function installCreativeWorkshopRegex(
+  projectId: string,
+  selectedEntryKeys?: string[],
+  expectedVersion?: string,
+  legacyProjectName?: string,
+) {
+  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+  const regexEntries = prepareCreativeWorkshopRegexEntries(detail, selectedEntryKeys);
+
+  if (regexEntries.length === 0) {
+    return [];
+  }
+
+  const result = await applyPreparedCreativeWorkshopRegex(projectId, detail, regexEntries, legacyProjectName);
   setCreativeWorkshopInstallRecord(projectId, {
     installedVersion: detail.project.version || expectedVersion || null,
   });

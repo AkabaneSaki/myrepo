@@ -6,11 +6,19 @@ import type { Env } from './env';
 export type AppContext = Context<{ Bindings: Env }>;
 
 // ============ 枚举定义 ============
-export const ProjectStatus = z.enum(['pending', 'approved', 'rejected']);
+export const ProjectStatus = z.enum(['drafting', 'pending', 'approved', 'rejected']);
 export type ProjectStatus = z.infer<typeof ProjectStatus>;
 
 export const ProjectReviewTarget = z.enum(['project', 'draft']);
 export type ProjectReviewTarget = z.infer<typeof ProjectReviewTarget>;
+
+export const ProjectCompatibilityStatus = z.enum([
+  'compatible_latest',
+  'pending_latest',
+  'based_on_older',
+  'known_incompatible',
+]);
+export type ProjectCompatibilityStatus = z.infer<typeof ProjectCompatibilityStatus>;
 
 export const ProjectCategory = z.enum(PROJECT_TYPES);
 export type ProjectCategory = z.infer<typeof ProjectCategory>;
@@ -106,6 +114,7 @@ export const Project = z.object({
   draftProjectId: z.string().optional().describe('草稿项目 ID'),
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   version: z.string().default('1.0.0').describe('工坊内部机器版本'),
   versionLabel: z.string().nullable().optional().describe('作者自定义显示版本，仅展示'),
   publishedVersion: z.string().optional().describe('关联正式内部版本号，仅用于 draft 状态'),
@@ -126,6 +135,9 @@ export const Project = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).default([]).describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签镜像'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).default(50).describe('封面水平焦点百分比'),
+  coverPositionY: z.number().min(0).max(100).default(50).describe('封面垂直焦点百分比'),
+  coverZoom: z.number().min(1).max(3).default(1).describe('封面显示缩放'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),
   regexEntriesPreview: z.array(RegexEntryPreview).default([]).describe('正则条目预览'),
   likesCount: z.number().int().min(0).default(0).describe('点赞数'),
@@ -144,6 +156,16 @@ export const Project = z.object({
   draftRevision: z.number().int().min(1).default(1).describe('草稿修订号'),
 
   latestApprovedAt: z.string().optional().describe('最近审核通过时间'),
+  characterReferenceId: z.string().nullable().optional().describe('Workshop 角色卡 Reference ID'),
+  builtForReferenceVersionId: z.string().nullable().optional().describe('DLC 制作基准角色卡版本'),
+  testedThroughReferenceVersionId: z.string().nullable().optional().describe('Creator 已确认兼容至的角色卡版本'),
+  compatibilityStatus: ProjectCompatibilityStatus.nullable().optional().describe('角色卡兼容状态'),
+  compatibilityKnownIncompatible: z.boolean().default(false).describe('是否已明确确认不兼容'),
+  compatibilityNote: z.string().nullable().optional().describe('兼容性说明'),
+  compatibilityGraceUntil: z.string().nullable().optional().describe('最新版兼容维护宽限期截止时间'),
+  compatibilityUpdatedAt: z.string().nullable().optional().describe('兼容性 metadata 最近更新时间'),
+  conflictsWithOriginal: z.boolean().default(false).describe('是否需要暂时关闭原版世界书条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).default([]).describe('需要暂时关闭的原版条目基准 ID'),
 });
 
 // ============ API 请求/响应类型 ============
@@ -157,14 +179,19 @@ export const ProjectListQuery = z.object({
   projectType: ProjectCategory.optional().describe('项目基础分类筛选'),
   tag: z.string().optional().describe('旧标签筛选'),
   search: z.string().optional().describe('搜索关键词'),
-  sort: z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']).default('published').describe('排序方式'),
+  sort: z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']).default('discover').describe('排序方式'),
 });
 
 // 项目创建请求
 export const ProjectCreateRequest = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
+  builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
+  compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
+  conflictsWithOriginal: z.boolean().optional().describe('是否需要暂时关闭原版条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).optional().describe('需要暂时关闭的原版条目基准 ID'),
   projectType: ProjectCategory.optional().describe('项目基础分类；旧客户端可继续只发送 tags'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
@@ -172,13 +199,21 @@ export const ProjectCreateRequest = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).default([]).describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).optional(),
+  coverPositionY: z.number().min(0).max(100).optional(),
+  coverZoom: z.number().min(1).max(3).optional(),
 });
 
 // 项目更新请求
 export const ProjectUpdateRequest = z.object({
   name: z.string().optional().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
+  builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
+  compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
+  conflictsWithOriginal: z.boolean().optional().describe('是否需要暂时关闭原版条目'),
+  originalConflictReferenceItemIds: z.array(z.string()).max(500).optional().describe('需要暂时关闭的原版条目基准 ID'),
   projectType: ProjectCategory.optional().describe('项目基础分类'),
   extensionType: ProjectExtensionType.nullable().optional().describe('扩展子类型'),
   facets: ProjectFacets.optional().describe('角色官方属性标签'),
@@ -186,6 +221,9 @@ export const ProjectUpdateRequest = z.object({
   displayTags: z.array(z.string()).max(MAX_DISPLAY_TAGS).optional().describe('首页展示标签'),
   tags: z.array(z.string()).optional().describe('旧客户端兼容标签'),
   coverImage: z.string().optional().describe('封面图片 URL'),
+  coverPositionX: z.number().min(0).max(100).optional(),
+  coverPositionY: z.number().min(0).max(100).optional(),
+  coverZoom: z.number().min(1).max(3).optional(),
 });
 
 // 审核请求

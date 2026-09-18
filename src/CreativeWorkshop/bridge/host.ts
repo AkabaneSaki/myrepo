@@ -2,8 +2,10 @@ import { getCreativeWorkshopOrigin } from '../services/config';
 import { getCurrentCreativeWorkshopContext } from '../services/context';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
-import { listInstalledCreativeWorkshopProjects } from '../services/install-state';
+import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
+import { repairCreativeWorkshopProject, scanCreativeWorkshopRepairCandidates } from '../services/repair';
+import { listCreativeWorkshopScriptDependencies } from '../services/script-dependency';
 import {
   installCreativeWorkshopRegex,
   uninstallCreativeWorkshopRegex,
@@ -61,6 +63,16 @@ function isOAuthCallbackMessage(value: unknown): value is OAuthCallbackMessage {
   );
 }
 
+function redactOAuthLogPayload(value: unknown) {
+  return {
+    type: _.isString(_.get(value, 'type')) ? String(_.get(value, 'type')) : undefined,
+    state: _.isString(_.get(value, 'state')) ? String(_.get(value, 'state')) : undefined,
+    success: _.isBoolean(_.get(value, 'success')) ? Boolean(_.get(value, 'success')) : undefined,
+    callbackReady: _.isBoolean(_.get(value, 'callbackReady')) ? Boolean(_.get(value, 'callbackReady')) : undefined,
+    hasToken: _.isString(_.get(value, 'token')),
+  };
+}
+
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
@@ -70,6 +82,27 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthTimeoutId: number | null = null;
   let oauthClosePollId: number | null = null;
   let oauthPopupOpenedAt = 0;
+  let initialInstalledProjectScanInFlight: ReturnType<typeof scanInstalledCreativeWorkshopProjects> | null = null;
+  const projectMutationInFlight = new Set<string>();
+
+  async function getInitialInstalledProjectScan() {
+    if (initialInstalledProjectScanInFlight) return initialInstalledProjectScanInFlight;
+    const scan = scanInstalledCreativeWorkshopProjects();
+    initialInstalledProjectScanInFlight = scan;
+    try {
+      return await scan;
+    } finally {
+      if (initialInstalledProjectScanInFlight === scan) initialInstalledProjectScanInFlight = null;
+    }
+  }
+
+  async function getCompleteInitialInstalledProjects() {
+    const scan = await getInitialInstalledProjectScan();
+    if (!scan.complete) {
+      throw new Error(`世界书尚未准备完成，未能读取：${scan.unreadableWorldbookNames.join('、')}`);
+    }
+    return scan.projects;
+  }
 
   console.info('[CreativeWorkshopBridgeHost] created', {
     targetOrigin,
@@ -106,7 +139,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   async function resolveOAuthResult(payload: Record<string, unknown>, requestId = pendingOauthRequestId) {
     console.info('[CreativeWorkshopBridgeHost] resolveOAuthResult', {
       requestId,
-      payload,
+      payload: redactOAuthLogPayload(payload),
     });
     await post('bridge:oauth:result', payload, requestId);
     clearOAuthTimers();
@@ -172,7 +205,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       pendingOauthState,
       eventOrigin: event.origin,
       sourceMatchesPopup: oauthPopup ? event.source === oauthPopup : null,
-      data: event.data,
+      data: redactOAuthLogPayload(event.data),
     });
     if (!pendingOauthRequestId) return;
     if (event.origin !== oauthOrigin) return;
@@ -226,7 +259,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] post', {
       type,
       requestId,
-      payload,
+      payload: type === 'bridge:oauth:result' ? redactOAuthLogPayload(payload) : payload,
       targetOrigin,
     });
     iframe.contentWindow?.postMessage(createBridgeMessage(type as never, payload, requestId), targetOrigin);
@@ -236,7 +269,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     console.info('[CreativeWorkshopBridgeHost] handleMessage:received', {
       eventOrigin: event.origin,
       sourceMatchesIframe: event.source === iframe.contentWindow,
-      data: event.data,
+      data: {
+        type: _.get(event.data, 'type'),
+        requestId: _.get(event.data, 'requestId'),
+      },
     });
     if (event.source !== iframe.contentWindow) return;
     if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
@@ -249,6 +285,27 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
+    const isProjectMutation =
+      actionType === 'bridge:install-project' ||
+      actionType === 'bridge:uninstall-project' ||
+      actionType === 'bridge:confirm-project-update' ||
+      actionType === 'bridge:repair:project';
+
+    if (isProjectMutation && actionProjectId) {
+      if (projectMutationInFlight.has(actionProjectId)) {
+        await post(
+          'bridge:error',
+          {
+            message: '此项目已有安装、更新或卸载操作正在进行，请等待完成',
+            projectId: actionProjectId,
+            action: actionType,
+          },
+          event.data.requestId,
+        );
+        return;
+      }
+      projectMutationInFlight.add(actionProjectId);
+    }
 
     try {
       switch (event.data.type) {
@@ -261,7 +318,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
           await post(
             'bridge:installed-projects',
-            { projects: await listInstalledCreativeWorkshopProjects() },
+            { projects: await getCompleteInitialInstalledProjects() },
             event.data.requestId,
           );
           break;
@@ -271,7 +328,14 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         case 'bridge:list-installed-projects':
           await post(
             'bridge:installed-projects',
-            { projects: await listInstalledCreativeWorkshopProjects() },
+            { projects: await getCompleteInitialInstalledProjects() },
+            event.data.requestId,
+          );
+          break;
+        case 'bridge:list-script-dependencies':
+          await post(
+            'bridge:script-dependencies',
+            listCreativeWorkshopScriptDependencies(),
             event.data.requestId,
           );
           break;
@@ -284,6 +348,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined,
             _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
+            event.data.payload?.manageOriginalConflicts === true,
           );
           await installCreativeWorkshopRegex(
             String(event.data.payload?.projectId),
@@ -310,9 +375,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const remainingProjects = await listInstalledCreativeWorkshopProjects();
           const stillInstalled = remainingProjects.some(project =>
             project.projectId === String(event.data.payload?.projectId) ||
-            Boolean(actionLegacyProjectName && (
-              project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName
-            )),
+            Boolean(
+              actionLegacyProjectName &&
+                (project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName),
+            ),
           );
           if (stillInstalled) {
             throw new Error('卸载未完全完成：仍检测到旧工坊安装条目，请重试或手动检查世界书/正则');
@@ -350,7 +416,12 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const expectedVersion = _.isString(event.data.payload?.projectVersion)
             ? String(event.data.payload?.projectVersion)
             : undefined;
-          await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
+          await updateCreativeWorkshopProject(
+            String(event.data.payload?.projectId),
+            expectedVersion,
+            actionLegacyProjectName,
+            event.data.payload?.manageOriginalConflicts === true,
+          );
           await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
           await post(
             'bridge:update-result',
@@ -362,6 +433,44 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             event.data.requestId,
           );
           break;
+        case 'bridge:repair:scan': {
+          const requestedWorldbookNames = Array.isArray(event.data.payload?.worldbookNames)
+            ? event.data.payload?.worldbookNames.filter(_.isString).map(String)
+            : undefined;
+          const report = await scanCreativeWorkshopRepairCandidates({ worldbookNames: requestedWorldbookNames });
+          await post('bridge:repair:scan-result', report, event.data.requestId);
+          break;
+        }
+        case 'bridge:repair:project': {
+          const result = await repairCreativeWorkshopProject({
+            candidateId: _.isString(_.get(event.data, 'payload.candidateId')) ? String(event.data.payload?.candidateId) : '',
+            projectId: _.isString(_.get(event.data, 'payload.projectId')) ? String(event.data.payload?.projectId) : '',
+            projectVersion: _.isString(_.get(event.data, 'payload.projectVersion')) ? String(event.data.payload?.projectVersion) : null,
+            worldbookName: _.isString(_.get(event.data, 'payload.worldbookName')) ? String(event.data.payload?.worldbookName) : '',
+            entryUids: Array.isArray(event.data.payload?.entryUids)
+              ? (event.data.payload?.entryUids as Array<string | number>)
+              : [],
+            regexIds: Array.isArray(event.data.payload?.regexIds)
+              ? event.data.payload?.regexIds.filter(_.isString).map(String)
+              : [],
+            expectedEntryCount: _.isNumber(_.get(event.data, 'payload.expectedEntryCount'))
+              ? Number(event.data.payload?.expectedEntryCount)
+              : undefined,
+            expectedRegexCount: _.isNumber(_.get(event.data, 'payload.expectedRegexCount'))
+              ? Number(event.data.payload?.expectedRegexCount)
+              : undefined,
+            sourceProjectIds: Array.isArray(event.data.payload?.sourceProjectIds)
+              ? event.data.payload?.sourceProjectIds.filter(_.isString).map(String)
+              : [],
+          });
+          await post(
+            'bridge:repair:project-result',
+            { ...result, projects: await listInstalledCreativeWorkshopProjects() },
+            event.data.requestId,
+          );
+          await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
+          break;
+        }
         case 'bridge:close-workshop':
           onClose?.();
           break;
@@ -435,6 +544,10 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         },
         event.data.requestId,
       );
+    } finally {
+      if (isProjectMutation && actionProjectId) {
+        projectMutationInFlight.delete(actionProjectId);
+      }
     }
   }
 

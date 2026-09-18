@@ -7,6 +7,7 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
+
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
@@ -48,6 +49,7 @@ async function readDirectReviewContentText(
   const object = await c.env.R2_BUCKET.get(getReviewContentKey(projectId, kind));
   return object ? object.text() : null;
 }
+
 
 async function validateReviewPayloads(
   c: AppContext,
@@ -122,7 +124,8 @@ export class AdminPendingList extends OpenAPIRoute {
 
     const result = await projectDb.getPendingList(c, page, pageSize, payload, { sort, projectType });
 
-    // 统一作者显示字段，便于前端卡片/详情直接复用
+    // 审核队列必须保持轻量：这里只返回数据库 metadata。
+    // 完整 R2 读取、内容解析、diff、外链/EJS 检查仅在进入单条审核详情时执行。
     const projects = result.projects.map(p => ({
       ...p,
       authorGlobalName: p.authorGlobalName || p.authorName,
@@ -291,63 +294,144 @@ export class AdminReview extends OpenAPIRoute {
 
     let approvedVersion: string | null = null;
     let publishedVersionBeforeApproval: string | null = null;
+    let publishedDraftProjectIdBeforeApproval: string | null = null;
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
       const published = await projectDb.get(c, project.publishedProjectId);
       if (!published) {
         return c.json({ error: 'Published project not found for draft' }, 409);
       }
       publishedVersionBeforeApproval = published.version;
-      approvedVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      publishedDraftProjectIdBeforeApproval = published.draftProjectId || null;
+      const expectedTargetVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      if (project.version !== expectedTargetVersion) {
+        return c.json(
+          {
+            error: `This review request is outdated. Current project is v${published.version}; this request targets v${project.version}.`,
+          },
+          409,
+        );
+      }
+      approvedVersion = project.version;
     }
 
-    // 执行审核
-    const reviewedAt = await projectDb.review(c, projectId, payload.userId, action, rejectReason);
+    // 执行审核。status + draft_revision 必须在同一条 D1 UPDATE 里原子校验，
+    // 否则两个管理员的旧页面可以先后覆盖审核结果。
+    const reviewedAt = await projectDb.review(
+      c,
+      projectId,
+      payload.userId,
+      action,
+      rejectReason,
+      expectedRevision,
+    );
+    if (!reviewedAt) {
+      return c.json({ error: 'Review conflict: project was changed or already reviewed. Refresh and retry.' }, 409);
+    }
 
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
-      const publishedAssets = await r2Storage.copyProjectFilesToPublished(
-        c,
-        projectId,
-        project.publishedProjectId,
-        project.coverImage || undefined,
-      );
+      let publishedAssets: Awaited<ReturnType<typeof r2Storage.copyProjectFilesToPublished>> | null = null;
+      try {
+        publishedAssets = await r2Storage.copyProjectFilesToPublished(
+          c,
+          projectId,
+          project.publishedProjectId,
+          project.coverImage || undefined,
+        );
 
-      await projectDb.update(c, project.publishedProjectId, {
-        name: project.name,
-        description: project.description || '',
-        version: approvedVersion || project.version,
-        versionLabel: project.versionLabel ?? null,
-        projectType: project.projectType,
-        extensionType: project.extensionType,
-        facets: project.facets,
-        customTags: project.customTags,
-        displayTags: project.displayTags,
-        tags: project.tags,
-        coverImage: publishedAssets.coverImage || project.coverImage || undefined,
-        downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,
-        fileSize: publishedAssets.fileSize || project.fileSize || undefined,
-        hasEjs: project.hasEjs,
-        hasCharacterArtwork: project.hasCharacterArtwork,
-        status: 'approved',
-        draftProjectId: null,
-        visibility: project.visibility,
-        isPublished: true,
-        latestApprovedAt: reviewedAt,
-      });
+        try {
+          await projectDb.update(c, project.publishedProjectId, {
+            name: project.name,
+            description: project.description || '',
+            precautions: project.precautions ?? null,
+            version: approvedVersion || project.version,
+            versionLabel: project.versionLabel ?? null,
+            characterReferenceId: project.characterReferenceId ?? null,
+            builtForReferenceVersionId: project.builtForReferenceVersionId ?? null,
+            testedThroughReferenceVersionId: project.testedThroughReferenceVersionId ?? null,
+            compatibilityStatus: project.compatibilityStatus ?? null,
+            compatibilityKnownIncompatible: project.compatibilityKnownIncompatible,
+            compatibilityNote: project.compatibilityNote ?? null,
+            compatibilityGraceUntil: project.compatibilityGraceUntil ?? null,
+            compatibilityUpdatedAt: project.compatibilityUpdatedAt ?? null,
+            conflictsWithOriginal: project.conflictsWithOriginal,
+            originalConflictReferenceItemIds: project.originalConflictReferenceItemIds,
+            projectType: project.projectType,
+            extensionType: project.extensionType,
+            facets: project.facets,
+            customTags: project.customTags,
+            displayTags: project.displayTags,
+            tags: project.tags,
+            coverImage: publishedAssets.coverImage || project.coverImage || undefined,
+            coverPositionX: project.coverPositionX,
+            coverPositionY: project.coverPositionY,
+            coverZoom: project.coverZoom,
+            downloadUrl: publishedAssets.downloadUrl || project.downloadUrl || undefined,
+            fileSize: publishedAssets.fileSize || project.fileSize || undefined,
+            hasEjs: project.hasEjs,
+            hasCharacterArtwork: project.hasCharacterArtwork,
+            status: 'approved',
+            draftProjectId:
+              publishedDraftProjectIdBeforeApproval === projectId ? null : publishedDraftProjectIdBeforeApproval,
+            visibility: project.visibility,
+            isPublished: true,
+            latestApprovedAt: reviewedAt,
+          });
+        } catch (error) {
+          try {
+            await publishedAssets.rollback();
+          } catch (rollbackError) {
+            console.error('Failed to rollback published R2 assets after D1 publish failure', {
+              projectId,
+              publishedProjectId: project.publishedProjectId,
+              rollbackError,
+            });
+          }
+          throw error;
+        }
+      } catch (error) {
+        const restored = await projectDb.restoreApprovedReviewToPending(
+          c,
+          projectId,
+          payload.userId,
+          expectedRevision,
+          reviewedAt,
+          project.latestApprovedAt ?? null,
+        );
+        if (!restored) {
+          console.error('Failed to restore draft review state after publication failure', {
+            projectId,
+            expectedRevision,
+            reviewedAt,
+          });
+        }
+        throw error;
+      }
 
       await projectDb.delete(c, projectId);
-    } else if (action === 'reject' && project.reviewTarget === 'draft' && project.publishedProjectId) {
-      await projectDb.update(c, project.publishedProjectId, {
-        draftProjectId: projectId,
-      });
     } else if (action === 'approve') {
-      await projectDb.update(c, projectId, {
-        version: project.version,
-        versionLabel: project.versionLabel ?? null,
-        isPublished: true,
-        visibility: project.visibility,
-        latestApprovedAt: reviewedAt,
-      });
+      try {
+        await projectDb.update(c, projectId, {
+          version: project.version,
+          versionLabel: project.versionLabel ?? null,
+          isPublished: true,
+          visibility: project.visibility,
+          latestApprovedAt: reviewedAt,
+        });
+      } catch (error) {
+        await projectDb.restoreApprovedReviewToPending(
+          c,
+          projectId,
+          payload.userId,
+          expectedRevision,
+          reviewedAt,
+          project.latestApprovedAt ?? null,
+        );
+        throw error;
+      }
     }
+
+    // Discovery/rating boards are immutable during the UTC day; newly approved projects
+    // appear in 最新 immediately and enter public rankings on the next scheduled build.
 
     await projectDb.logAdminAction(c, {
       action: action === 'approve' ? 'project_approved' : 'project_rejected',

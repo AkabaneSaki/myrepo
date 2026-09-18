@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../types';
 import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../utils/db';
+import { resolveProjectCompatibilitySelection, validateOriginalConflictReferenceItems } from '../utils/character-reference.ts';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import {
   removeProjectEntryFromJson,
@@ -13,7 +14,7 @@ import { parseRegexEntriesPreview, parseWorldbookEntriesPreview, summarizeProjec
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
-const projectListSortSchema = z.enum(['published', 'updated', 'likes', 'subscribes', 'downloads']);
+const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + 1024 * 1024;
 const UPLOAD_SIZE_ERROR = '文件过大，最大 10MB';
@@ -83,8 +84,9 @@ export class ProjectList extends OpenAPIRoute {
         pageSize: Num({ description: 'Page size', default: 20 }),
         projectType: z.enum(PROJECT_TYPES).optional().describe('Filter by project type'),
         tag: Str({ required: false }).describe('Filter by tag'),
+        tags: Str({ required: false }).describe('Filter by multiple tags (AND, comma-separated)'),
         search: Str({ required: false }).describe('Search keyword'),
-        sort: projectListSortSchema.default('published').describe('Sort mode'),
+        sort: projectListSortSchema.default('discover').describe('Sort mode'),
       }),
     },
     responses: {
@@ -137,8 +139,13 @@ export class ProjectList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const data = await this.getValidatedData<typeof this.schema>();
-    const { page, pageSize, projectType, tag, search, sort } = data.query;
+    const { page, pageSize, projectType, tag, tags, search, sort } = data.query;
     const payload = await getCurrentUserFromRequest(c);
+    const tagFilters = String(tags || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+      .slice(0, 12);
 
     const result = await projectDb.list(c, {
       page,
@@ -146,6 +153,7 @@ export class ProjectList extends OpenAPIRoute {
       approvedOnly: true, // 只返回已审核通过的项目
       projectType,
       tag,
+      tags: tagFilters,
       search,
       sort,
       currentUser: payload,
@@ -229,6 +237,52 @@ export class ProjectFetch extends OpenAPIRoute {
       },
       worldbookEntriesPreview: preview.worldbookEntriesPreview,
       regexEntriesPreview: preview.regexEntriesPreview,
+    };
+  }
+}
+
+/**
+ * 批量获取指定项目摘要。主要用于本地已安装项目筛选，不读取 R2 项目内容。
+ */
+export class ProjectBatchFetch extends OpenAPIRoute {
+  schema = {
+    tags: ['Projects'],
+    summary: 'Get Project Summaries By IDs',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              projectIds: z.array(z.string().min(1)).min(1).max(50),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      '200': { description: 'Returns project summaries for requested IDs' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const data = await this.getValidatedData<typeof this.schema>();
+    const payload = await getCurrentUserFromRequest(c);
+    const projectIds = Array.from(new Set(data.body.projectIds.map(value => value.trim()).filter(Boolean))).slice(0, 50);
+    const projects = await projectDb.getMany(c, projectIds, payload);
+
+    const visibleProjects = projects.filter(project => {
+      if (project.status === 'approved') return true;
+      return Boolean(payload && (project.authorId === payload.userId || payload.isAdmin));
+    });
+
+    return {
+      success: true,
+      projects: visibleProjects.map(project => ({
+        ...project,
+        authorAvatar: project.authorAvatar
+          ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
+          : null,
+      })),
     };
   }
 }
@@ -320,6 +374,10 @@ export class ProjectCreate extends OpenAPIRoute {
               name: Str({ description: 'Project name' }),
               description: Str({ required: false }).describe('Project description'),
               versionLabel: z.string().max(80).nullable().optional(),
+              builtForReferenceVersionId: z.string().max(120).nullable().optional(),
+              compatibilityConfirmed: z.boolean().optional(),
+              conflictsWithOriginal: z.boolean().optional(),
+              originalConflictReferenceItemIds: z.array(z.string()).max(500).optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -358,15 +416,34 @@ export class ProjectCreate extends OpenAPIRoute {
 
       const name = typeof rawBody.name === 'string' ? rawBody.name.trim() : '';
       const description = typeof rawBody.description === 'string' ? rawBody.description : undefined;
+      const rawPrecautions = rawBody.precautions;
+      if (rawPrecautions !== undefined && rawPrecautions !== null && typeof rawPrecautions !== 'string') {
+        return c.json({ error: '安装注意事项必须是文字' }, 400);
+      }
+      const precautions = typeof rawPrecautions === 'string' ? rawPrecautions.trim() || null : rawPrecautions;
+      if (typeof precautions === 'string' && precautions.length > 2000) {
+        return c.json({ error: '安装注意事项最多 2000 字符' }, 400);
+      }
       const rawVersionLabel = rawBody.versionLabel;
       if (rawVersionLabel !== undefined && rawVersionLabel !== null && typeof rawVersionLabel !== 'string') {
         return c.json({ error: 'Version label must be text' }, 400);
       }
       const versionLabel = typeof rawVersionLabel === 'string' ? rawVersionLabel.trim() || null : rawVersionLabel;
+      const rawBuiltForReferenceVersionId = rawBody.builtForReferenceVersionId;
+      if (
+        rawBuiltForReferenceVersionId !== undefined
+        && rawBuiltForReferenceVersionId !== null
+        && typeof rawBuiltForReferenceVersionId !== 'string'
+      ) {
+        return c.json({ error: '角色卡版本格式不正确，请重新选择' }, 400);
+      }
+      const builtForReferenceVersionId = typeof rawBuiltForReferenceVersionId === 'string'
+        ? rawBuiltForReferenceVersionId.trim() || null
+        : rawBuiltForReferenceVersionId;
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
 
       const taxonomyResult = normalizeProjectTaxonomyInput(rawBody as Record<string, unknown>, {
-        requireExtensionSubtypeForExplicitType: true,
+        requireExtensionSubtypeForExplicitType: false,
       });
       if (!taxonomyResult.value) {
         return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
@@ -382,6 +459,29 @@ export class ProjectCreate extends OpenAPIRoute {
       }
       if (typeof versionLabel === 'string' && versionLabel.length > 80) {
         return c.json({ error: 'Version label must be 80 characters or fewer' }, 400);
+      }
+
+      const compatibilityConfirmed = rawBody.compatibilityConfirmed === true;
+      const conflictsWithOriginal = rawBody.conflictsWithOriginal === true;
+      const requestedConflictItemIds = Array.isArray(rawBody.originalConflictReferenceItemIds)
+        ? rawBody.originalConflictReferenceItemIds.map(String)
+        : [];
+
+      let compatibilitySelection;
+      let originalConflictReferenceItemIds: string[] = [];
+      try {
+        compatibilitySelection = await resolveProjectCompatibilitySelection(c, {
+          builtForReferenceVersionId,
+          testedThroughReferenceVersionId: compatibilityConfirmed ? builtForReferenceVersionId : null,
+        });
+        originalConflictReferenceItemIds = conflictsWithOriginal
+          ? await validateOriginalConflictReferenceItems(c, compatibilitySelection.builtForReferenceVersionId, requestedConflictItemIds)
+          : [];
+        if (conflictsWithOriginal && originalConflictReferenceItemIds.length === 0) {
+          return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
+        }
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
       }
 
       const projectId = generateId();
@@ -401,8 +501,18 @@ export class ProjectCreate extends OpenAPIRoute {
         id: projectId,
         name,
         description,
+        precautions,
         version: '1.0.0',
         versionLabel,
+        characterReferenceId: compatibilitySelection.characterReferenceId,
+        builtForReferenceVersionId: compatibilitySelection.builtForReferenceVersionId,
+        testedThroughReferenceVersionId: compatibilitySelection.testedThroughReferenceVersionId,
+        compatibilityStatus: compatibilitySelection.compatibilityStatus,
+        compatibilityKnownIncompatible: false,
+        compatibilityGraceUntil: compatibilitySelection.compatibilityGraceUntil,
+        compatibilityUpdatedAt: compatibilitySelection.builtForReferenceVersionId ? new Date().toISOString() : null,
+        conflictsWithOriginal,
+        originalConflictReferenceItemIds,
         authorId: payload.userId,
         authorName: payload.username,
         authorAvatar: payload.avatar || '',
@@ -637,7 +747,7 @@ export class ProjectCoverUpload extends OpenAPIRoute {
     let reusedDraft = false;
 
     if (project.isPublished && project.status === 'approved') {
-      const existingDraft = await projectDb.findDraftByPublishedId(c, projectId);
+      const existingDraft = project.draftProjectId ? await projectDb.get(c, project.draftProjectId, payload) : null;
       const draftId = existingDraft?.id || (await projectDb.createDraftFromPublished(c, projectId, {}));
       if (!draftId) {
         return c.json({ error: 'Draft creation failed' }, 500);
@@ -678,6 +788,53 @@ export class ProjectCoverUpload extends OpenAPIRoute {
       success: true,
       coverImage: uploadResult.url,
     };
+  }
+}
+
+export class ProjectCoverPresentationUpdate extends OpenAPIRoute {
+  schema = {
+    tags: ['Projects'],
+    summary: 'Adjust Project Cover Presentation',
+    request: {
+      params: z.object({ projectId: Str({ description: 'Project ID' }) }),
+      headers: z.object({ authorization: z.string().describe('Session ID') }),
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              coverPositionX: z.number().min(0).max(100),
+              coverPositionY: z.number().min(0).max(100),
+              coverZoom: z.number().min(1).max(3),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      '200': { description: 'Cover presentation updated' },
+      '403': { description: 'Author or admin only' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload) return c.json({ error: 'Unauthorized' }, 401);
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { projectId } = data.params;
+    const project = await projectDb.get(c, projectId, payload);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+    if (project.authorId !== payload.userId && !payload.isAdmin) {
+      return c.json({ error: 'Permission denied' }, 403);
+    }
+
+    const presentation = {
+      coverPositionX: data.body.coverPositionX,
+      coverPositionY: data.body.coverPositionY,
+      coverZoom: data.body.coverZoom,
+    };
+    const linkedId = project.publishedProjectId || project.draftProjectId || null;
+    await projectDb.setCoverPresentation(c, [project.id, linkedId || ''], presentation);
+    return { success: true, ...presentation };
   }
 }
 
@@ -810,6 +967,10 @@ export class ProjectUpdate extends OpenAPIRoute {
               name: Str({ required: false }),
               description: Str({ required: false }),
               versionLabel: z.string().max(80).nullable().optional(),
+              builtForReferenceVersionId: z.string().max(120).nullable().optional(),
+              compatibilityConfirmed: z.boolean().optional(),
+              conflictsWithOriginal: z.boolean().optional(),
+              originalConflictReferenceItemIds: z.array(z.string()).max(500).optional(),
               projectType: z.enum(PROJECT_TYPES).optional(),
               extensionType: z.enum(['规则', '内容']).nullable().optional(),
               facets: z.record(z.array(z.string())).optional(),
@@ -888,14 +1049,61 @@ export class ProjectUpdate extends OpenAPIRoute {
     }
 
     const taxonomyResult = normalizeProjectTaxonomyInput(taxonomyInput, {
-      requireExtensionSubtypeForExplicitType: data.body.projectType === '扩展',
+      requireExtensionSubtypeForExplicitType: false,
     });
     if (!taxonomyResult.value) {
       return c.json({ error: taxonomyResult.error || 'Invalid project taxonomy' }, 400);
     }
     const taxonomy = taxonomyResult.value;
+    const targetBuiltForReferenceVersionId = data.body.builtForReferenceVersionId !== undefined
+      ? data.body.builtForReferenceVersionId
+      : project.builtForReferenceVersionId;
+    const shouldRefreshCompatibility = data.body.builtForReferenceVersionId !== undefined
+      || data.body.compatibilityConfirmed !== undefined;
+    let compatibilityUpdates: Record<string, unknown> = {};
+    let conflictUpdates: Record<string, unknown> = {};
+    try {
+      if (shouldRefreshCompatibility) {
+        const confirmed = data.body.compatibilityConfirmed === true;
+        const selection = await resolveProjectCompatibilitySelection(c, {
+          builtForReferenceVersionId: targetBuiltForReferenceVersionId,
+          testedThroughReferenceVersionId: confirmed ? targetBuiltForReferenceVersionId : null,
+        });
+        compatibilityUpdates = {
+          characterReferenceId: selection.characterReferenceId,
+          builtForReferenceVersionId: selection.builtForReferenceVersionId,
+          testedThroughReferenceVersionId: selection.testedThroughReferenceVersionId,
+          compatibilityStatus: selection.compatibilityStatus,
+          compatibilityKnownIncompatible: false,
+          compatibilityNote: null,
+          compatibilityGraceUntil: selection.compatibilityGraceUntil,
+          compatibilityUpdatedAt: selection.builtForReferenceVersionId ? new Date().toISOString() : null,
+        };
+      }
+
+      if (data.body.conflictsWithOriginal !== undefined || data.body.originalConflictReferenceItemIds !== undefined) {
+        const conflictsWithOriginal = data.body.conflictsWithOriginal ?? project.conflictsWithOriginal;
+        const requestedIds = data.body.originalConflictReferenceItemIds ?? project.originalConflictReferenceItemIds;
+        const validatedIds = conflictsWithOriginal
+          ? await validateOriginalConflictReferenceItems(c, targetBuiltForReferenceVersionId, requestedIds)
+          : [];
+        if (conflictsWithOriginal && validatedIds.length === 0) {
+          return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
+        }
+        conflictUpdates = {
+          conflictsWithOriginal,
+          originalConflictReferenceItemIds: validatedIds,
+        };
+      }
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : '角色卡版本无效，请重新选择' }, 400);
+    }
+
+    const { compatibilityConfirmed: _compatibilityConfirmed, ...bodyUpdates } = data.body;
     const updates = {
-      ...data.body,
+      ...bodyUpdates,
+      ...compatibilityUpdates,
+      ...conflictUpdates,
       projectType: taxonomy.projectType,
       extensionType: taxonomy.extensionType,
       facets: taxonomy.facets,
@@ -995,15 +1203,83 @@ export class ProjectDelete extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    // 删除正式项目时，把关联的审核草稿一起清掉，避免留下 orphan draft。
-    // 删除 draft 本身则只撤回该 draft；projectDb.delete() 会解除 published 上的关联。
+    if (project.reviewTarget === 'draft' && project.publishedProjectId && project.status === 'pending') {
+      const published = await projectDb.get(c, project.publishedProjectId, payload);
+      if (!published) return c.json({ error: 'Published project not found for draft' }, 409);
+      if (published.draftProjectId && published.draftProjectId !== project.id) {
+        return c.json({ error: 'A newer working draft already exists.' }, 409);
+      }
+
+      const nextDraftId = generateId();
+      const nextVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
+      await projectDb.create(c, {
+        id: nextDraftId,
+        name: project.name,
+        description: project.description || undefined,
+        precautions: project.precautions ?? null,
+        version: nextVersion,
+        versionLabel: project.versionLabel ?? null,
+        authorId: project.authorId,
+        authorName: project.authorName,
+        authorAvatar: project.authorAvatar || '',
+        projectType: project.projectType,
+        extensionType: project.extensionType,
+        facets: project.facets,
+        customTags: project.customTags,
+        displayTags: project.displayTags,
+        tags: project.tags,
+        coverImage: project.coverImage || undefined,
+        coverPositionX: project.coverPositionX,
+        coverPositionY: project.coverPositionY,
+        coverZoom: project.coverZoom,
+        downloadUrl: project.downloadUrl || undefined,
+        fileSize: project.fileSize || undefined,
+        hasEjs: project.hasEjs,
+        hasCharacterArtwork: project.hasCharacterArtwork,
+        rootProjectId: project.rootProjectId || published.rootProjectId || published.id,
+        publishedProjectId: published.id,
+        reviewTarget: 'draft',
+        draftRevision: 1,
+        visibility: project.visibility,
+        isPublished: false,
+        latestApprovedAt: published.latestApprovedAt || published.reviewedAt,
+        status: 'drafting',
+      });
+
+      try {
+        const copied = await r2Storage.copyProjectFilesToPublished(
+          c,
+          project.id,
+          nextDraftId,
+          project.coverImage || undefined,
+        );
+        await projectDb.update(c, nextDraftId, {
+          downloadUrl: copied.downloadUrl || project.downloadUrl || undefined,
+          fileSize: copied.fileSize ?? project.fileSize ?? undefined,
+          coverImage: copied.coverImage || project.coverImage || undefined,
+        });
+        await projectDb.update(c, published.id, { draftProjectId: nextDraftId });
+      } catch (error) {
+        await projectDb.delete(c, nextDraftId).catch(() => undefined);
+        throw error;
+      }
+
+      return {
+        success: true,
+        continuedDraftProjectId: nextDraftId,
+        reviewRequestId: project.id,
+        message: 'Review snapshot preserved. Continue editing in the new draft.',
+      };
+    }
+
+    // 删除正式项目时，一并清理当前草稿和历史审核快照。
     let linkedDraftId: string | null = null;
     if (project.isPublished) {
-      const linkedDraft = await projectDb.findDraftByPublishedId(c, project.id);
-      if (linkedDraft) {
-        linkedDraftId = linkedDraft.id;
-        await r2Storage.deleteProjectFiles(c, linkedDraft.id);
-        await projectDb.delete(c, linkedDraft.id);
+      const linkedDraftIds = await projectDb.listDraftIdsByPublishedId(c, project.id);
+      linkedDraftId = project.draftProjectId || linkedDraftIds[0] || null;
+      for (const linkedId of linkedDraftIds) {
+        await r2Storage.deleteProjectFiles(c, linkedId);
+        await projectDb.delete(c, linkedId);
       }
     }
 
@@ -1206,7 +1482,9 @@ export class ProjectEntryRemove extends OpenAPIRoute {
 
     let targetProjectId = project.id;
     const existingDraft =
-      project.isPublished && project.status === 'approved' ? await projectDb.findDraftByPublishedId(c, project.id) : null;
+      project.isPublished && project.status === 'approved' && project.draftProjectId
+        ? await projectDb.get(c, project.draftProjectId, payload)
+        : null;
     const sourceProject =
       project.isPublished && project.status === 'approved'
         ? existingDraft || project

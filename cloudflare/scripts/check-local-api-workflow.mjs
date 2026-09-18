@@ -28,6 +28,7 @@ function createToken({ userId, username, isAdmin }) {
 }
 
 const creatorToken = createToken({ userId: 'cw_local_creator', username: 'Local Creator', isAdmin: false });
+const otherUserToken = createToken({ userId: 'cw_local_other', username: 'Local Other', isAdmin: false });
 const adminToken = createToken({ userId: 'cw_local_admin', username: 'Local Admin', isAdmin: true });
 
 async function api(path, { method = 'GET', token, body, expected = 200 } = {}) {
@@ -102,6 +103,8 @@ const regex = [
 let publishedId = null;
 let draftId = null;
 let pendingDeleteId = null;
+let rejectedId = null;
+let rankingFreshnessId = null;
 
 async function cleanupProject(id) {
   if (!id) return;
@@ -113,6 +116,48 @@ async function cleanupProject(id) {
 }
 
 try {
+  const rejectCandidate = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Local API Reject Test',
+      description: 'Admin review reject and permission checks',
+      tags: ['系统'],
+    },
+  });
+  rejectedId = rejectCandidate.projectId;
+  assert.ok(rejectedId);
+  await api(`/api/projects/${rejectedId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: JSON.stringify(worldbook),
+  });
+  const rejectCandidateDetail = await api(`/api/projects/${rejectedId}`, { token: creatorToken });
+  const rejectRevision = rejectCandidateDetail.project.draftRevision;
+
+  await api(`/api/admin/review/${rejectedId}`, { token: creatorToken, expected: 403 });
+  await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: creatorToken,
+    body: { action: 'reject', rejectReason: 'creator must not review', expectedRevision: rejectRevision },
+    expected: 403,
+  });
+  const missingReason = await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'reject', expectedRevision: rejectRevision },
+    expected: 400,
+  });
+  assert.match(String(missingReason.error), /Reject reason required/i);
+  await api(`/api/admin/review/${rejectedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'reject', rejectReason: 'Please revise this test project', expectedRevision: rejectRevision },
+  });
+  const rejected = await api(`/api/projects/${rejectedId}`, { token: creatorToken });
+  assert.equal(rejected.project.status, 'rejected');
+  assert.equal(rejected.project.rejectReason, 'Please revise this test project');
+
   const removablePending = await api('/api/projects', {
     method: 'POST',
     token: creatorToken,
@@ -186,19 +231,99 @@ try {
   assert.equal(approved.worldbookEntriesPreview.length, 3);
   assert.equal(approved.regexEntriesPreview.length, 2);
 
-  const withdrawDraftUpdate = await api(`/api/projects/${publishedId}`, {
+  const stalePostApprovalReview = await api(`/api/admin/review/${publishedId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      action: 'reject',
+      rejectReason: 'stale review request must not overwrite an approved project',
+      expectedRevision: firstReviewRevision,
+    },
+    expected: 409,
+  });
+  assert.match(String(stalePostApprovalReview.error), /already reviewed|changed|conflict/i);
+  const approvedAfterStaleReview = await api(`/api/projects/${publishedId}`);
+  assert.equal(approvedAfterStaleReview.project.status, 'approved');
+  assert.equal(approvedAfterStaleReview.project.isPublished, true);
+
+  await api('/api/projects?page=0&pageSize=50&sort=discover');
+  const rankingFreshnessProject = await api('/api/projects', {
+    method: 'POST',
+    token: creatorToken,
+    body: {
+      name: 'Ranking Freshness Probe',
+      description: 'Must become searchable immediately after approval invalidates discovery snapshot',
+      tags: ['角色'],
+    },
+  });
+  rankingFreshnessId = rankingFreshnessProject.projectId;
+  assert.ok(rankingFreshnessId);
+  await api(`/api/projects/${rankingFreshnessId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: JSON.stringify(worldbook),
+  });
+  const rankingFreshnessPending = await api(`/api/projects/${rankingFreshnessId}`, { token: creatorToken });
+  await api(`/api/admin/review/${rankingFreshnessId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'approve', expectedRevision: rankingFreshnessPending.project.draftRevision },
+  });
+  const rankingFreshnessSearch = await api(
+    '/api/projects?page=0&pageSize=50&sort=discover&search=Ranking%20Freshness%20Probe',
+  );
+  assert.ok(
+    rankingFreshnessSearch.projects.some(project => project.id === rankingFreshnessId),
+    'newly approved projects must be searchable immediately even when the current discovery bucket already had a snapshot',
+  );
+  await cleanupProject(rankingFreshnessId);
+  rankingFreshnessId = null;
+
+  await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: otherUserToken,
+    body: { visibility: false },
+    expected: 403,
+  });
+  const hiddenByAdmin = await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: adminToken,
+    body: { visibility: false },
+  });
+  assert.equal(hiddenByAdmin.visibility, false);
+  const restoredByAdmin = await api(`/api/projects/${publishedId}/visibility`, {
+    method: 'PUT',
+    token: adminToken,
+    body: { visibility: true },
+  });
+  assert.equal(restoredByAdmin.visibility, true);
+
+  const frozenReviewUpdate = await api(`/api/projects/${publishedId}`, {
     method: 'PUT',
     token: creatorToken,
-    body: { description: 'Temporary draft that should be withdrawn' },
+    body: { description: 'Frozen review snapshot A' },
   });
-  const withdrawnDraftId = withdrawDraftUpdate.draftProjectId;
-  assert.ok(withdrawnDraftId);
-  await api(`/api/projects/${withdrawnDraftId}`, { method: 'DELETE', token: creatorToken });
-  await api(`/api/projects/${withdrawnDraftId}`, { token: creatorToken, expected: 404 });
-  const publishedAfterWithdraw = await api(`/api/projects/${publishedId}`, { token: creatorToken });
-  assert.equal(publishedAfterWithdraw.project.status, 'approved');
-  assert.equal(publishedAfterWithdraw.project.description, 'Base description');
-  assert.equal(publishedAfterWithdraw.project.draftProjectId, null);
+  const frozenReviewId = frozenReviewUpdate.draftProjectId;
+  assert.ok(frozenReviewId);
+  const frozenReviewBeforeContinue = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(frozenReviewBeforeContinue.project.status, 'pending');
+  assert.equal(frozenReviewBeforeContinue.project.version, '1.0.1');
+
+  const continueEditing = await api(`/api/projects/${frozenReviewId}`, { method: 'DELETE', token: creatorToken });
+  const continuedDraftId = continueEditing.continuedDraftProjectId;
+  assert.ok(continuedDraftId);
+  assert.notEqual(continuedDraftId, frozenReviewId);
+
+  const frozenReviewAfterContinue = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(frozenReviewAfterContinue.project.status, 'pending');
+  assert.equal(frozenReviewAfterContinue.project.description, 'Frozen review snapshot A');
+  const continuedDraft = await api(`/api/projects/${continuedDraftId}`, { token: creatorToken });
+  assert.equal(continuedDraft.project.status, 'drafting');
+  assert.equal(continuedDraft.project.description, 'Frozen review snapshot A');
+  const publishedAfterContinue = await api(`/api/projects/${publishedId}`, { token: creatorToken });
+  assert.equal(publishedAfterContinue.project.status, 'approved');
+  assert.equal(publishedAfterContinue.project.description, 'Base description');
+  assert.equal(publishedAfterContinue.project.draftProjectId, continuedDraftId);
 
   const firstDraftUpdate = await api(`/api/projects/${publishedId}`, {
     method: 'PUT',
@@ -207,6 +332,7 @@ try {
   });
   draftId = firstDraftUpdate.draftProjectId;
   assert.ok(draftId);
+  assert.equal(draftId, continuedDraftId);
   assert.equal(firstDraftUpdate.targetVersion, '1.0.1');
   assert.equal('versionBump' in firstDraftUpdate, false);
 
@@ -274,6 +400,25 @@ try {
   });
   draftId = null;
 
+  const staleFrozenReview = await api(`/api/admin/review/${frozenReviewId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: { action: 'approve', expectedRevision: frozenReviewBeforeContinue.project.draftRevision },
+    expected: 409,
+  });
+  assert.match(String(staleFrozenReview.error), /outdated/i);
+  await api(`/api/admin/review/${frozenReviewId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      action: 'reject',
+      rejectReason: 'Superseded by a newer approved review request',
+      expectedRevision: frozenReviewBeforeContinue.project.draftRevision,
+    },
+  });
+  const rejectedFrozenReview = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
+  assert.equal(rejectedFrozenReview.project.status, 'rejected');
+
   const finalPublished = await api(`/api/projects/${publishedId}`);
   assert.equal(finalPublished.project.name, 'Local API Draft Name Fixed');
   assert.equal(finalPublished.project.description, 'Draft description changed later');
@@ -294,15 +439,18 @@ try {
   draftId = cascadeDraftUpdate.draftProjectId;
   assert.ok(draftId);
   await api(`/api/projects/${draftId}`, { token: creatorToken });
-  await api(`/api/projects/${publishedId}`, { method: 'DELETE', token: creatorToken });
+  await api(`/api/projects/${publishedId}`, { method: 'DELETE', token: adminToken });
   await api(`/api/projects/${publishedId}`, { token: creatorToken, expected: 404 });
   await api(`/api/projects/${draftId}`, { token: creatorToken, expected: 404 });
+  await api(`/api/projects/${frozenReviewId}`, { token: creatorToken, expected: 404 });
   draftId = null;
   publishedId = null;
 
   console.log('local API workflow OK');
 } finally {
+  await cleanupProject(rejectedId);
   await cleanupProject(pendingDeleteId);
+  await cleanupProject(rankingFreshnessId);
   await cleanupProject(draftId);
   await cleanupProject(publishedId);
 }

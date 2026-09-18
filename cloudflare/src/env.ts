@@ -25,6 +25,10 @@ export interface Env {
 
   // JWT 密钥 (通过 wrangler secret 设置)
   JWT_SECRET: string;
+
+  // 仅供显式本地预览配置开启的管理员模拟登录。
+  LOCAL_PREVIEW_ADMIN?: string;
+  LOCAL_PREVIEW_FILE_BASE?: string;
 }
 
 // 扩展 Window 类型 (用于前端)

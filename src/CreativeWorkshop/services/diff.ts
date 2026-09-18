@@ -1,9 +1,11 @@
 import { resolveCreativeWorkshopInstallWorldbook } from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
-import { getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
+import { formatCreativeWorkshopEntryName } from './project-type';
+import { getCreativeWorkshopManagedRegexId, getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
+const DIFF_IDENTITY_VERSION = 2;
 
 type CreativeWorkshopDiffCache = Record<
   string,
@@ -56,11 +58,19 @@ function normalizeWorldbookEntry(entry: WorldbookEntry) {
   };
 }
 
-function normalizeRemoteEntry(entry: Record<string, any>, projectId: string, index: number) {
+function normalizeRemoteEntry(
+  entry: Record<string, any>,
+  projectId: string,
+  index: number,
+  project: Record<string, any> | null | undefined,
+  projectName: string,
+) {
   const comment = entry.comment || '无标题';
+  const rawEntryKey = _.get(entry, 'entryKey');
+  const entryKey = _.isString(rawEntryKey) && rawEntryKey ? `${projectId}:${rawEntryKey}` : `${projectId}:${index}`;
   return {
-    entryKey: `${projectId}:${index}`,
-    name: comment,
+    entryKey,
+    name: formatCreativeWorkshopEntryName(comment, project, projectName),
     comment,
     content: entry.content || '',
     key: JSON.stringify(Array.isArray(entry.key) ? entry.key : []),
@@ -98,12 +108,24 @@ export async function getCreativeWorkshopProjectDiff(
       entry =>
         _.get(entry, 'extra.cw_project_id') === projectId ||
         _.get(entry, 'extra.fate_project_name') === projectId ||
+        Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
         Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName),
     )
     .map(normalizeWorldbookEntry);
-  const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) =>
-    normalizeRemoteEntry(entry, projectId, index),
-  );
+  const localEntryKeys = new Set(localEntries.map(entry => entry.entryKey));
+  const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) => {
+    const normalized = normalizeRemoteEntry(
+      entry,
+      projectId,
+      index,
+      detail.project,
+      detail.project.name || legacyProjectName || '未命名项目',
+    );
+    const legacyEntryKey = `${projectId}:${index}`;
+    return !localEntryKeys.has(normalized.entryKey) && localEntryKeys.has(legacyEntryKey)
+      ? { ...normalized, entryKey: legacyEntryKey }
+      : normalized;
+  });
 
   const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
     .filter(
@@ -120,13 +142,14 @@ export async function getCreativeWorkshopProjectDiff(
       replaceString: regex.replace_string,
     }));
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
-    id: `creative_workshop:${projectId}:${entry.id || index}`,
+    id: getCreativeWorkshopManagedRegexId(projectId, entry, index),
     scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
     findRegex: entry.findRegex || '',
     replaceString: entry.replaceString || '',
   }));
 
   const localSignature = JSON.stringify({
+    identityVersion: DIFF_IDENTITY_VERSION,
     localEntries,
     localRegexes,
   });

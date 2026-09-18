@@ -9,9 +9,19 @@ These rules apply to all agents and automated sessions working in this repositor
 - Preferred remote names:
   - `origin` = user fork (`uikawinwing/myrepo`)
   - `upstream` = owner repository (`AkabaneSaki/myrepo`)
-- `upstream/main` is the canonical production source branch.
+- Normally, `upstream/main` is the canonical production source branch.
 - `origin/main` should be kept synchronized with `upstream/main`; do not use the fork `main` as a task-development branch.
 - `origin/staging` is the long-lived integration branch used for Master staging validation before any owner PR.
+
+### Release transition — 2.1
+
+The temporary 2.0.15 recovery exception is retired for active development. The immutable `2.0.15` release tag remains the historical production backup; do not keep old hotfix/release branches merely as archives.
+
+- The forward development line already contains the required 2.0.15 reliability protections for project/cache freshness, worldbook update reconciliation/install identity, and per-project install/update/uninstall mutation serialization. Preserve equivalent protections during later refactors.
+- `origin/main` remains a synchronized mirror of `upstream/main`; never reset or force-push either main branch back to 2.0.15.
+- 2.1 follows the normal release flow: task branch -> `origin/staging` -> Master staging acceptance -> owner PR / `upstream/main` -> stable 2.1 tag -> production deployment.
+- Until Master explicitly accepts the 2.1 staging build and the exact accepted changes are present in `upstream/main`, do not deploy 2.1 to production or treat a newer main commit as an approved release.
+- After 2.1 is released, production source returns fully to the normal rule: the exact accepted `upstream/main` commit plus its stable release tag. No 2.0.15 branch exception remains.
 
 Before the first Git remote operation in every session, verify both actual remote URLs. Never infer ownership from a remote name alone.
 
@@ -23,6 +33,49 @@ Git hosting and runtime infrastructure are separate concerns.
 - Production Discord and Cloudflare configuration belongs to the production/owner environment and must be verified separately before any deploy or permission change.
 - Do not copy, infer, or substitute production credentials/bindings from the user fork.
 - A branch being pushed to `origin` does not deploy or reconfigure production.
+
+## UX language contract — mandatory
+
+Treat all user-facing, creator-facing, and admin-facing UI as being used by non-technical people.
+
+- Use plain everyday Chinese. Prefer concrete questions and actions over engineering nouns.
+- Do not expose internal terms such as `metadata`, `schema`, `reference`, `registry`, `fingerprint`, database fields, IDs, implementation names, or other backend concepts unless there is no practical alternative.
+- File formats may be shown only as a secondary hint, for example `世界书文件 (.json)`; do not make `JSON` the main concept the user must understand.
+- Clearly mark optional fields as optional. Do not make users guess whether something can be skipped.
+- Error messages must explain what the user should do next, not what the internal parser/database failed to do.
+- Keep unavoidable product/domain terms only when the target users already need them to operate SillyTavern, such as `世界书` or `正则`.
+- When reviewing a form, first ask whether each field is truly necessary. Hide, automate, or move nonessential choices out of the primary flow before merely rewriting their labels.
+- A good default test is: a person with no coding or IT background should understand what to choose without knowing how Creative Workshop is implemented.
+
+## Deployment helper contract — mandatory
+
+A reusable fail-closed deployment helper already exists on the primary machine. **Use it before considering any raw Wrangler/PowerShell/Bash deployment path.**
+
+- Generic engine: `.cotel/local/one-click-deploy/deploy-worker.ps1`
+- Target/source profiles: `.cotel/local/one-click-deploy/profiles/*.json`
+- Compatibility shortcuts: `.cotel/local/CHECK_STAGING.cmd`, `.cotel/local/DEPLOY_STAGING.cmd`, `.cotel/local/CHECK_PRODUCTION.cmd`, `.cotel/local/DEPLOY_PRODUCTION.cmd`
+- Helper documentation: `.cotel/local/one-click-deploy/README.md`
+
+Treat deployment as composable bricks, not one script per situation:
+
+- **target profile** chooses Cloudflare account, Worker, Wrangler config, D1/KV/R2 and auth policy;
+- **source selector** chooses an allowed Git remote + branch/tag;
+- `-SourceRepoRoot` may point at another clean worktree;
+- `-ConfigPath` may select another Wrangler config when the chosen profile permits that target;
+- `-CheckOnly` performs the same preflight without deploying.
+
+Examples of supported variation are multiple staging/preview Workers via additional profiles and temporary production deployment from an explicitly allowed owner `release/*` branch or release tag. A new target/source combination is **not** a reason to create a new deployment script.
+
+Agent rules:
+
+1. Before any Worker deployment, inspect/use the existing helper and an appropriate profile.
+2. If the scenario differs only by Worker/account/config/bindings/source branch/tag, add or adjust a profile/selector brick; do not copy the engine.
+3. If a genuinely generic capability is missing, extend `deploy-worker.ps1` once, preserving fail-closed checks, then use it.
+4. Do **not** fall back to ad-hoc `wrangler deploy`, raw Bash/PowerShell deployment chains, or a freshly invented deploy script merely because a profile/check failed.
+5. A failed helper check is a stop signal to fix the profile/source/credential/state mismatch. Do not weaken or bypass the check to make deployment pass.
+6. If Cotel exposes a dedicated deployment capability for this helper, prefer that capability over shell execution.
+
+The helper is persistent machine-local operational tooling under `.cotel/local/`. `.ai-bridge/` is reserved for current-session AI handoff state only; long-lived deployment policy remains this `AGENTS.md` plus `docs/GIT-WORKFLOW.md`.
 
 ## Staging terminology contract
 
@@ -130,6 +183,8 @@ For uncertain old branches, test from refreshed `upstream/main` with a temporary
 ## Deployment/account safety
 
 For Cloudflare production deploys, use the configured production profile and verify the target account/resources before deployment. Production deployment success does not mean GitHub has been updated; always record and reconcile the Git commit separately.
+
+Before any production deploy, query and record the production Worker's current deployment/version and verify the intended source commit/tag independently. Do not treat the newest local deployment log as proof of current runtime because dashboard/manual deployments may exist.
 
 For staging deploys, verify the personal staging Cloudflare account/resources independently from Git remotes. A successful `push staging` does not mean the staging Worker is updated, and a successful `deploy staging` does not mean `origin/staging` contains that code. Both states must be verified explicitly.
 

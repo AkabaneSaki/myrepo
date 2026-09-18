@@ -6,7 +6,7 @@ const args = [
   'wrangler',
   'dev',
   '--config',
-  'wrangler.staging.jsonc',
+  'wrangler.local-test.jsonc',
   '--local',
   '--ip',
   '127.0.0.1',

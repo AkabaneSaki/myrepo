@@ -99,6 +99,7 @@ async function fetchCurrentUser() {
 }
 
 const PROJECT_DETAIL_CACHE_TTL_MS = 60 * 1000;
+const INSTALLED_PROJECT_BATCH_SIZE = 50;
 const projectDetailCache = new Map();
 const projectDetailInFlight = new Map();
 const projectDetailGeneration = new Map();
@@ -137,6 +138,35 @@ async function fetchSubscriptions(forceRefresh = false) {
   return projectIds;
 }
 
+async function fetchDiscoverShelves(forceRefresh = false) {
+  const shelfSpecs = [
+    { key: 'discover', sort: 'discover', pageSize: 10 },
+    { key: 'published', sort: 'published', pageSize: 5 },
+    { key: 'rating', sort: 'rating', pageSize: 5 },
+    { key: 'downloads', sort: 'downloads', pageSize: 5 },
+  ];
+  setDiscoverShelves({ ...state.discoverShelves, loading: true });
+  renderApp();
+  try {
+    const results = await Promise.all(shelfSpecs.map(async spec => {
+      const params = new URLSearchParams({ page: '0', pageSize: String(spec.pageSize), sort: spec.sort });
+      if (forceRefresh) params.set('_', String(Date.now()));
+      const data = await apiFetch('/api/projects?' + params.toString());
+      return [spec.key, Array.isArray(data.projects) ? data.projects : []];
+    }));
+    const shelves = { discover: [], published: [], rating: [], downloads: [], loading: false };
+    results.forEach(([key, projects]) => { shelves[key] = projects; });
+    setDiscoverShelves(shelves);
+    syncProjectStats(state.projects);
+    renderApp();
+    return shelves;
+  } catch (error) {
+    setDiscoverShelves({ ...state.discoverShelves, loading: false });
+    renderApp();
+    throw error;
+  }
+}
+
 async function fetchProjects(forceRefresh = false, options = {}) {
   const append = Boolean(options.append);
   const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
@@ -150,6 +180,10 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   const baseTag = getActivePublicBaseTag();
   if (baseTag && baseTag !== 'all') {
     params.set('projectType', baseTag);
+  }
+  const activeTags = getActivePublicTags();
+  if (activeTags.length) {
+    params.set('tags', activeTags.join(','));
   }
   const searchKeyword = String(state.searchKeyword || '').trim();
   if (searchKeyword) {
@@ -220,11 +254,76 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   }
 }
 
+function normalizeRepairProjectName(value) {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function buildRepairSearchTerm(value) {
+  const cleaned = String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[%_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(cleaned).slice(0, 20).join('');
+}
+
+function isWorkshopUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
+async function searchWorkshopProjectsByName(query) {
+  const normalizedQuery = normalizeRepairProjectName(query);
+  const searchTerm = buildRepairSearchTerm(query);
+  if (!normalizedQuery || !searchTerm) return { projects: [], exactNameMatches: [] };
+  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: searchTerm });
+  const data = await apiFetch('/api/projects?' + params.toString());
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const exactNameMatches = projects.filter(project => normalizeRepairProjectName(project?.name) === normalizedQuery);
+  return { projects, exactNameMatches };
+}
+
+async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
+  const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
+  const detectedIds = detectedProjectId && isWorkshopUuid(detectedProjectId) ? [detectedProjectId] : [];
+
+  if (!manualQuery && detectedIds.length) {
+    try {
+      const exactData = await apiFetch('/api/projects/batch', {
+        method: 'POST',
+        body: JSON.stringify({ projectIds: detectedIds.slice(0, 50) }),
+      });
+      const exactProjects = Array.isArray(exactData.projects) ? exactData.projects : [];
+      if (exactProjects.length === 1) {
+        return { status: 'unique', method: 'project_id', projects: exactProjects };
+      }
+      if (exactProjects.length > 1) {
+        return { status: 'ambiguous', method: 'project_id', projects: exactProjects };
+      }
+    } catch (error) {
+      console.warn('[CreativeWorkshop] repair project-id match failed', { candidate, error });
+    }
+  }
+
+  const query = String(manualQuery || candidate?.name || candidate?.legacyProjectName || '').trim();
+  if (!query) return { status: 'none', method: 'none', projects: [] };
+  const { projects, exactNameMatches } = await searchWorkshopProjectsByName(query);
+
+  if (exactNameMatches.length === 1) {
+    return { status: 'candidates', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
+  }
+  if (exactNameMatches.length > 1) {
+    return { status: 'ambiguous', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
+  }
+  if (projects.length > 0) {
+    return { status: 'candidates', method: manualQuery ? 'manual_search' : 'name_search', projects };
+  }
+  return { status: 'none', method: manualQuery ? 'manual_search' : 'name_search', projects: [] };
+}
+
 async function fetchInstalledProjectDetails() {
+  const installedProjects = state.tavern.installedProjects.slice();
   const installedProjectIds = Array.from(new Set(
-    state.tavern.installedProjects
-      .map(project => project.projectId || project.id)
-      .filter(Boolean),
+    installedProjects.map(project => project.projectId || project.id).filter(Boolean),
   ));
   if (!installedProjectIds.length) {
     mergeInstalledRemoteProjects([]);
@@ -235,15 +334,42 @@ async function fetchInstalledProjectDetails() {
   const missingProjectIds = installedProjectIds.filter(projectId => !loadedProjectIds.has(projectId));
   if (!missingProjectIds.length) return [];
 
-  const results = await Promise.allSettled(
-    missingProjectIds.map(async projectId => {
-      const detail = await fetchProjectEntries(projectId);
-      return detail?.project?.id ? detail.project : null;
-    }),
-  );
-  const remoteProjects = results
-    .filter(result => result.status === 'fulfilled' && result.value)
-    .map(result => result.value);
+  const remoteProjects = [];
+  for (let offset = 0; offset < missingProjectIds.length; offset += INSTALLED_PROJECT_BATCH_SIZE) {
+    const projectIds = missingProjectIds.slice(offset, offset + INSTALLED_PROJECT_BATCH_SIZE);
+    const data = await apiFetch('/api/projects/batch', {
+      method: 'POST',
+      body: JSON.stringify({ projectIds }),
+    });
+    if (Array.isArray(data.projects)) {
+      remoteProjects.push(...data.projects);
+    }
+  }
+
+  const foundRemoteIds = new Set(remoteProjects.map(project => project?.id).filter(Boolean));
+  const missingIdSet = new Set(missingProjectIds);
+  const nameSearchCache = new Map();
+  for (const localProject of installedProjects) {
+    const currentProjectId = localProject.projectId || localProject.id;
+    if (!missingIdSet.has(currentProjectId) || foundRemoteIds.has(currentProjectId)) continue;
+    const installedProjectId = String(localProject.installedProjectId || currentProjectId || '').trim();
+    const projectNameHint = String(localProject.projectNameHint || localProject.legacyProjectName || localProject.name || '').trim();
+    if (!installedProjectId || !projectNameHint) {
+      setInstalledProjectRebindCandidates(installedProjectId, []);
+      continue;
+    }
+    try {
+      if (!nameSearchCache.has(projectNameHint)) {
+        nameSearchCache.set(projectNameHint, searchWorkshopProjectsByName(projectNameHint));
+      }
+      const result = await nameSearchCache.get(projectNameHint);
+      setInstalledProjectRebindCandidates(installedProjectId, result?.exactNameMatches || []);
+    } catch (error) {
+      console.warn('[CreativeWorkshop] stale installed project candidate lookup failed', { installedProjectId, error });
+      setInstalledProjectRebindCandidates(installedProjectId, []);
+    }
+  }
+
   mergeInstalledRemoteProjects(remoteProjects);
   return remoteProjects;
 }
@@ -291,6 +417,14 @@ async function fetchProjectEntries(projectOrId, options = {}) {
     const projectId = typeof projectOrId === 'string' ? projectOrId : projectOrId?.id;
     if (!projectId) {
       throw new Error('缺少项目 ID');
+    }
+
+    if (typeof projectOrId === 'object' && projectOrId?.source === 'local-only') {
+      return {
+        project: projectOrId,
+        entries: [],
+        regexEntries: [],
+      };
     }
 
     const forceRefresh = Boolean(options.forceRefresh);
@@ -452,6 +586,44 @@ async function uploadCoverFile(projectId, file) {
   }
 }
 
+async function fetchDiscoverBanner() {
+  const result = await apiFetch('/api/site/discover-banner', { cache: 'no-store' });
+  setDiscoverBanner(result?.banner || {});
+  return result?.banner || {};
+}
+
+async function updateCoverPresentation(projectId, presentation) {
+  const result = await apiFetch('/api/projects/' + projectId + '/cover-presentation', {
+    method: 'PUT',
+    body: JSON.stringify(presentation),
+  });
+  invalidateProjectDetailCache(projectId);
+  return result;
+}
+
+async function updateDiscoverBannerPresentation(presentation) {
+  const result = await apiFetch('/api/admin/discover-banner', {
+    method: 'PUT',
+    body: JSON.stringify(presentation),
+  });
+  if (result?.banner) setDiscoverBanner(result.banner);
+  return result;
+}
+
+async function uploadDiscoverBanner(file) {
+  const formData = new FormData();
+  formData.append('banner', file);
+  const response = await fetch('/api/admin/discover-banner/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY) },
+    body: formData,
+  });
+  const { rawText, data } = await parseResponseBody(response);
+  if (!response.ok) throw new Error(resolveApiErrorMessage(response.status, rawText, data, 'Banner 上传失败'));
+  if (data?.banner) setDiscoverBanner(data.banner);
+  return data || {};
+}
+
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
   const params = new URLSearchParams({ page: '0', pageSize: '50', sort });
   if (projectType) params.set('projectType', projectType);
@@ -480,6 +652,24 @@ async function fetchAdminList() {
 
 async function fetchAdminLogs() {
   return apiFetch('/api/admin/logs');
+}
+
+async function fetchCharacterReferences() {
+  return apiFetch('/api/character-references', { method: 'GET', cache: 'no-store' });
+}
+
+async function fetchCharacterReferenceVersionItems(versionId) {
+  return apiFetch('/api/character-references/versions/' + encodeURIComponent(versionId) + '/items', { method: 'GET', cache: 'no-store' });
+}
+
+
+async function updateProjectCompatibility(projectId, payload) {
+  const result = await apiFetch('/api/projects/' + projectId + '/compatibility', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  invalidateProjectDetailCache(projectId);
+  return result;
 }
 
 async function setAdmin(userId, isAdmin) {

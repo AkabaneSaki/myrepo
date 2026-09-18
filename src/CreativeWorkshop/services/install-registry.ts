@@ -1,9 +1,18 @@
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
 
+export type CreativeWorkshopOriginalEntryState = {
+  referenceItemId: string;
+  worldbookName: string;
+  displayName: string;
+  entryUid?: string | null;
+  wasEnabled: boolean;
+};
+
 export type CreativeWorkshopInstallRecord = {
   projectId: string;
   worldbookName: string | null;
   installedVersion?: string | null;
+  originalEntryStates?: CreativeWorkshopOriginalEntryState[];
   installedAt: number;
 };
 
@@ -35,6 +44,22 @@ export function getCreativeWorkshopInstallRecords(): Record<string, CreativeWork
 
 export function getCreativeWorkshopInstallRecord(projectId: string): CreativeWorkshopInstallRecord | null {
   return getCreativeWorkshopInstallRecords()[projectId] || null;
+}
+
+export function getCreativeWorkshopBoundWorldbookNames(): string[] {
+  const charWorldbooks = getCharWorldbookNames('current');
+  let chatWorldbook: string | null = null;
+  try {
+    chatWorldbook = getChatWorldbookName('current');
+  } catch {
+    chatWorldbook = null;
+  }
+  return _.uniq([
+    charWorldbooks.primary,
+    ...(charWorldbooks.additional || []),
+    ...getGlobalWorldbookNames(),
+    chatWorldbook,
+  ]).filter((name): name is string => _.isString(name) && Boolean(name));
 }
 
 export function getCreativeWorkshopRelevantWorldbookNames(projectId?: string, legacyProjectName?: string): string[] {
@@ -78,6 +103,7 @@ export async function resolveCreativeWorkshopInstallWorldbook(
         entry =>
           _.get(entry, 'extra.cw_project_id') === projectId ||
           _.get(entry, 'extra.fate_project_name') === projectId ||
+          Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
           Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName),
       )
     ) {
@@ -90,7 +116,11 @@ export async function resolveCreativeWorkshopInstallWorldbook(
 
 export function setCreativeWorkshopInstallRecord(
   projectId: string,
-  patch: { worldbookName?: string | null; installedVersion?: string | null },
+  patch: {
+    worldbookName?: string | null;
+    installedVersion?: string | null;
+    originalEntryStates?: CreativeWorkshopOriginalEntryState[];
+  },
 ) {
   const registry = readInstallRegistry();
   const scopeKey = getRegistryScopeKey();
@@ -100,6 +130,8 @@ export function setCreativeWorkshopInstallRecord(
     projectId,
     worldbookName: patch.worldbookName !== undefined ? patch.worldbookName : current?.worldbookName ?? null,
     installedVersion: patch.installedVersion !== undefined ? patch.installedVersion : current?.installedVersion ?? null,
+    originalEntryStates:
+      patch.originalEntryStates !== undefined ? patch.originalEntryStates : current?.originalEntryStates ?? [],
     installedAt: Date.now(),
   };
   writeInstallRegistry(registry);

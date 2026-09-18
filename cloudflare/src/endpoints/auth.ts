@@ -6,6 +6,17 @@ import { userDb } from '../utils/db';
 import { jwt } from '../utils/jwt';
 
 const AUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
+
+function isPrivatePreviewHost(c: AppContext): boolean {
+  const hostname = new URL(c.req.url).hostname.toLowerCase();
+  if (hostname === '127.0.0.1' || hostname === 'localhost') return true;
+
+  const octets = hostname.split('.').map(part => Number(part));
+  if (octets.length !== 4 || octets.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return octets[0] === 10
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
+}
 const AUTH_CALLBACK_CSP =
   "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com https://wsrv.nl data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://discord.com;";
 
@@ -144,6 +155,47 @@ export class AuthLogin extends OpenAPIRoute {
 /**
  * 轮询 OAuth 结果
  */
+export class AuthLocalPreview extends OpenAPIRoute {
+  schema = {
+    tags: ['Auth'],
+    summary: 'Local Preview Admin Login',
+    responses: {
+      '200': { description: 'Local preview admin session' },
+      '404': { description: 'Unavailable outside local preview' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    if (c.env.LOCAL_PREVIEW_ADMIN !== '1' || !isPrivatePreviewHost(c)) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+
+    const user = {
+      id: 'local-preview-admin',
+      username: 'local-preview-admin',
+      globalName: 'Local Preview Admin',
+      avatar: '',
+      avatarUrl: 'https://cdn.discordapp.com/embed/avatars/0.png',
+      isAdmin: true,
+      isSuperAdmin: false,
+    };
+    const token = await jwt.sign(
+      c,
+      {
+        userId: user.id,
+        username: user.username,
+        globalName: user.globalName,
+        avatar: user.avatar,
+        isAdmin: true,
+        isSuperAdmin: false,
+      },
+      8 * 60 * 60,
+    );
+
+    return { success: true, token, user };
+  }
+}
+
 export class AuthPoll extends OpenAPIRoute {
   schema = {
     tags: ['Auth'],

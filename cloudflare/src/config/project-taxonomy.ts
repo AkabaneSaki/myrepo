@@ -265,7 +265,7 @@ export function normalizeProjectTaxonomyInput(
   const tagPool = new Set(buildProjectTagPool(facets, customTags));
   const unknownDisplayTags = normalizedDisplayInput?.filter(tag => !tagPool.has(tag)) || [];
   const displayTags = normalizedDisplayInput === undefined
-    ? customTags.slice(0, MAX_DISPLAY_TAGS)
+    ? Array.from(tagPool).slice(0, MAX_DISPLAY_TAGS)
     : normalizedDisplayInput.filter(tag => tagPool.has(tag));
 
   if (explicitProjectTypeValue !== undefined && explicitProjectTypeValue !== null && !explicitProjectType) {
@@ -278,19 +278,19 @@ export function normalizeProjectTaxonomyInput(
     return { value: null, error: '扩展项目必须选择「规则」或「内容」' };
   }
   if (projectType !== '角色' && rawFacets && typeof rawFacets === 'object' && Object.keys(rawFacets as object).length > 0) {
-    return { value: null, error: '只有角色项目可以使用角色官方标签' };
+    return { value: null, error: '只有角色类项目可以选择角色特点' };
   }
   if (unknownFacets.length > 0) {
     return { value: null, error: `包含未定义的官方标签：${unknownFacets.join('；')}` };
   }
-  if (customTags.length > MAX_CUSTOM_TAGS) {
-    return { value: null, error: `自定义标签最多 ${MAX_CUSTOM_TAGS} 个` };
+  if (officialTagValues.size + customTags.length > MAX_CUSTOM_TAGS) {
+    return { value: null, error: `标签最多 ${MAX_CUSTOM_TAGS} 个` };
   }
   if ((normalizedDisplayInput?.length || 0) > MAX_DISPLAY_TAGS) {
-    return { value: null, error: `首页展示标签最多 ${MAX_DISPLAY_TAGS} 个` };
+    return { value: null, error: `首页最多显示 ${MAX_DISPLAY_TAGS} 个` };
   }
   if (unknownDisplayTags.length > 0) {
-    return { value: null, error: `首页展示标签必须来自已选官方标签或自定义标签：${unknownDisplayTags.join('、')}` };
+    return { value: null, error: `首页显示的内容请从你已经选择的特点或关键词中挑选：${unknownDisplayTags.join('、')}` };
   }
 
   return {

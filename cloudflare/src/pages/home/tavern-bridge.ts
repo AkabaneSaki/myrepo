@@ -2,8 +2,17 @@ export const homeTavernBridgeScript = String.raw`
 const TAVERN_BRIDGE_NAMESPACE = 'creative-workshop-bridge';
 const TAVERN_OAUTH_RESULT_EVENT = 'creative-workshop:oauth-result';
 const PROJECT_DIFF_TIMEOUT_MS = 10000;
+const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
+const pendingRepairRequests = new Map();
 const installSubscriptionSyncChains = new Map();
+const SCRIPT_DEPENDENCY_REGISTRY = new Map([
+  ['uikawinwing/CharInfo-Manager', { name: 'CharInfo Manager', latestVersion: '0.3.2' }],
+]);
+
+state.tavern.scriptDependenciesSupported = false;
+state.tavern.scriptDependenciesLoaded = false;
+state.tavern.scriptDependencies = [];
 
 function createBridgeRequest(type, payload) {
   return {
@@ -34,6 +43,17 @@ function settleProjectDiffRequest(requestId, error, diff) {
   return true;
 }
 
+function settleRepairRequest(requestId, error, payload) {
+  if (!requestId) return false;
+  const pending = pendingRepairRequests.get(requestId);
+  if (!pending) return false;
+  clearTimeout(pending.timeoutId);
+  pendingRepairRequests.delete(requestId);
+  if (error) pending.reject(error);
+  else pending.resolve(payload || {});
+  return true;
+}
+
 function dispatchOAuthResult(payload) {
   window.dispatchEvent(new CustomEvent(TAVERN_OAUTH_RESULT_EVENT, {
     detail: payload || {},
@@ -48,6 +68,98 @@ function syncInstalledProjectsFromBridge(payload, options) {
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
   });
   renderApp();
+}
+
+function normalizeScriptDependencyVersion(version) {
+  const match = String(version || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) return null;
+  return match.slice(1, 4).map(Number);
+}
+
+function compareScriptDependencyVersions(left, right) {
+  const leftParts = normalizeScriptDependencyVersion(left);
+  const rightParts = normalizeScriptDependencyVersion(right);
+  if (!leftParts || !rightParts) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] < rightParts[index]) return -1;
+    if (leftParts[index] > rightParts[index]) return 1;
+  }
+  return 0;
+}
+
+function syncScriptDependenciesFromBridge(payload) {
+  state.tavern.scriptDependenciesSupported = Boolean(payload?.supported);
+  state.tavern.scriptDependenciesLoaded = true;
+  state.tavern.scriptDependencies = Array.isArray(payload?.scripts) ? payload.scripts : [];
+  renderApp();
+}
+
+function getScriptDependencyHealthItems() {
+  const items = [];
+  const scripts = Array.isArray(state.tavern.scriptDependencies) ? state.tavern.scriptDependencies : [];
+  scripts.forEach(script => {
+    const dependencies = Array.isArray(script?.dependencies) ? script.dependencies : [];
+    dependencies.forEach(dependency => {
+      const registryEntry = SCRIPT_DEPENDENCY_REGISTRY.get(String(dependency?.repository || ''));
+      if (!registryEntry) return;
+
+      let status = 'unknown';
+      if (dependency?.refKind === 'semver' && dependency?.installedVersion) {
+        const comparison = compareScriptDependencyVersions(dependency.installedVersion, registryEntry.latestVersion);
+        if (comparison === -1) status = 'outdated';
+        else if (comparison === 0) status = 'current';
+        else if (comparison === 1) status = 'ahead';
+      } else if (dependency?.refKind === 'floating') {
+        status = 'floating';
+      } else if (dependency?.refKind === 'commit' || dependency?.refKind === 'other-ref') {
+        status = 'pinned-unknown';
+      }
+
+      items.push({
+        ...dependency,
+        scriptName: script?.scriptName || dependency?.scriptName || registryEntry.name,
+        dependencyName: registryEntry.name,
+        latestVersion: registryEntry.latestVersion,
+        status,
+      });
+    });
+  });
+  return items;
+}
+
+function getScriptDependencyHealthSummary() {
+  const items = getScriptDependencyHealthItems();
+  return {
+    items,
+    outdated: items.filter(item => item.status === 'outdated'),
+    uncertain: items.filter(item => item.status === 'floating' || item.status === 'pinned-unknown' || item.status === 'unknown'),
+  };
+}
+
+function getScriptDependencySuggestedImport(item) {
+  if (!item?.importUrl || !item?.latestVersion || item?.refKind !== 'semver') return null;
+  let url;
+  try {
+    url = new URL(String(item.importUrl));
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  const segments = url.pathname.split('/').filter(Boolean);
+  if (host.endsWith('jsdelivr.net') && segments[0] === 'gh' && segments.length >= 3) {
+    const repoAndRef = segments[2];
+    const atIndex = repoAndRef.lastIndexOf('@');
+    if (atIndex < 1) return null;
+    segments[2] = repoAndRef.slice(0, atIndex) + '@' + item.latestVersion;
+    url.pathname = '/' + segments.join('/');
+    return url.toString();
+  }
+  if (host === 'raw.githubusercontent.com' && segments.length >= 4) {
+    segments[2] = item.latestVersion;
+    url.pathname = '/' + segments.join('/');
+    return url.toString();
+  }
+  return null;
 }
 
 function syncInstallSubscription(projectId, subscribed) {
@@ -130,6 +242,9 @@ function handleBridgeMessage(event) {
     case 'bridge:context':
       syncContextFromBridge(data.payload || {});
       break;
+    case 'bridge:script-dependencies':
+      syncScriptDependenciesFromBridge(data.payload || {});
+      break;
     case 'bridge:installed-projects':
     case 'bridge:install-result':
     case 'bridge:uninstall-result':
@@ -151,6 +266,15 @@ function handleBridgeMessage(event) {
       settleProjectDiffRequest(data.requestId, null, syncDiffFromBridge(data.payload || {}));
       renderApp();
       break;
+    case 'bridge:repair:scan-result':
+      settleRepairRequest(data.requestId, null, data.payload || {});
+      break;
+    case 'bridge:repair:project-result':
+      if (Array.isArray(data.payload?.projects)) {
+        syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'merge' });
+      }
+      settleRepairRequest(data.requestId, null, data.payload || {});
+      break;
     case 'bridge:oauth:result':
       dispatchOAuthResult(data.payload || {});
       break;
@@ -160,12 +284,17 @@ function handleBridgeMessage(event) {
         new Error(data.payload?.message || '更新差异加载失败'),
         null,
       );
+      const handledRepairError = settleRepairRequest(
+        data.requestId,
+        new Error(data.payload?.message || 'DLC 修复请求失败'),
+        null,
+      );
       const isProjectDiffError = data.payload?.action === 'bridge:get-project-diff';
       if (projectId) {
         setProjectPendingAction(projectId, null);
         renderApp();
       }
-      if (!handledProjectDiffError && !isProjectDiffError) {
+      if (!handledProjectDiffError && !handledRepairError && !isProjectDiffError) {
         showToast(data.payload?.message || '酒馆桥接错误', 'error');
       }
       break;
@@ -183,10 +312,14 @@ function initializeTavernBridge() {
   postBridgeMessage('bridge:handshake');
   postBridgeMessage('bridge:get-context');
   postBridgeMessage('bridge:list-installed-projects');
+  postBridgeMessage('bridge:list-script-dependencies');
 }
 
 function getLegacyProjectNameForBridge(projectId) {
-  return getLocalProjectMeta(projectId)?.legacyProjectName || null;
+  const localMeta = getLocalProjectMeta(projectId);
+  const installedProjectId = String(localMeta?.installedProjectId || '').trim();
+  if (installedProjectId && installedProjectId !== projectId) return installedProjectId;
+  return localMeta?.legacyProjectName || null;
 }
 
 function requestInstallProject(projectId, selection = {}) {
@@ -226,15 +359,39 @@ function requestProjectDiff(projectId, projectVersion = null) {
   });
 }
 
-function confirmProjectUpdate(projectId, projectVersion = null) {
+function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false) {
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   setProjectPendingAction(projectId, 'update');
   renderApp();
   postBridgeMessage('bridge:confirm-project-update', {
     projectId,
     ...(projectVersion ? { projectVersion } : {}),
+    manageOriginalConflicts: manageOriginalConflicts === true,
     ...(legacyProjectName ? { legacyProjectName } : {}),
   });
+}
+
+function requestRepairBridge(type, payload = {}) {
+  const requestId = postBridgeMessage(type, payload);
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      if (!pendingRepairRequests.has(requestId)) return;
+      pendingRepairRequests.delete(requestId);
+      reject(new Error('DLC 诊断 / 修复请求超时，请重试'));
+    }, REPAIR_REQUEST_TIMEOUT_MS);
+    pendingRepairRequests.set(requestId, { resolve, reject, timeoutId, type });
+  });
+}
+
+function requestDlcRepairScan(worldbookNames = null) {
+  const payload = Array.isArray(worldbookNames) && worldbookNames.length
+    ? { worldbookNames }
+    : {};
+  return requestRepairBridge('bridge:repair:scan', payload);
+}
+
+function requestDlcRepairProject(target) {
+  return requestRepairBridge('bridge:repair:project', target || {});
 }
 
 function requestOAuthLogin(authUrl, state) {

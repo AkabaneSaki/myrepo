@@ -88,6 +88,9 @@ const worldbook = JSON.stringify({
 const regex = JSON.stringify([
   { id: 'regex-only', scriptName: 'Regex only', findRegex: 'foo', replaceString: 'bar' },
 ]);
+const updatedRegex = JSON.stringify([
+  { id: 'regex-only', scriptName: 'Regex only edited', findRegex: 'foo', replaceString: 'baz' },
+]);
 
 const oversizedUpload = 'x'.repeat(10 * 1024 * 1024 + 1);
 
@@ -169,19 +172,21 @@ try {
   await approve(metadataDraft.projectId);
   cleanupIds.delete(metadataDraft.projectId);
 
-  const invalidStructuredExtension = await api('/api/projects', {
+  const structuredExtensionWithoutSubtype = await api('/api/projects', {
     method: 'POST',
     token: creatorToken,
     body: {
-      name: 'Validation Structured Extension Missing Type',
+      name: 'Validation Structured Extension Without Subtype',
       description: 'taxonomy validation test',
       projectType: '扩展',
       customTags: [],
       tags: ['扩展'],
     },
-    expected: 400,
   });
-  assert.match(String(invalidStructuredExtension?.error || ''), /规则|内容/);
+  cleanupIds.add(structuredExtensionWithoutSubtype.projectId);
+  const structuredExtensionWithoutSubtypeDetail = await api(`/api/projects/${structuredExtensionWithoutSubtype.projectId}`, { token: creatorToken });
+  assert.equal(structuredExtensionWithoutSubtypeDetail.project.projectType, '扩展');
+  assert.equal(structuredExtensionWithoutSubtypeDetail.project.extensionType, null);
 
   const structuredCharacter = await api('/api/projects', {
     method: 'POST',
@@ -225,6 +230,12 @@ try {
   assert.deepEqual(structuredCharacterPublished.project.facets.势力, ['王国']);
   assert.deepEqual(structuredCharacterPublished.project.customTags, ['纯爱', '慢热']);
   assert.deepEqual(structuredCharacterPublished.project.displayTags, ['人鱼', '纯爱', '慢热']);
+  const facetFilteredProjects = await api('/api/projects?page=0&pageSize=50&tag=' + encodeURIComponent('人鱼'));
+  assert.ok(facetFilteredProjects.projects.some(project => project.id === structuredCharacter.projectId));
+  const multiFacetFilteredProjects = await api('/api/projects?page=0&pageSize=50&tags=' + encodeURIComponent('人鱼,圣女'));
+  assert.ok(multiFacetFilteredProjects.projects.some(project => project.id === structuredCharacter.projectId));
+  const mismatchedMultiFacetProjects = await api('/api/projects?page=0&pageSize=50&tags=' + encodeURIComponent('人鱼,规则'));
+  assert.ok(!mismatchedMultiFacetProjects.projects.some(project => project.id === structuredCharacter.projectId));
 
   const taxonomyDraft = await api(`/api/projects/${structuredCharacter.projectId}`, {
     method: 'PUT',
@@ -247,6 +258,8 @@ try {
   assert.deepEqual(taxonomyDraftDetail.project.tags, ['扩展', '战斗']);
   await approve(taxonomyDraft.projectId);
   cleanupIds.delete(taxonomyDraft.projectId);
+  const extensionTypeFilteredProjects = await api('/api/projects?page=0&pageSize=50&tag=' + encodeURIComponent('规则'));
+  assert.ok(extensionTypeFilteredProjects.projects.some(project => project.id === structuredCharacter.projectId));
 
   const taxonomyPublished = await api(`/api/projects/${structuredCharacter.projectId}`);
   assert.equal(taxonomyPublished.project.projectType, '扩展');
@@ -277,6 +290,47 @@ try {
   const publishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
   assert.equal(publishedRegex.project.status, 'approved');
   assert.equal(publishedRegex.regexEntriesPreview.length, 1);
+
+  const regexEditDraft = await api(`/api/projects/${extensionRegexOnly.projectId}`, {
+    method: 'PUT',
+    token: creatorToken,
+    body: { description: 'regex-only edit lifecycle test' },
+  });
+  assert.ok(regexEditDraft.draftProjectId);
+  cleanupIds.add(regexEditDraft.draftProjectId);
+
+  const regexEditUpload = await api(`/api/projects/${regexEditDraft.draftProjectId}/upload-regex`, {
+    method: 'POST',
+    token: creatorToken,
+    body: updatedRegex,
+  });
+  assert.equal(regexEditUpload.projectId, regexEditDraft.draftProjectId);
+
+  const regexEditDraftDetail = await api(`/api/projects/${regexEditDraft.draftProjectId}`, { token: creatorToken });
+  assert.equal(regexEditDraftDetail.project.reviewTarget, 'draft');
+  assert.equal(regexEditDraftDetail.project.publishedProjectId, extensionRegexOnly.projectId);
+  assert.equal(regexEditDraftDetail.regexEntriesPreview.length, 1);
+  assert.equal(regexEditDraftDetail.regexEntriesPreview[0].id, 'regex-only');
+  assert.equal(regexEditDraftDetail.regexEntriesPreview[0].replaceString, 'baz');
+
+  await approve(regexEditDraft.draftProjectId);
+  cleanupIds.delete(regexEditDraft.draftProjectId);
+
+  const republishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  assert.equal(republishedRegex.project.status, 'approved');
+  assert.equal(republishedRegex.project.description, 'regex-only edit lifecycle test');
+  assert.equal(republishedRegex.regexEntriesPreview.length, 1);
+  assert.equal(republishedRegex.regexEntriesPreview[0].id, 'regex-only');
+  assert.equal(republishedRegex.regexEntriesPreview[0].scriptName, 'Regex only edited');
+  assert.equal(republishedRegex.regexEntriesPreview[0].replaceString, 'baz');
+
+  const regexDelete = await api(`/api/projects/${extensionRegexOnly.projectId}`, {
+    method: 'DELETE',
+    token: creatorToken,
+  });
+  assert.equal(regexDelete.success, true);
+  cleanupIds.delete(extensionRegexOnly.projectId);
+  await api(`/api/projects/${extensionRegexOnly.projectId}`, { token: creatorToken, expected: 404 });
 
   const typeMismatch = await createProject('Validation Type Mismatch');
   cleanupIds.add(typeMismatch.projectId);

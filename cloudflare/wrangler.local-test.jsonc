@@ -1,0 +1,38 @@
+{
+  // LOCAL TEST ONLY. Never deploy this config.
+  // Real staging deploys must use the one-click deploy helper with the master-staging profile.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "poemofdestinycreativeworkshop-local-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-12",
+  "dev": {
+    "port": 8790
+  },
+  "triggers": {
+    "crons": ["5 0 * * *"]
+  },
+  "vars": {
+    "ALLOWED_GUILD_IDS": "",
+    "ADMIN_ROLE_IDS": "",
+    "SUPER_ADMIN_USER_ID": ""
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "creative_workshop_local_test",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "poemofdestinycreativeworkshop-local-test-r2"
+    }
+  ]
+}

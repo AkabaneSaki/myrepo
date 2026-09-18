@@ -1,5 +1,6 @@
 export const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'] as const;
 export const CREATIVE_WORKSHOP_EXTENSION_TYPES = ['规则', '内容'] as const;
+export const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 3;
 
 export type CreativeWorkshopProjectType = (typeof CREATIVE_WORKSHOP_PROJECT_TYPES)[number];
 export type CreativeWorkshopExtensionType = (typeof CREATIVE_WORKSHOP_EXTENSION_TYPES)[number];
@@ -60,16 +61,65 @@ export function getCreativeWorkshopProjectTypeLabel(project: Record<string, any>
   return extensionType ? `${extensionType}扩展` : '扩展';
 }
 
+export function getCreativeWorkshopDlcCategory(project: Record<string, any> | null | undefined): string {
+  const projectType = resolveCreativeWorkshopProjectType(project);
+  return projectType === '系统核心' ? '命定系统' : projectType;
+}
+
+function readLeadingBracketSegment(value: string, offset: number): { value: string; end: number } | null {
+  const match = value.slice(offset).match(/^\[([^\[\]]+)\]/);
+  if (!match) return null;
+  return { value: match[1], end: offset + match[0].length };
+}
+
+function getExistingDlcCategory(entryName: string): string | null {
+  const dlc = readLeadingBracketSegment(entryName, 0);
+  if (!dlc || dlc.value !== 'DLC') return null;
+  return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
+}
+
+function stripExistingDlcHeader(entryName: string): string {
+  const dlc = readLeadingBracketSegment(entryName, 0);
+  if (!dlc || dlc.value !== 'DLC') return entryName;
+
+  const category = readLeadingBracketSegment(entryName, dlc.end);
+  if (!category) return entryName.slice(dlc.end);
+
+  const third = readLeadingBracketSegment(entryName, category.end);
+  if (!third) return entryName.slice(category.end);
+
+  // v3: [DLC][category][WS]author content
+  if (third.value === 'WS') return entryName.slice(third.end);
+
+  const fourth = readLeadingBracketSegment(entryName, third.end);
+  // v2: [DLC][category][project][WS]author content
+  if (fourth?.value === 'WS') {
+    const authorContent = entryName.slice(fourth.end);
+    // Some already-damaged v2 names contain no author suffix. Preserve the old
+    // third segment as a human-readable fallback rather than returning blank.
+    return authorContent || `[${third.value}]`;
+  }
+
+  // Source/legacy entries commonly use the third segment as the actual entry
+  // title, e.g. [DLC][扩展][种族-地精]. Preserve it instead of eating it.
+  return entryName.slice(category.end);
+}
+
+function stripLegacyCorePrefix(entryName: string): string {
+  if (entryName.startsWith('命定系统-')) return entryName.slice('命定系统-'.length);
+  if (entryName.startsWith('[命定系统]')) return entryName.slice('[命定系统]'.length);
+  return entryName;
+}
+
 export function formatCreativeWorkshopEntryName(
   entryName: string,
   project: Record<string, any> | null | undefined,
-  projectName: string,
+  _projectName: string,
 ): string {
   const projectType = resolveCreativeWorkshopProjectType(project);
-  if (projectType === '系统核心') {
-    return entryName.startsWith('命定系统-') ? entryName : `命定系统-${entryName}`;
-  }
+  let authorContent = stripExistingDlcHeader(entryName);
+  if (projectType === '系统核心') authorContent = stripLegacyCorePrefix(authorContent);
 
-  const typeLabel = getCreativeWorkshopProjectTypeLabel(project);
-  return entryName.startsWith('[DLC]') ? entryName : `[DLC][${typeLabel}][${projectName}]${entryName}`;
+  const category = getExistingDlcCategory(entryName) || getCreativeWorkshopDlcCategory(project);
+  return `[DLC][${category}][WS]${authorContent}`;
 }

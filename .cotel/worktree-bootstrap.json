@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "cwd": ".",
+      "packageManager": "pnpm"
+    },
+    {
+      "cwd": "cloudflare",
+      "packageManager": "npm"
+    }
+  ]
+}

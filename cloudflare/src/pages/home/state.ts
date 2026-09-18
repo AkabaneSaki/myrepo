@@ -2,7 +2,56 @@ export const homeStateScript = String.raw`
 const API_BASE = '';
 const TOKEN_KEY = 'creative_workshop_token';
 const USER_KEY = 'creative_workshop_user';
-const DEFAULT_SORT_MODE = 'published';
+const DEFAULT_SORT_MODE = 'discover';
+const CONTENT_FONT_KEY = 'creative_workshop_content_font_v1';
+const DEFAULT_CONTENT_FONT = 'noto-sans';
+const CONTENT_FONT_OPTIONS = [
+  { value: 'wenkai', label: '霞鹜文楷', family: '\"LXGW WenKai Lite\", \"Microsoft YaHei\", sans-serif', stylesheets: [] },
+  { value: 'system', label: '系统字体', family: '-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif', stylesheets: [] },
+  { value: 'noto-sans', label: 'Noto 黑体', family: '\"Noto Sans SC\", \"Microsoft YaHei\", sans-serif', stylesheets: ['https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.3.0/400.css', 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.3.0/500.css', 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.3.0/700.css'] },
+  { value: 'noto-serif', label: 'Noto 宋体', family: '\"Noto Serif SC\", \"Songti SC\", SimSun, serif', stylesheets: ['https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.3.0/400.css', 'https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.3.0/700.css'] },
+  { value: 'zcool-xiaowei', label: '站酷小薇', family: '\"ZCOOL XiaoWei\", \"Songti SC\", SimSun, serif', stylesheets: ['https://cdn.jsdelivr.net/npm/@fontsource/zcool-xiaowei@5.3.0/400.css'] },
+  { value: 'ma-shan-zheng', label: '马善政毛笔', family: '\"Ma Shan Zheng\", \"KaiTi\", cursive', stylesheets: ['https://cdn.jsdelivr.net/npm/@fontsource/ma-shan-zheng@5.3.0/400.css'] },
+];
+
+function readSavedContentFont() {
+  try {
+    const saved = DEFAULT_CONTENT_FONT;
+    return CONTENT_FONT_OPTIONS.some(option => option.value === saved) ? saved : DEFAULT_CONTENT_FONT;
+  } catch {
+    return DEFAULT_CONTENT_FONT;
+  }
+}
+
+function getContentFontOption(value) {
+  return CONTENT_FONT_OPTIONS.find(option => option.value === value)
+    || CONTENT_FONT_OPTIONS.find(option => option.value === DEFAULT_CONTENT_FONT)
+    || CONTENT_FONT_OPTIONS[0];
+}
+
+function ensureContentFontAssets(option) {
+  (option?.stylesheets || []).forEach(href => {
+    if (document.querySelector('link[data-workshop-font-href="' + href + '"]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.dataset.workshopFontHref = href;
+    document.head.appendChild(link);
+  });
+}
+
+function applyContentFont(value, persist = false) {
+  const option = getContentFontOption(value || state.contentFont);
+  state.contentFont = option.value;
+  ensureContentFontAssets(option);
+  document.documentElement.style.setProperty('--workshop-content-font', option.family);
+  if (persist) {
+    try {
+      localStorage.setItem(CONTENT_FONT_KEY, option.value);
+    } catch {}
+  }
+  return option;
+}
 
 function createDefaultTavernState() {
   return {
@@ -14,6 +63,8 @@ function createDefaultTavernState() {
     installedProjectsLoaded: false,
     localProjectMap: new Map(),
     installedRemoteProjectMap: new Map(),
+    installedProjectRebindCandidates: new Map(),
+    installedProjectRebindMap: new Map(),
     updateDiffMap: new Map(),
     pendingProjectActions: new Map(),
     worldbooks: { primary: null, additional: [], available: [] },
@@ -33,13 +84,35 @@ const state = {
   currentUser: null,
   projects: [],
   myProjects: [],
+  discoverShelves: {
+    discover: [],
+    published: [],
+    rating: [],
+    downloads: [],
+    loading: false,
+  },
+  discoverBanner: {
+    imageUrl: '/discover-preview-banner.png',
+    positionX: 50,
+    positionY: 50,
+    zoom: 1,
+    mobilePositionX: 50,
+    mobilePositionY: 50,
+    mobileZoom: 1,
+  },
+  viewMode: 'discover',
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
   sortMode: DEFAULT_SORT_MODE,
   activeBaseTag: 'all',
+  activeTags: [],
+  searchDraft: '',
+  mobileToolMode: '',
   searchKeyword: '',
   userMenuOpen: false,
   sortMenuOpen: false,
+  fontMenuOpen: false,
+  contentFont: readSavedContentFont(),
   sortRequestPending: false,
   filterRequestPending: false,
   projectRequestToken: 0,
@@ -55,6 +128,15 @@ const state = {
   },
 };
 
+function isDiscoverHomeView() {
+  return state.viewMode === 'discover'
+    && !state.showOnlyMyProjects
+    && !state.showSubscribedAndInstalledProjects
+    && state.activeBaseTag === 'all'
+    && !String(state.searchKeyword || '').trim()
+    && getActivePublicTags().length === 0;
+}
+
 function setCurrentUser(user) {
   const previousUserId = state.currentUser?.id || null;
   const nextUser = user || null;
@@ -67,11 +149,42 @@ function setCurrentUser(user) {
   }
 }
 
+function setDiscoverBanner(banner) {
+  state.discoverBanner = {
+    ...state.discoverBanner,
+    ...(banner && typeof banner === 'object' ? banner : {}),
+  };
+}
+
 function setProjects(projects) {
   state.projects = Array.isArray(projects) ? projects : [];
   if (state.tavern.installedProjectsLoaded) {
     rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
   }
+}
+
+function setDiscoverShelves(payload = {}) {
+  state.discoverShelves = {
+    discover: Array.isArray(payload.discover) ? payload.discover : [],
+    published: Array.isArray(payload.published) ? payload.published : [],
+    rating: Array.isArray(payload.rating) ? payload.rating : [],
+    downloads: Array.isArray(payload.downloads) ? payload.downloads : [],
+    loading: Boolean(payload.loading),
+  };
+  const combined = [
+    ...state.discoverShelves.discover,
+    ...state.discoverShelves.published,
+    ...state.discoverShelves.rating,
+    ...state.discoverShelves.downloads,
+  ];
+  const uniqueProjects = [];
+  const seen = new Set();
+  combined.forEach(project => {
+    if (!project?.id || seen.has(project.id)) return;
+    seen.add(project.id);
+    uniqueProjects.push(project);
+  });
+  setProjects(uniqueProjects);
 }
 
 function setProjectsPage(payload) {
@@ -89,6 +202,7 @@ function setProjectsPage(payload) {
 
 function setMyProjects(projects) {
   state.myProjects = Array.isArray(projects) ? projects : [];
+  syncProjectStats(state.myProjects, { replace: false });
 }
 
 function resetProjectPagination() {
@@ -100,6 +214,15 @@ function getActivePublicBaseTag() {
     return 'all';
   }
   return state.activeBaseTag || 'all';
+}
+
+function getActivePublicTags() {
+  if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
+    return [];
+  }
+  return Array.from(new Set((Array.isArray(state.activeTags) ? state.activeTags : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean))).slice(0, 12);
 }
 
 function createProjectRequestToken() {
@@ -128,8 +251,8 @@ function getProjectPendingAction(projectId) {
   return state.tavern.pendingProjectActions.get(projectId) || null;
 }
 
-function syncProjectStats(projects) {
-  state.likesMap = new Map();
+function syncProjectStats(projects, options = {}) {
+  if (options.replace !== false) state.likesMap = new Map();
   
   (projects || []).forEach(project => {
     state.likesMap.set(project.id, {
@@ -182,10 +305,15 @@ function normalizeInstalledProject(project) {
   if (!project || typeof project !== 'object') return null;
   const projectId = project.projectId || project.id;
   if (!projectId) return null;
+  const installedProjectId = project.installedProjectId || project.projectId || project.id || projectId;
   return {
     ...project,
     installed: true,
     projectId,
+    installedProjectId,
+    projectNameHint: typeof project.projectNameHint === 'string' && project.projectNameHint.trim()
+      ? project.projectNameHint.trim()
+      : null,
     remoteVersion: project.remoteVersion || null,
     localVersion: project.localVersion || null,
     entryCount: Number(project.entryCount || 0),
@@ -200,34 +328,64 @@ function normalizeInstalledProject(project) {
   };
 }
 
-function canResolveLegacyProjectIdentities() {
-  return !state.projectPagination.hasMore &&
-    !state.projectPagination.loadingMore &&
-    !state.searchKeyword &&
-    getActivePublicBaseTag() === 'all' &&
-    !state.showOnlyMyProjects &&
-    !state.showSubscribedAndInstalledProjects;
-}
-
 function resolveInstalledProjectIdentity(project) {
-  if (!project?.legacyProjectName) return project;
-  if (state.projects.some(remoteProject => remoteProject.id === project.projectId)) return project;
-  if (!canResolveLegacyProjectIdentities()) return project;
-  const matches = state.projects.filter(remoteProject => String(remoteProject.name || '') === project.legacyProjectName);
-  if (matches.length !== 1) return project;
+  if (!project) return project;
+  const installedProjectId = String(project.installedProjectId || project.projectId || '').trim();
+  if (!installedProjectId) return project;
+  const reboundProjectId = state.tavern.installedProjectRebindMap.get(installedProjectId);
+  if (!reboundProjectId || reboundProjectId === project.projectId) return project;
+  const remoteProject = state.tavern.installedRemoteProjectMap.get(reboundProjectId)
+    || state.projects.find(item => item?.id === reboundProjectId);
   return {
     ...project,
-    projectId: matches[0].id,
-    name: matches[0].name || project.name,
+    projectId: reboundProjectId,
+    name: remoteProject?.name || project.name,
   };
 }
 
 function getLegacyInstalledProjectMatches(project) {
-  const projectName = String(project?.name || '');
+  const projectName = String(project?.name || '').trim();
   if (!projectName) return [];
-  return state.tavern.installedProjects.filter(localProject =>
-    localProject?.legacyProjectName === projectName && localProject.projectId !== project?.id,
+  return state.tavern.installedProjects.filter(localProject => {
+    const hint = String(localProject?.projectNameHint || localProject?.legacyProjectName || '').trim();
+    return hint === projectName && localProject.projectId !== project?.id;
+  });
+}
+
+function setInstalledProjectRebindCandidates(installedProjectId, projects) {
+  const key = String(installedProjectId || '').trim();
+  if (!key) return;
+  const list = Array.isArray(projects) ? projects.filter(project => project?.id) : [];
+  if (list.length) state.tavern.installedProjectRebindCandidates.set(key, list);
+  else state.tavern.installedProjectRebindCandidates.delete(key);
+}
+
+function getInstalledProjectRebindCandidate(projectId) {
+  const localProject = getLocalProjectMeta(projectId)
+    || state.tavern.installedProjects.find(project => project?.installedProjectId === projectId || project?.projectId === projectId);
+  const installedProjectId = String(localProject?.installedProjectId || projectId || '').trim();
+  if (!installedProjectId) return null;
+  const projects = state.tavern.installedProjectRebindCandidates.get(installedProjectId) || [];
+  return projects.length ? { installedProjectId, projects } : null;
+}
+
+function confirmInstalledProjectRebind(installedProjectId, remoteProject) {
+  const sourceId = String(installedProjectId || '').trim();
+  const targetId = String(remoteProject?.id || '').trim();
+  if (!sourceId || !targetId || sourceId === targetId) return false;
+  const localProject = state.tavern.installedProjects.find(project =>
+    String(project?.installedProjectId || project?.projectId || '') === sourceId,
   );
+  if (!localProject) return false;
+  const candidates = state.tavern.installedProjectRebindCandidates.get(sourceId) || [];
+  if (!candidates.some(project => project?.id === targetId)) return false;
+  state.tavern.installedProjectRebindMap.set(sourceId, targetId);
+  state.tavern.installedRemoteProjectMap.set(targetId, remoteProject);
+  state.tavern.installedProjectRebindCandidates.delete(sourceId);
+  rebuildInstalledProjectState(new Map(
+    state.tavern.installedProjects.map(project => [project.installedProjectId || project.projectId || project.id, project]),
+  ));
+  return true;
 }
 
 function rebuildInstalledProjectState(installedProjectMap) {
@@ -254,8 +412,15 @@ function rebuildInstalledProjectState(installedProjectMap) {
   state.tavern.installedProjects = list;
   state.tavern.localProjectMap = new Map(list.map(project => [project.projectId, project]));
   const installedIds = new Set(list.map(project => project.projectId).filter(Boolean));
+  const installedSourceIds = new Set(list.map(project => project.installedProjectId || project.projectId).filter(Boolean));
   state.tavern.installedRemoteProjectMap = new Map(
     Array.from(state.tavern.installedRemoteProjectMap || new Map()).filter(([projectId]) => installedIds.has(projectId)),
+  );
+  state.tavern.installedProjectRebindCandidates = new Map(
+    Array.from(state.tavern.installedProjectRebindCandidates || new Map()).filter(([projectId]) => installedSourceIds.has(projectId)),
+  );
+  state.tavern.installedProjectRebindMap = new Map(
+    Array.from(state.tavern.installedProjectRebindMap || new Map()).filter(([projectId]) => installedSourceIds.has(projectId)),
   );
 }
 
@@ -374,11 +539,15 @@ function getFilteredProjects() {
 
   const baseTag = getActivePublicBaseTag();
   const baseTagFilteredSource = scopedSource.filter(project => matchProjectBaseTag(project, baseTag));
+  const activeTags = getActivePublicTags();
+  const tagFilteredSource = activeTags.length
+    ? baseTagFilteredSource.filter(project => activeTags.every(tag => getProjectDetailTags(project).includes(tag) || getProjectExtensionType(project) === tag))
+    : baseTagFilteredSource;
 
   const keyword = String(state.searchKeyword || '').trim().toLowerCase();
   const filteredSource = !keyword
-    ? baseTagFilteredSource
-    : baseTagFilteredSource.filter(project => {
+    ? tagFilteredSource
+    : tagFilteredSource.filter(project => {
         const haystacks = [
           project.name,
           project.description,
