@@ -50,6 +50,73 @@ async function readDirectReviewContentText(
   return object ? object.text() : null;
 }
 
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>) {
+  if (!items.length) return [] as R[];
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= items.length) return;
+        results[index] = await worker(items[index], index);
+      }
+    }),
+  );
+  return results;
+}
+
+async function buildPendingReviewQueueSummary(
+  c: AppContext,
+  project: Awaited<ReturnType<typeof projectDb.getPendingList>>['projects'][number],
+) {
+  const isUpdate = project.reviewTarget === 'draft' && Boolean(project.publishedProjectId);
+  const [currentWorldbookText, currentRegexText, previousWorldbookText, previousRegexText] = await Promise.all([
+    readReviewContentText(c, project.id, project.publishedProjectId, 'worldbook'),
+    readReviewContentText(c, project.id, project.publishedProjectId, 'regex'),
+    isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'worldbook') : Promise.resolve(null),
+    isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'regex') : Promise.resolve(null),
+  ]);
+
+  const worldbookEntries = currentWorldbookText ? parseWorldbookEntriesPreview(currentWorldbookText) : [];
+  const regexEntries = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
+  const reviewDiff = buildProjectReviewDiff({
+    previousWorldbookText,
+    currentWorldbookText,
+    previousRegexText,
+    currentRegexText,
+    isUpdate,
+  });
+  const entries = [...worldbookEntries, ...regexEntries];
+  const externalLinks = new Set<string>();
+  const imageLinks = new Set<string>();
+  let warningCount = 0;
+  for (const entry of entries) {
+    for (const link of Array.isArray(entry.externalLinks) ? entry.externalLinks : []) {
+      if (!link?.url) continue;
+      const url = String(link.url);
+      externalLinks.add(url);
+      try {
+        if (/\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(new URL(url).pathname)) imageLinks.add(url);
+      } catch {
+        // External-link parsing already validated these URLs; ignore malformed leftovers defensively.
+      }
+    }
+    warningCount += Array.isArray(entry.inspectionWarnings) ? entry.inspectionWarnings.length : 0;
+  }
+
+  return {
+    ...reviewDiff.summary,
+    externalLinkCount: externalLinks.size,
+    imageLinkCount: imageLinks.size,
+    warningCount,
+    hasEjs: entries.some(entry => Boolean(entry.hasEjs)),
+    hasCharacterArtwork: entries.some(entry => Boolean(entry.hasCharacterArtwork)),
+  };
+}
+
 async function validateReviewPayloads(
   c: AppContext,
   project: {
@@ -123,17 +190,26 @@ export class AdminPendingList extends OpenAPIRoute {
 
     const result = await projectDb.getPendingList(c, page, pageSize, payload, { sort, projectType });
 
-    // 统一作者显示字段，便于前端卡片/详情直接复用
-    const projects = result.projects.map(p => ({
-      ...p,
-      authorGlobalName: p.authorGlobalName || p.authorName,
-      authorAvatar:
-        p.authorAvatar &&
-        !String(p.authorAvatar).startsWith('http://') &&
-        !String(p.authorAvatar).startsWith('https://')
-          ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
-          : p.authorAvatar,
-    }));
+    // 队列卡片只需要轻量摘要；完整正文仍在进入单条审核时按需加载。
+    const projects = await mapWithConcurrency(result.projects, 4, async p => {
+      let reviewQueueSummary = null;
+      try {
+        reviewQueueSummary = await buildPendingReviewQueueSummary(c, p);
+      } catch (error) {
+        console.warn('[AdminReview] queue summary failed', { projectId: p.id, error });
+      }
+      return {
+        ...p,
+        authorGlobalName: p.authorGlobalName || p.authorName,
+        authorAvatar:
+          p.authorAvatar &&
+          !String(p.authorAvatar).startsWith('http://') &&
+          !String(p.authorAvatar).startsWith('https://')
+            ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
+            : p.authorAvatar,
+        reviewQueueSummary,
+      };
+    });
 
     return {
       success: true,
