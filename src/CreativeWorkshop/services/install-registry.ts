@@ -103,6 +103,7 @@ export async function resolveCreativeWorkshopInstallWorldbook(
         entry =>
           _.get(entry, 'extra.cw_project_id') === projectId ||
           _.get(entry, 'extra.fate_project_name') === projectId ||
+          Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
           Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName),
       )
     ) {

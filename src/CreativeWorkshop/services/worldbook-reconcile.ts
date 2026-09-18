@@ -28,6 +28,7 @@ function isSameCreativeWorkshopProject(
   return (
     itemProjectId === projectId ||
     legacyName === projectId ||
+    Boolean(legacyProjectName && itemProjectId === legacyProjectName) ||
     Boolean(legacyProjectName && legacyName === legacyProjectName) ||
     (!itemProjectId && legacyName === projectName)
   );
@@ -45,7 +46,11 @@ function findExistingEntryIndex(
     const extra = getEntryExtra(entry);
     const entryKey = extra.cw_entry_key;
     if (entryKey === desired.stableKey || entryKey === desired.legacyKey) return true;
-    if (entryKey) return false;
+    const isConfirmedLegacyAlias = Boolean(
+      options.legacyProjectName &&
+        (extra.cw_project_id === options.legacyProjectName || extra.fate_project_name === options.legacyProjectName),
+    );
+    if (entryKey && !isConfirmedLegacyAlias) return false;
     if (!isSameCreativeWorkshopProject(entry, projectId, options.projectName, options.legacyProjectName)) return false;
     return entry.name === desired.payload.name || (entry as any).comment === desired.sourceName;
   });

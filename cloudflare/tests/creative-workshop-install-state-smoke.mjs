@@ -102,6 +102,8 @@ const managedEntry = {
   const result = await harness.api.scanInstalledCreativeWorkshopProjects();
   assert.equal(result.complete, true);
   assert.equal(result.projects.length, 1);
+  assert.equal(result.projects[0].installedProjectId, '11111111-1111-4111-8111-111111111111');
+  assert.equal(result.projects[0].projectNameHint, '测试项目');
   assert.equal(result.projects[0].worldbookName, 'DLC');
   assert.deepEqual(harness.counts(), { refreshCount: 1, worldbookReadCount: 1 });
 }

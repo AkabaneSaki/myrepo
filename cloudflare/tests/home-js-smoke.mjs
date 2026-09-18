@@ -373,11 +373,19 @@ assert.match(fragments.homeCardsRenderScript, /editButtonHtml = isPendingProject
 assert.match(fragments.homeCardsRenderScript, /role=\"button\" tabindex=\"0\"/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /detail-btn/);
 assert.doesNotMatch(fragments.homeCardsRenderScript, /审核中的项目暂不可删除/);
+assert.match(fragments.homeCardsRenderScript, /rebind-project-btn/);
+assert.match(fragments.homeDetailModalRenderScript, /detail-rebind-project-btn/);
+assert.match(fragments.homeModalsScript, /openInstalledProjectRebindModal/);
+assert.match(fragments.homeApiScript, /exactNameMatches/);
+assert.match(fragments.homeTavernBridgeScript, /installedProjectId && installedProjectId !== projectId/);
+assert.match(fragments.homeStateScript, /confirmInstalledProjectRebind/);
+assert.doesNotMatch(fragments.homeStateScript, /canResolveLegacyProjectIdentities/);
 
 const cardViewModelUi = Function(
   'getLikeState',
   'getLocalProjectMeta',
   'getLegacyInstalledProjectMatches',
+  'getInstalledProjectRebindCandidate',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -386,6 +394,7 @@ const cardViewModelUi = Function(
   () => ({ liked: false, count: 0 }),
   () => null,
   () => [],
+  () => null,
   () => null,
   { tavern: { connected: false, installedProjectsLoaded: false } },
   value => String(value),
@@ -402,6 +411,7 @@ const cardRenderUi = Function(
   'getLikeState',
   'getLocalProjectMeta',
   'getLegacyInstalledProjectMatches',
+  'getInstalledProjectRebindCandidate',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -425,6 +435,7 @@ const cardRenderUi = Function(
   () => ({ liked: false, count: 0 }),
   () => null,
   () => [],
+  () => null,
   () => null,
   { tavern: { connected: false, installedProjectsLoaded: false }, currentUser: null },
   value => String(value),
@@ -459,12 +470,14 @@ const labeledCardHtml = cardRenderUi.renderProjectCard({ id: 'labeled', name: 'L
 assert.doesNotMatch(labeledCardHtml, /card-meta--version|夏季版/);
 
 const createLegacyIdentityUi = () => Function(
-  `${fragments.homeStateScript}; return { state, setProjectsPage, setInstalledProjects, getLocalProjectMeta, getLegacyInstalledProjectMatches };`,
+  `${fragments.homeStateScript}; return { state, setProjectsPage, setInstalledProjects, getLocalProjectMeta, getLegacyInstalledProjectMatches, setInstalledProjectRebindCandidates, getInstalledProjectRebindCandidate, confirmInstalledProjectRebind };`,
 )();
 const legacyIdentityUi = createLegacyIdentityUi();
 const canonicalProjectId = '11111111-1111-4111-8111-111111111111';
 legacyIdentityUi.setInstalledProjects([{
   projectId: '旧工坊项目',
+  installedProjectId: '旧工坊项目',
+  projectNameHint: '旧工坊项目',
   name: '旧工坊项目',
   legacyProjectName: '旧工坊项目',
   localVersion: null,
@@ -478,29 +491,35 @@ legacyIdentityUi.setProjectsPage({
   pageSize: 50,
   hasMore: false,
 });
-assert.equal(legacyIdentityUi.getLocalProjectMeta(canonicalProjectId)?.legacyProjectName, '旧工坊项目');
+assert.equal(legacyIdentityUi.getLocalProjectMeta('旧工坊项目')?.installedProjectId, '旧工坊项目');
+assert.equal(legacyIdentityUi.getLocalProjectMeta(canonicalProjectId), null, 'name match must not auto-rebind');
+legacyIdentityUi.setInstalledProjectRebindCandidates('旧工坊项目', [{ id: canonicalProjectId, name: '旧工坊项目' }]);
+assert.equal(legacyIdentityUi.getInstalledProjectRebindCandidate('旧工坊项目')?.projects.length, 1);
+assert.equal(legacyIdentityUi.getLocalProjectMeta(canonicalProjectId), null, 'candidate discovery alone must not change identity');
+assert.equal(
+  legacyIdentityUi.confirmInstalledProjectRebind('旧工坊项目', { id: canonicalProjectId, name: '旧工坊项目' }),
+  true,
+);
+assert.equal(legacyIdentityUi.getLocalProjectMeta(canonicalProjectId)?.installedProjectId, '旧工坊项目');
 assert.equal(legacyIdentityUi.getLocalProjectMeta('旧工坊项目'), null);
 
 const ambiguousLegacyUi = createLegacyIdentityUi();
 ambiguousLegacyUi.setInstalledProjects([{
   projectId: '同名旧项目',
+  installedProjectId: '同名旧项目',
+  projectNameHint: '同名旧项目',
   name: '同名旧项目',
   legacyProjectName: '同名旧项目',
   localVersion: null,
   entryCount: 1,
   regexCount: 0,
 }]);
-ambiguousLegacyUi.setProjectsPage({
-  projects: [
-    { id: '22222222-2222-4222-8222-222222222222', name: '同名旧项目' },
-    { id: '33333333-3333-4333-8333-333333333333', name: '同名旧项目' },
-  ],
-  append: false,
-  page: 0,
-  pageSize: 50,
-  hasMore: false,
-});
-assert.equal(ambiguousLegacyUi.getLocalProjectMeta('同名旧项目')?.legacyProjectName, '同名旧项目');
+ambiguousLegacyUi.setInstalledProjectRebindCandidates('同名旧项目', [
+  { id: '22222222-2222-4222-8222-222222222222', name: '同名旧项目' },
+  { id: '33333333-3333-4333-8333-333333333333', name: '同名旧项目' },
+]);
+assert.equal(ambiguousLegacyUi.getLocalProjectMeta('同名旧项目')?.installedProjectId, '同名旧项目');
+assert.equal(ambiguousLegacyUi.getInstalledProjectRebindCandidate('同名旧项目')?.projects.length, 2);
 assert.equal(
   ambiguousLegacyUi.getLegacyInstalledProjectMatches({ id: '22222222-2222-4222-8222-222222222222', name: '同名旧项目' }).length,
   1,
@@ -545,6 +564,7 @@ const migratedCardUi = Function(
   'getLikeState',
   'getLocalProjectMeta',
   'getLegacyInstalledProjectMatches',
+  'getInstalledProjectRebindCandidate',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -553,6 +573,7 @@ const migratedCardUi = Function(
   () => ({ liked: false, count: 0 }),
   () => ({ projectId: canonicalProjectId, legacyProjectName: '旧工坊项目', localVersion: null }),
   () => [],
+  () => null,
   () => null,
   { tavern: { connected: true, installedProjectsLoaded: true } },
   value => String(value),
@@ -566,6 +587,7 @@ const legacyConflictView = Function(
   'getLikeState',
   'getLocalProjectMeta',
   'getLegacyInstalledProjectMatches',
+  'getInstalledProjectRebindCandidate',
   'getProjectPendingAction',
   'state',
   'escapeHtml',
@@ -574,6 +596,7 @@ const legacyConflictView = Function(
   () => ({ liked: false, count: 0 }),
   () => null,
   () => [{}],
+  () => null,
   () => null,
   { tavern: { connected: true, installedProjectsLoaded: true } },
   value => String(value),

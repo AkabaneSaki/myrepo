@@ -1095,6 +1095,13 @@ export const homeScript = String.raw`
       });
     });
 
+    document.querySelectorAll('.rebind-project-btn').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        if (button.dataset.id) openInstalledProjectRebindModal(button.dataset.id);
+      });
+    });
+
     document.querySelectorAll('.install-btn').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();

@@ -7,6 +7,8 @@ import { getCreativeWorkshopRegexId } from './regex-name';
 
 export type CreativeWorkshopInstalledProject = {
   projectId: string;
+  installedProjectId: string;
+  projectNameHint: string | null;
   name: string;
   legacyProjectName: string | null;
   localVersion: string | null;
@@ -116,8 +118,13 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
           .map(entry => _.get(entry, 'extra.fate_project_name'))
           .find(value => _.isString(value) && Boolean(value)) ||
         (!UUID_PATTERN.test(projectId) ? projectId : null);
+      const projectNameHint = projectEntries
+        .map(entry => _.get(entry, 'extra.cw_project_name_display'))
+        .find(value => _.isString(value) && Boolean(String(value).trim()));
       return {
         projectId,
+        installedProjectId: projectId,
+        projectNameHint: _.isString(projectNameHint) ? projectNameHint.trim() : legacyProjectName,
         name: firstEntry
           ? _.get(firstEntry, 'extra.cw_project_name_display', legacyProjectName || _.get(firstEntry, 'name', '未命名项目'))
           : legacyProjectName || _.get(firstRegex, 'script_name', '未命名项目'),

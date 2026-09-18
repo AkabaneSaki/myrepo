@@ -290,7 +290,10 @@ function initializeTavernBridge() {
 }
 
 function getLegacyProjectNameForBridge(projectId) {
-  return getLocalProjectMeta(projectId)?.legacyProjectName || null;
+  const localMeta = getLocalProjectMeta(projectId);
+  const installedProjectId = String(localMeta?.installedProjectId || '').trim();
+  if (installedProjectId && installedProjectId !== projectId) return installedProjectId;
+  return localMeta?.legacyProjectName || null;
 }
 
 function requestInstallProject(projectId, selection = {}) {

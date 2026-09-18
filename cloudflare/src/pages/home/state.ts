@@ -63,6 +63,8 @@ function createDefaultTavernState() {
     installedProjectsLoaded: false,
     localProjectMap: new Map(),
     installedRemoteProjectMap: new Map(),
+    installedProjectRebindCandidates: new Map(),
+    installedProjectRebindMap: new Map(),
     updateDiffMap: new Map(),
     pendingProjectActions: new Map(),
     worldbooks: { primary: null, additional: [], available: [] },
@@ -303,10 +305,15 @@ function normalizeInstalledProject(project) {
   if (!project || typeof project !== 'object') return null;
   const projectId = project.projectId || project.id;
   if (!projectId) return null;
+  const installedProjectId = project.installedProjectId || project.projectId || project.id || projectId;
   return {
     ...project,
     installed: true,
     projectId,
+    installedProjectId,
+    projectNameHint: typeof project.projectNameHint === 'string' && project.projectNameHint.trim()
+      ? project.projectNameHint.trim()
+      : null,
     remoteVersion: project.remoteVersion || null,
     localVersion: project.localVersion || null,
     entryCount: Number(project.entryCount || 0),
@@ -321,34 +328,64 @@ function normalizeInstalledProject(project) {
   };
 }
 
-function canResolveLegacyProjectIdentities() {
-  return !state.projectPagination.hasMore &&
-    !state.projectPagination.loadingMore &&
-    !state.searchKeyword &&
-    getActivePublicBaseTag() === 'all' &&
-    !state.showOnlyMyProjects &&
-    !state.showSubscribedAndInstalledProjects;
-}
-
 function resolveInstalledProjectIdentity(project) {
-  if (!project?.legacyProjectName) return project;
-  if (state.projects.some(remoteProject => remoteProject.id === project.projectId)) return project;
-  if (!canResolveLegacyProjectIdentities()) return project;
-  const matches = state.projects.filter(remoteProject => String(remoteProject.name || '') === project.legacyProjectName);
-  if (matches.length !== 1) return project;
+  if (!project) return project;
+  const installedProjectId = String(project.installedProjectId || project.projectId || '').trim();
+  if (!installedProjectId) return project;
+  const reboundProjectId = state.tavern.installedProjectRebindMap.get(installedProjectId);
+  if (!reboundProjectId || reboundProjectId === project.projectId) return project;
+  const remoteProject = state.tavern.installedRemoteProjectMap.get(reboundProjectId)
+    || state.projects.find(item => item?.id === reboundProjectId);
   return {
     ...project,
-    projectId: matches[0].id,
-    name: matches[0].name || project.name,
+    projectId: reboundProjectId,
+    name: remoteProject?.name || project.name,
   };
 }
 
 function getLegacyInstalledProjectMatches(project) {
-  const projectName = String(project?.name || '');
+  const projectName = String(project?.name || '').trim();
   if (!projectName) return [];
-  return state.tavern.installedProjects.filter(localProject =>
-    localProject?.legacyProjectName === projectName && localProject.projectId !== project?.id,
+  return state.tavern.installedProjects.filter(localProject => {
+    const hint = String(localProject?.projectNameHint || localProject?.legacyProjectName || '').trim();
+    return hint === projectName && localProject.projectId !== project?.id;
+  });
+}
+
+function setInstalledProjectRebindCandidates(installedProjectId, projects) {
+  const key = String(installedProjectId || '').trim();
+  if (!key) return;
+  const list = Array.isArray(projects) ? projects.filter(project => project?.id) : [];
+  if (list.length) state.tavern.installedProjectRebindCandidates.set(key, list);
+  else state.tavern.installedProjectRebindCandidates.delete(key);
+}
+
+function getInstalledProjectRebindCandidate(projectId) {
+  const localProject = getLocalProjectMeta(projectId)
+    || state.tavern.installedProjects.find(project => project?.installedProjectId === projectId || project?.projectId === projectId);
+  const installedProjectId = String(localProject?.installedProjectId || projectId || '').trim();
+  if (!installedProjectId) return null;
+  const projects = state.tavern.installedProjectRebindCandidates.get(installedProjectId) || [];
+  return projects.length ? { installedProjectId, projects } : null;
+}
+
+function confirmInstalledProjectRebind(installedProjectId, remoteProject) {
+  const sourceId = String(installedProjectId || '').trim();
+  const targetId = String(remoteProject?.id || '').trim();
+  if (!sourceId || !targetId || sourceId === targetId) return false;
+  const localProject = state.tavern.installedProjects.find(project =>
+    String(project?.installedProjectId || project?.projectId || '') === sourceId,
   );
+  if (!localProject) return false;
+  const candidates = state.tavern.installedProjectRebindCandidates.get(sourceId) || [];
+  if (!candidates.some(project => project?.id === targetId)) return false;
+  state.tavern.installedProjectRebindMap.set(sourceId, targetId);
+  state.tavern.installedRemoteProjectMap.set(targetId, remoteProject);
+  state.tavern.installedProjectRebindCandidates.delete(sourceId);
+  rebuildInstalledProjectState(new Map(
+    state.tavern.installedProjects.map(project => [project.installedProjectId || project.projectId || project.id, project]),
+  ));
+  return true;
 }
 
 function rebuildInstalledProjectState(installedProjectMap) {
@@ -375,8 +412,15 @@ function rebuildInstalledProjectState(installedProjectMap) {
   state.tavern.installedProjects = list;
   state.tavern.localProjectMap = new Map(list.map(project => [project.projectId, project]));
   const installedIds = new Set(list.map(project => project.projectId).filter(Boolean));
+  const installedSourceIds = new Set(list.map(project => project.installedProjectId || project.projectId).filter(Boolean));
   state.tavern.installedRemoteProjectMap = new Map(
     Array.from(state.tavern.installedRemoteProjectMap || new Map()).filter(([projectId]) => installedIds.has(projectId)),
+  );
+  state.tavern.installedProjectRebindCandidates = new Map(
+    Array.from(state.tavern.installedProjectRebindCandidates || new Map()).filter(([projectId]) => installedSourceIds.has(projectId)),
+  );
+  state.tavern.installedProjectRebindMap = new Map(
+    Array.from(state.tavern.installedProjectRebindMap || new Map()).filter(([projectId]) => installedSourceIds.has(projectId)),
   );
 }
 

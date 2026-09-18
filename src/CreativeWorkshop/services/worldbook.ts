@@ -207,6 +207,7 @@ function isCreativeWorkshopProjectEntry(entry: WorldbookEntry, projectId: string
   return (
     _.get(entry, 'extra.cw_project_id') === projectId ||
     _.get(entry, 'extra.fate_project_name') === projectId ||
+    Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
     Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName)
   );
 }
@@ -305,7 +306,7 @@ export async function uninstallCreativeWorkshopProject(projectId: string, legacy
     ? await deleteProjectEntriesFromInstalledWorldbooks(projectId, worldbookName, legacyProjectName)
     : [] as WorldbookEntry[];
   if (worldbookName) await assertNoProjectEntriesInRelevantWorldbooks(projectId, legacyProjectName);
-  await restoreCreativeWorkshopOriginalConflicts(projectId);
+  await restoreCreativeWorkshopOriginalConflicts(legacyProjectName || projectId);
   return deletedEntries;
 }
 
@@ -335,6 +336,9 @@ export async function updateCreativeWorkshopProject(
   } else if (prepared.length > 0) {
     worldbookName = getCurrentWorldbookName();
     await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
+  }
+  if (legacyProjectName && legacyProjectName !== projectId) {
+    await restoreCreativeWorkshopOriginalConflicts(legacyProjectName);
   }
   const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
   if (legacyProjectName && legacyProjectName !== projectId) {

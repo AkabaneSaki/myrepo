@@ -271,6 +271,17 @@ function isWorkshopUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
 
+async function searchWorkshopProjectsByName(query) {
+  const normalizedQuery = normalizeRepairProjectName(query);
+  const searchTerm = buildRepairSearchTerm(query);
+  if (!normalizedQuery || !searchTerm) return { projects: [], exactNameMatches: [] };
+  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: searchTerm });
+  const data = await apiFetch('/api/projects?' + params.toString());
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const exactNameMatches = projects.filter(project => normalizeRepairProjectName(project?.name) === normalizedQuery);
+  return { projects, exactNameMatches };
+}
+
 async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
   const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
   const detectedIds = detectedProjectId && isWorkshopUuid(detectedProjectId) ? [detectedProjectId] : [];
@@ -295,14 +306,7 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
 
   const query = String(manualQuery || candidate?.name || candidate?.legacyProjectName || '').trim();
   if (!query) return { status: 'none', method: 'none', projects: [] };
-  const searchTerm = buildRepairSearchTerm(query);
-  if (!searchTerm) return { status: 'none', method: 'none', projects: [] };
-
-  const params = new URLSearchParams({ page: '0', pageSize: '20', sort: 'published', search: searchTerm });
-  const data = await apiFetch('/api/projects?' + params.toString());
-  const projects = Array.isArray(data.projects) ? data.projects : [];
-  const normalizedQuery = normalizeRepairProjectName(query);
-  const exactNameMatches = projects.filter(project => normalizeRepairProjectName(project?.name) === normalizedQuery);
+  const { projects, exactNameMatches } = await searchWorkshopProjectsByName(query);
 
   if (exactNameMatches.length === 1) {
     return { status: 'candidates', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
@@ -317,10 +321,9 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
 }
 
 async function fetchInstalledProjectDetails() {
+  const installedProjects = state.tavern.installedProjects.slice();
   const installedProjectIds = Array.from(new Set(
-    state.tavern.installedProjects
-      .map(project => project.projectId || project.id)
-      .filter(Boolean),
+    installedProjects.map(project => project.projectId || project.id).filter(Boolean),
   ));
   if (!installedProjectIds.length) {
     mergeInstalledRemoteProjects([]);
@@ -342,6 +345,31 @@ async function fetchInstalledProjectDetails() {
       remoteProjects.push(...data.projects);
     }
   }
+
+  const foundRemoteIds = new Set(remoteProjects.map(project => project?.id).filter(Boolean));
+  const missingIdSet = new Set(missingProjectIds);
+  const nameSearchCache = new Map();
+  for (const localProject of installedProjects) {
+    const currentProjectId = localProject.projectId || localProject.id;
+    if (!missingIdSet.has(currentProjectId) || foundRemoteIds.has(currentProjectId)) continue;
+    const installedProjectId = String(localProject.installedProjectId || currentProjectId || '').trim();
+    const projectNameHint = String(localProject.projectNameHint || localProject.legacyProjectName || localProject.name || '').trim();
+    if (!installedProjectId || !projectNameHint) {
+      setInstalledProjectRebindCandidates(installedProjectId, []);
+      continue;
+    }
+    try {
+      if (!nameSearchCache.has(projectNameHint)) {
+        nameSearchCache.set(projectNameHint, searchWorkshopProjectsByName(projectNameHint));
+      }
+      const result = await nameSearchCache.get(projectNameHint);
+      setInstalledProjectRebindCandidates(installedProjectId, result?.exactNameMatches || []);
+    } catch (error) {
+      console.warn('[CreativeWorkshop] stale installed project candidate lookup failed', { installedProjectId, error });
+      setInstalledProjectRebindCandidates(installedProjectId, []);
+    }
+  }
+
   mergeInstalledRemoteProjects(remoteProjects);
   return remoteProjects;
 }
@@ -389,6 +417,14 @@ async function fetchProjectEntries(projectOrId, options = {}) {
     const projectId = typeof projectOrId === 'string' ? projectOrId : projectOrId?.id;
     if (!projectId) {
       throw new Error('缺少项目 ID');
+    }
+
+    if (typeof projectOrId === 'object' && projectOrId?.source === 'local-only') {
+      return {
+        project: projectOrId,
+        entries: [],
+        regexEntries: [],
+      };
     }
 
     const forceRefresh = Boolean(options.forceRefresh);
