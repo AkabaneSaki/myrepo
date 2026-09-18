@@ -5,6 +5,7 @@ import { getCreativeWorkshopProjectDiff } from '../services/diff';
 import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
 import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
 import { repairCreativeWorkshopProject, scanCreativeWorkshopRepairCandidates } from '../services/repair';
+import { listCreativeWorkshopScriptDependencies } from '../services/script-dependency';
 import {
   installCreativeWorkshopRegex,
   uninstallCreativeWorkshopRegex,
@@ -328,6 +329,13 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           await post(
             'bridge:installed-projects',
             { projects: await getCompleteInitialInstalledProjects() },
+            event.data.requestId,
+          );
+          break;
+        case 'bridge:list-script-dependencies':
+          await post(
+            'bridge:script-dependencies',
+            listCreativeWorkshopScriptDependencies(),
             event.data.requestId,
           );
           break;

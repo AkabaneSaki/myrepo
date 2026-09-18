@@ -1870,6 +1870,163 @@ async function repairCreativeWorkshopProject(rawTarget) {
     }
 }
 
+;// ./src/CreativeWorkshop/services/script-dependency.ts
+const SCRIPT_SCOPES = ['character', 'preset', 'global'];
+const FLOATING_REFS = new Set(['main', 'master', 'latest', 'dev', 'develop', 'development', 'staging', 'next', 'canary']);
+const SEMVER_RE = /^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/;
+const COMMIT_RE = /^[0-9a-f]{7,40}$/i;
+function getScriptTreeGetter() {
+    const candidate = globalThis.getScriptTrees;
+    return typeof candidate === 'function' ? candidate : null;
+}
+function normalizeText(value) {
+    return typeof value === 'string' ? value : '';
+}
+function normalizeBoolean(value) {
+    return value !== false;
+}
+function normalizeScript(tree, scope) {
+    if (tree.type !== 'script')
+        return null;
+    const scriptId = normalizeText(tree.id).trim();
+    const scriptName = normalizeText(tree.name).trim();
+    const content = normalizeText(tree.content);
+    const scriptEnabled = normalizeBoolean(tree.enabled);
+    if (!scriptId && !scriptName)
+        return null;
+    const dependencies = extractScriptDependencies({ scope, scriptId, scriptName, scriptEnabled, content });
+    if (dependencies.length === 0)
+        return null;
+    return {
+        scope,
+        scriptId,
+        scriptName,
+        scriptEnabled,
+        dependencies,
+    };
+}
+function flattenScriptTrees(value, scope) {
+    if (!Array.isArray(value))
+        return [];
+    const scripts = [];
+    for (const item of value) {
+        if (!item || typeof item !== 'object')
+            continue;
+        const tree = item;
+        const script = normalizeScript(tree, scope);
+        if (script) {
+            scripts.push(script);
+            continue;
+        }
+        if (tree.type === 'folder' && Array.isArray(tree.scripts)) {
+            for (const child of tree.scripts) {
+                const nestedScript = child && typeof child === 'object'
+                    ? normalizeScript(child, scope)
+                    : null;
+                if (nestedScript)
+                    scripts.push(nestedScript);
+            }
+        }
+    }
+    return scripts;
+}
+function extractStaticImportUrls(content) {
+    const urls = new Set();
+    const patterns = [
+        /\bimport\s+(?:[^'";]*?\s+from\s+)?['"](https?:\/\/[^'"\s]+)['"]/g,
+        /\bimport\s*\(\s*['"](https?:\/\/[^'"\s]+)['"]\s*\)/g,
+    ];
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(content))) {
+            if (match[1])
+                urls.add(match[1]);
+        }
+    }
+    return [...urls];
+}
+function safelyDecodeRef(ref) {
+    try {
+        return decodeURIComponent(ref).trim();
+    }
+    catch {
+        return ref.trim();
+    }
+}
+function normalizeRef(ref) {
+    if (!ref) {
+        return { ref: null, installedVersion: null, refKind: 'unversioned' };
+    }
+    const decoded = safelyDecodeRef(ref);
+    const semverMatch = decoded.match(SEMVER_RE);
+    if (semverMatch) {
+        return { ref: decoded, installedVersion: semverMatch[1], refKind: 'semver' };
+    }
+    if (FLOATING_REFS.has(decoded.toLowerCase())) {
+        return { ref: decoded, installedVersion: null, refKind: 'floating' };
+    }
+    if (COMMIT_RE.test(decoded)) {
+        return { ref: decoded, installedVersion: null, refKind: 'commit' };
+    }
+    return { ref: decoded, installedVersion: null, refKind: 'other-ref' };
+}
+function inspectScriptImportUrl(importUrl) {
+    let url;
+    try {
+        url = new URL(importUrl);
+    }
+    catch {
+        return { repository: null, ref: null, installedVersion: null, refKind: 'unknown' };
+    }
+    const host = url.hostname.toLowerCase();
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (host.endsWith('jsdelivr.net') && segments[0] === 'gh' && segments.length >= 3) {
+        const owner = segments[1];
+        const repoAndRef = segments[2];
+        const atIndex = repoAndRef.lastIndexOf('@');
+        const repo = atIndex >= 0 ? repoAndRef.slice(0, atIndex) : repoAndRef;
+        const ref = atIndex >= 0 ? repoAndRef.slice(atIndex + 1) : null;
+        return {
+            repository: owner && repo ? `${owner}/${repo}` : null,
+            ...normalizeRef(ref),
+        };
+    }
+    if (host === 'raw.githubusercontent.com' && segments.length >= 4) {
+        const [owner, repo, ref] = segments;
+        return {
+            repository: owner && repo ? `${owner}/${repo}` : null,
+            ...normalizeRef(ref || null),
+        };
+    }
+    return { repository: null, ref: null, installedVersion: null, refKind: 'unknown' };
+}
+function extractScriptDependencies(input) {
+    return extractStaticImportUrls(input.content).map(importUrl => ({
+        scope: input.scope,
+        scriptId: input.scriptId,
+        scriptName: input.scriptName,
+        scriptEnabled: input.scriptEnabled,
+        importUrl,
+        ...inspectScriptImportUrl(importUrl),
+    }));
+}
+function listCreativeWorkshopScriptDependencies() {
+    const getTrees = getScriptTreeGetter();
+    if (!getTrees) {
+        return { supported: false, scripts: [] };
+    }
+    const scripts = [];
+    for (const scope of SCRIPT_SCOPES) {
+        try {
+            scripts.push(...flattenScriptTrees(getTrees({ type: scope }), scope));
+        }
+        catch (error) {
+            console.warn('[CreativeWorkshop] failed to inspect TavernHelper script tree', { scope, error });
+        }
+    }
+    return { supported: true, scripts };
+}
+
 ;// ./src/CreativeWorkshop/bridge/protocol.ts
 const CREATIVE_WORKSHOP_BRIDGE_NAMESPACE = 'creative-workshop-bridge';
 function isCreativeWorkshopBridgeMessage(value) {
@@ -1887,6 +2044,7 @@ function createBridgeMessage(type, payload, requestId) {
 }
 
 ;// ./src/CreativeWorkshop/bridge/host.ts
+
 
 
 
@@ -2143,6 +2301,9 @@ function createCreativeWorkshopBridgeHost(option) {
                 case 'bridge:list-installed-projects':
                     await post('bridge:installed-projects', { projects: await getCompleteInitialInstalledProjects() }, event.data.requestId);
                     break;
+                case 'bridge:list-script-dependencies':
+                    await post('bridge:script-dependencies', listCreativeWorkshopScriptDependencies(), event.data.requestId);
+                    break;
                 case 'bridge:install-project':
                     if (!_.isString(_.get(event.data, 'payload.projectId'))) {
                         throw new Error('缺少 projectId');
@@ -2356,14 +2517,14 @@ function showAgreementPopup() {
         backdropFilter: 'blur(6px)',
     });
     const $card = $('<div>').css({
-        background: 'linear-gradient(145deg, #1E293B, #0F172A)',
+        background: '#18191c',
         borderRadius: '20px',
         padding: '36px 32px 28px',
         width: 'min(520px, 92vw)',
         maxHeight: '85vh',
         overflowY: 'auto',
         boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
-        color: '#E2E8F0',
+        color: '#ececea',
         fontFamily: 'system-ui, -apple-system, sans-serif',
     });
     const $title = $('<h2>')
@@ -2378,7 +2539,7 @@ function showAgreementPopup() {
         justifyContent: 'center',
         gap: '10px',
     })
-        .html('<i class="fas fa-shield-alt" style="color:#60A5FA"></i> 免责声明');
+        .html('<i class="fas fa-shield-alt" style="color:#b89d76"></i> 免责声明');
     const disclaimerItems = [
         {
             icon: 'fa-user-edit',
@@ -2419,7 +2580,7 @@ function showAgreementPopup() {
             alignItems: 'center',
             gap: '8px',
         })
-            .html(`<i class="fas ${item.icon}" style="color:#60A5FA;font-size:0.85rem"></i> ${index + 1}. ${item.title}`);
+            .html(`<i class="fas ${item.icon}" style="color:#b89d76;font-size:0.85rem"></i> ${index + 1}. ${item.title}`);
         const $itemText = $('<div>')
             .css({
             fontSize: '0.88rem',
@@ -2542,7 +2703,7 @@ function openCreativeWorkshop() {
         width: '100%',
         height: '100%',
         borderRadius: '20px',
-        background: '#0F172A',
+        background: '#0f1012',
         boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
     });
     const $closeButton = host$('<button type="button">退出</button>').css({

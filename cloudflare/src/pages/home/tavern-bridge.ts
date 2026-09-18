@@ -6,6 +6,13 @@ const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
 const installSubscriptionSyncChains = new Map();
+const SCRIPT_DEPENDENCY_REGISTRY = new Map([
+  ['uikawinwing/CharInfo-Manager', { name: 'CharInfo Manager', latestVersion: '0.3.2' }],
+]);
+
+state.tavern.scriptDependenciesSupported = false;
+state.tavern.scriptDependenciesLoaded = false;
+state.tavern.scriptDependencies = [];
 
 function createBridgeRequest(type, payload) {
   return {
@@ -61,6 +68,72 @@ function syncInstalledProjectsFromBridge(payload, options) {
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
   });
   renderApp();
+}
+
+function normalizeScriptDependencyVersion(version) {
+  const match = String(version || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) return null;
+  return match.slice(1, 4).map(Number);
+}
+
+function compareScriptDependencyVersions(left, right) {
+  const leftParts = normalizeScriptDependencyVersion(left);
+  const rightParts = normalizeScriptDependencyVersion(right);
+  if (!leftParts || !rightParts) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] < rightParts[index]) return -1;
+    if (leftParts[index] > rightParts[index]) return 1;
+  }
+  return 0;
+}
+
+function syncScriptDependenciesFromBridge(payload) {
+  state.tavern.scriptDependenciesSupported = Boolean(payload?.supported);
+  state.tavern.scriptDependenciesLoaded = true;
+  state.tavern.scriptDependencies = Array.isArray(payload?.scripts) ? payload.scripts : [];
+  renderApp();
+}
+
+function getScriptDependencyHealthItems() {
+  const items = [];
+  const scripts = Array.isArray(state.tavern.scriptDependencies) ? state.tavern.scriptDependencies : [];
+  scripts.forEach(script => {
+    const dependencies = Array.isArray(script?.dependencies) ? script.dependencies : [];
+    dependencies.forEach(dependency => {
+      const registryEntry = SCRIPT_DEPENDENCY_REGISTRY.get(String(dependency?.repository || ''));
+      if (!registryEntry) return;
+
+      let status = 'unknown';
+      if (dependency?.refKind === 'semver' && dependency?.installedVersion) {
+        const comparison = compareScriptDependencyVersions(dependency.installedVersion, registryEntry.latestVersion);
+        if (comparison === -1) status = 'outdated';
+        else if (comparison === 0) status = 'current';
+        else if (comparison === 1) status = 'ahead';
+      } else if (dependency?.refKind === 'floating') {
+        status = 'floating';
+      } else if (dependency?.refKind === 'commit' || dependency?.refKind === 'other-ref') {
+        status = 'pinned-unknown';
+      }
+
+      items.push({
+        ...dependency,
+        scriptName: script?.scriptName || dependency?.scriptName || registryEntry.name,
+        dependencyName: registryEntry.name,
+        latestVersion: registryEntry.latestVersion,
+        status,
+      });
+    });
+  });
+  return items;
+}
+
+function getScriptDependencyHealthSummary() {
+  const items = getScriptDependencyHealthItems();
+  return {
+    items,
+    outdated: items.filter(item => item.status === 'outdated'),
+    uncertain: items.filter(item => item.status === 'floating' || item.status === 'pinned-unknown' || item.status === 'unknown'),
+  };
 }
 
 function syncInstallSubscription(projectId, subscribed) {
@@ -143,6 +216,9 @@ function handleBridgeMessage(event) {
     case 'bridge:context':
       syncContextFromBridge(data.payload || {});
       break;
+    case 'bridge:script-dependencies':
+      syncScriptDependenciesFromBridge(data.payload || {});
+      break;
     case 'bridge:installed-projects':
     case 'bridge:install-result':
     case 'bridge:uninstall-result':
@@ -210,6 +286,7 @@ function initializeTavernBridge() {
   postBridgeMessage('bridge:handshake');
   postBridgeMessage('bridge:get-context');
   postBridgeMessage('bridge:list-installed-projects');
+  postBridgeMessage('bridge:list-script-dependencies');
 }
 
 function getLegacyProjectNameForBridge(projectId) {
