@@ -662,19 +662,6 @@ async function fetchCharacterReferenceVersionItems(versionId) {
   return apiFetch('/api/character-references/versions/' + encodeURIComponent(versionId) + '/items', { method: 'GET', cache: 'no-store' });
 }
 
-async function createCharacterReference(payload) {
-  return apiFetch('/api/admin/character-references', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-async function createCharacterReferenceVersion(referenceId, payload) {
-  return apiFetch('/api/admin/character-references/' + encodeURIComponent(referenceId) + '/versions', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
 
 async function updateProjectCompatibility(projectId, payload) {
   const result = await apiFetch('/api/projects/' + projectId + '/compatibility', {

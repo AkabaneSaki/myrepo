@@ -227,7 +227,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .project-form-section { min-width:0; padding:0 0 28px; border-bottom:1px solid rgba(255,255,255,.07); }
 .project-form-section:last-child,.project-form-section--assets { padding-bottom:0; border-bottom:0; }
 .project-form-section-head { display:grid; grid-template-columns:28px minmax(0,1fr); gap:10px; align-items:start; margin-bottom:20px; }
-.project-form-section-head--plain { grid-template-columns:minmax(0,1fr); gap:0; }
 .project-form-section-index { width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(190,164,125,.26); border-radius:8px; background:rgba(190,164,125,.07); color:#c5ad8b; font-size:.65rem; font-weight:800; letter-spacing:.04em; }
 .project-form-section-head h3 { margin:1px 0 3px; color:#e5e4e1; font-size:.94rem; font-weight:760; line-height:1.3; }
 .project-form-section-head p { margin:0; color:#77756f; font-size:.72rem; line-height:1.5; }
@@ -290,12 +289,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .creator-tag-picker > summary small { margin-left:auto; color:#686762; font-size:.68rem; font-weight:600; }
 .creator-tag-picker-body { display:grid; gap:14px; padding:0 12px 12px; }
 
-.character-reference-modal .modal-content { width:min(94vw,980px); max-width:980px; max-height:min(90dvh,900px); }
-.character-reference-modal .modal-header { position:relative; z-index:3; }
-.character-reference-modal .close-btn { position:relative; z-index:4; pointer-events:auto; }
-.character-reference-modal .modal-body { min-height:0; overflow-y:auto; }
-.character-reference-modal .project-form-layout { overflow:visible; }
-.character-reference-modal .project-form-section-head--plain { grid-template-columns:minmax(0,1fr); }
 .compatibility-modal .modal-content { width:min(94vw,680px); max-height:min(90dvh,820px); }
 .compatibility-modal .modal-header { position:relative; z-index:3; }
 .compatibility-modal .close-btn { position:relative; z-index:4; pointer-events:auto; }
@@ -308,14 +301,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .compatibility-modal .project-form-footer { position:sticky; bottom:0; z-index:2; margin:20px -18px -14px; padding:12px 18px calc(12px + env(safe-area-inset-bottom)); }
 .publish-check-modal .modal-content { width:min(94vw,760px); max-height:min(90dvh,860px); }
 @media (max-width:640px) {
-  .character-reference-modal { align-items:stretch; padding:0; overflow:hidden; background:#0f1012; }
-  .character-reference-modal .modal-content { width:100%; height:100dvh; max-width:none; max-height:100dvh; border:0; border-radius:0; }
-  .character-reference-modal .modal-header { min-height:56px; padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left)); }
-  .character-reference-modal .modal-body { padding:18px 16px calc(24px + env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
-  .character-reference-modal .project-form-layout { display:block; overflow:visible; }
-  .character-reference-modal .project-form-column { padding:0 0 24px; }
-  .character-reference-modal .project-form-column--assets { padding-top:24px; border-left:0; border-top:1px solid rgba(255,255,255,.07); background:transparent; }
-  .character-reference-modal .project-form-section-head--plain { grid-template-columns:minmax(0,1fr); gap:0; }
   .compatibility-modal { align-items:stretch; padding:0; background:rgba(5,6,8,.92); }
   .compatibility-modal .modal-content { width:100%; height:100dvh; max-width:none; max-height:100dvh; border:0; border-radius:0; }
   .compatibility-modal .modal-header { min-height:56px; padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left)); }
