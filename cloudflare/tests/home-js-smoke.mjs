@@ -399,6 +399,8 @@ assert.match(fragments.homeModalsScript, /label for="coverInput"/);
 assert.match(fragments.homeModalsScript, /name="worldbookFile" aria-label="世界书文件"/);
 assert.match(fragments.homeModalsScript, /name="regexFiles" aria-label="正则文件"/);
 assert.match(fragments.homeModalsScript, /name="coverImage" aria-label="封面图"/);
+assert.match(fragments.homeModalsScript, /for="\$\{inputId\}"><input id="\$\{inputId\}" type="checkbox" data-preset-tag/);
+assert.match(fragments.homeModalsScript, /display-tag-chip" for="\$\{inputId\}"><input id="\$\{inputId\}" type="checkbox" data-display-tag/);
 assert.match(fragments.homeModalsScript, /overlay\.style\.zIndex = String\(9999 \+ document\.querySelectorAll\("\.modal-overlay"\)\.length\)/);
 assert.match(fragments.homeModalsScript, /compatibility-modal/);
 assert.match(fragments.homeModalsScript, /compatibility-section-head/);
