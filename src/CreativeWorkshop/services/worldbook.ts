@@ -269,11 +269,14 @@ export async function installCreativeWorkshopProject(
   selectedEntryKeys?: string[],
   requestedWorldbookName?: string,
   expectedVersion?: string,
+  manageOriginalConflicts = false,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
   if (prepared.length === 0) {
-    const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+    const originalEntryStates = manageOriginalConflicts
+      ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
+      : [];
     setCreativeWorkshopInstallRecord(projectId, {
       worldbookName: null,
       installedVersion: detail.project.version || expectedVersion || null,
@@ -285,12 +288,14 @@ export async function installCreativeWorkshopProject(
     ? await ensureCreativeWorkshopTargetWorldbook(requestedWorldbookName)
     : getCurrentWorldbookName();
   await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
-  let originalEntryStates;
-  try {
-    originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
-  } catch (error) {
-    await deleteProjectEntriesFromWorldbook(projectId, worldbookName);
-    throw error;
+  let originalEntryStates = [];
+  if (manageOriginalConflicts) {
+    try {
+      originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+    } catch (error) {
+      await deleteProjectEntriesFromWorldbook(projectId, worldbookName);
+      throw error;
+    }
   }
   setCreativeWorkshopInstallRecord(projectId, {
     worldbookName,
@@ -314,6 +319,7 @@ export async function updateCreativeWorkshopProject(
   projectId: string,
   expectedVersion?: string,
   legacyProjectName?: string,
+  manageOriginalConflicts = false,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
@@ -340,7 +346,12 @@ export async function updateCreativeWorkshopProject(
   if (legacyProjectName && legacyProjectName !== projectId) {
     await restoreCreativeWorkshopOriginalConflicts(legacyProjectName);
   }
-  const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+  let originalEntryStates = [];
+  if (manageOriginalConflicts) {
+    originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+  } else {
+    await restoreCreativeWorkshopOriginalConflicts(projectId);
+  }
   if (legacyProjectName && legacyProjectName !== projectId) {
     deleteCreativeWorkshopInstallRecord(legacyProjectName);
   }

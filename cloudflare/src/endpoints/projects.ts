@@ -416,6 +416,14 @@ export class ProjectCreate extends OpenAPIRoute {
 
       const name = typeof rawBody.name === 'string' ? rawBody.name.trim() : '';
       const description = typeof rawBody.description === 'string' ? rawBody.description : undefined;
+      const rawPrecautions = rawBody.precautions;
+      if (rawPrecautions !== undefined && rawPrecautions !== null && typeof rawPrecautions !== 'string') {
+        return c.json({ error: '安装注意事项必须是文字' }, 400);
+      }
+      const precautions = typeof rawPrecautions === 'string' ? rawPrecautions.trim() || null : rawPrecautions;
+      if (typeof precautions === 'string' && precautions.length > 2000) {
+        return c.json({ error: '安装注意事项最多 2000 字符' }, 400);
+      }
       const rawVersionLabel = rawBody.versionLabel;
       if (rawVersionLabel !== undefined && rawVersionLabel !== null && typeof rawVersionLabel !== 'string') {
         return c.json({ error: 'Version label must be text' }, 400);
@@ -493,6 +501,7 @@ export class ProjectCreate extends OpenAPIRoute {
         id: projectId,
         name,
         description,
+        precautions,
         version: '1.0.0',
         versionLabel,
         characterReferenceId: compatibilitySelection.characterReferenceId,
@@ -1207,6 +1216,7 @@ export class ProjectDelete extends OpenAPIRoute {
         id: nextDraftId,
         name: project.name,
         description: project.description || undefined,
+        precautions: project.precautions ?? null,
         version: nextVersion,
         versionLabel: project.versionLabel ?? null,
         authorId: project.authorId,

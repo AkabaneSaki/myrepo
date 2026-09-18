@@ -114,6 +114,7 @@ export const Project = z.object({
   draftProjectId: z.string().optional().describe('草稿项目 ID'),
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   version: z.string().default('1.0.0').describe('工坊内部机器版本'),
   versionLabel: z.string().nullable().optional().describe('作者自定义显示版本，仅展示'),
   publishedVersion: z.string().optional().describe('关联正式内部版本号，仅用于 draft 状态'),
@@ -185,6 +186,7 @@ export const ProjectListQuery = z.object({
 export const ProjectCreateRequest = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
@@ -206,6 +208,7 @@ export const ProjectCreateRequest = z.object({
 export const ProjectUpdateRequest = z.object({
   name: z.string().optional().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
+  precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),

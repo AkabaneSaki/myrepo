@@ -1018,6 +1018,20 @@ body { background:#0f1012; color:#ececea; }
 .project-detail-modal button.detail-stat:disabled { opacity:.55; }
 .project-detail-modal .detail-warning { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border:1px solid rgba(245,158,11,.24); border-radius:10px; background:rgba(245,158,11,.07); color:#dbc58d; font-size:.76rem; line-height:1.5; }
 .project-detail-modal .detail-warning i { flex:none; margin-top:3px; }
+.project-detail-modal .detail-precautions strong { display:block; margin-bottom:3px; color:#f0d79a; }
+.project-detail-modal .detail-precautions span { display:block; white-space:pre-line; overflow-wrap:anywhere; }
+.install-conflict-consent { display:flex; flex-direction:column; gap:14px; }
+.install-conflict-consent .detail-warning { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid rgba(245,158,11,.28); border-radius:10px; background:rgba(245,158,11,.08); color:#dbc58d; line-height:1.55; }
+.install-conflict-consent .detail-warning i { flex:none; margin-top:3px; }
+.install-conflict-consent .detail-warning strong { display:block; margin-bottom:3px; color:#f0d79a; }
+.install-conflict-consent .detail-warning span { display:block; color:#c9b98f; }
+.install-conflict-list { display:flex; flex-direction:column; gap:7px; max-height:240px; margin:0; padding:0; overflow:auto; list-style:none; }
+.install-conflict-list li { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); }
+.install-conflict-list li i { flex:none; margin-top:3px; color:#bca57f; }
+.install-conflict-unavailable { padding:10px 12px; border-radius:8px; background:rgba(255,255,255,.035); color:var(--cw-text-secondary); }
+.install-conflict-consent > p { margin:0; color:var(--cw-text-secondary); line-height:1.6; }
+.install-conflict-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+@media (max-width:640px) { .install-conflict-actions { flex-direction:column; } .install-conflict-actions .btn { width:100%; } }
 .project-detail-modal .detail-overview { display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
 .project-detail-modal .detail-overview .detail-block-title,.project-detail-modal .detail-overview .detail-description { width:100%; }
 .project-detail-modal .detail-primary .detail-facts { width:100%; margin-top:auto; grid-template-columns:repeat(4,minmax(0,1fr)); }

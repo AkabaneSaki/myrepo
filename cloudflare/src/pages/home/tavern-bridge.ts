@@ -333,13 +333,14 @@ function requestProjectDiff(projectId, projectVersion = null) {
   });
 }
 
-function confirmProjectUpdate(projectId, projectVersion = null) {
+function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false) {
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   setProjectPendingAction(projectId, 'update');
   renderApp();
   postBridgeMessage('bridge:confirm-project-update', {
     projectId,
     ...(projectVersion ? { projectVersion } : {}),
+    manageOriginalConflicts: manageOriginalConflicts === true,
     ...(legacyProjectName ? { legacyProjectName } : {}),
   });
 }

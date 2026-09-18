@@ -1368,11 +1368,13 @@ async function deleteProjectEntriesFromInstalledWorldbooks(projectId, preferredW
     }
     return deletedEntries;
 }
-async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion) {
+async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion, manageOriginalConflicts = false) {
     invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
     if (prepared.length === 0) {
-        const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+        const originalEntryStates = manageOriginalConflicts
+            ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
+            : [];
         setCreativeWorkshopInstallRecord(projectId, {
             worldbookName: null,
             installedVersion: detail.project.version || expectedVersion || null,
@@ -1384,13 +1386,15 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
         ? await ensureCreativeWorkshopTargetWorldbook(requestedWorldbookName)
         : getCurrentWorldbookName();
     await applyPreparedCreativeWorkshopProject(projectId, detail, prepared, worldbookName);
-    let originalEntryStates;
-    try {
-        originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
-    }
-    catch (error) {
-        await deleteProjectEntriesFromWorldbook(projectId, worldbookName);
-        throw error;
+    let originalEntryStates = [];
+    if (manageOriginalConflicts) {
+        try {
+            originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+        }
+        catch (error) {
+            await deleteProjectEntriesFromWorldbook(projectId, worldbookName);
+            throw error;
+        }
     }
     setCreativeWorkshopInstallRecord(projectId, {
         worldbookName,
@@ -1409,7 +1413,7 @@ async function uninstallCreativeWorkshopProject(projectId, legacyProjectName) {
     await restoreCreativeWorkshopOriginalConflicts(legacyProjectName || projectId);
     return deletedEntries;
 }
-async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName) {
+async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName, manageOriginalConflicts = false) {
     invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
     const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
@@ -1434,7 +1438,13 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
     if (legacyProjectName && legacyProjectName !== projectId) {
         await restoreCreativeWorkshopOriginalConflicts(legacyProjectName);
     }
-    const originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+    let originalEntryStates = [];
+    if (manageOriginalConflicts) {
+        originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+    }
+    else {
+        await restoreCreativeWorkshopOriginalConflicts(projectId);
+    }
     if (legacyProjectName && legacyProjectName !== projectId) {
         deleteCreativeWorkshopInstallRecord(legacyProjectName);
     }
@@ -2322,7 +2332,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     if (!_.isString(_.get(event.data, 'payload.projectId'))) {
                         throw new Error('缺少 projectId');
                     }
-                    await installCreativeWorkshopProject(String(event.data.payload?.projectId), Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined);
+                    await installCreativeWorkshopProject(String(event.data.payload?.projectId), Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined, event.data.payload?.manageOriginalConflicts === true);
                     await installCreativeWorkshopRegex(String(event.data.payload?.projectId), Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload?.regexEntryKeys.map(String) : undefined, _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined);
                     await post('bridge:install-result', {
                         success: true,
@@ -2369,7 +2379,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     const expectedVersion = _.isString(event.data.payload?.projectVersion)
                         ? String(event.data.payload?.projectVersion)
                         : undefined;
-                    await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
+                    await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName, event.data.payload?.manageOriginalConflicts === true);
                     await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
                     await post('bridge:update-result', {
                         success: true,

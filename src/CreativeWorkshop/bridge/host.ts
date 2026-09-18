@@ -348,6 +348,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined,
             _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
+            event.data.payload?.manageOriginalConflicts === true,
           );
           await installCreativeWorkshopRegex(
             String(event.data.payload?.projectId),
@@ -415,7 +416,12 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const expectedVersion = _.isString(event.data.payload?.projectVersion)
             ? String(event.data.payload?.projectVersion)
             : undefined;
-          await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
+          await updateCreativeWorkshopProject(
+            String(event.data.payload?.projectId),
+            expectedVersion,
+            actionLegacyProjectName,
+            event.data.payload?.manageOriginalConflicts === true,
+          );
           await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
           await post(
             'bridge:update-result',

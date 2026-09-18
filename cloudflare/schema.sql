@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
+    precautions TEXT,
     version TEXT DEFAULT '1.0.0',
     version_label TEXT,
     author_id TEXT NOT NULL,
