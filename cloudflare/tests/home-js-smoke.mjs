@@ -19,6 +19,8 @@ async function evaluateStandalone(relativePath, exportName) {
 }
 
 const homeAppSource = await readFile(resolve('src/pages/home/app.ts'), 'utf8');
+const homePageSource = await readFile(resolve('src/pages/home.ts'), 'utf8');
+const homeStylesSource = await readFile(resolve('src/pages/home/styles.ts'), 'utf8');
 const fragments = {
   homeStateScript: await evaluateStandalone('src/pages/home/state.ts', 'homeStateScript'),
   homeUtilsScript: await evaluateStandalone('src/pages/home/utils.ts', 'homeUtilsScript'),
@@ -39,6 +41,13 @@ for (const [name, script] of Object.entries(fragments)) {
   assert.equal(typeof script, 'string', `${name} must evaluate to JavaScript text`);
   new Function(script);
 }
+
+assert.match(homePageSource, /theme-color\" content=\"#0f1012/);
+assert.match(homePageSource, /html,body\{margin:0;min-height:100%;background:#0f1012/);
+assert.match(homeStylesSource, /body \{[^}]*background:#0f1012/);
+assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.detail-keywords-block/);
+assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.keyword-chip/);
+assert.doesNotMatch(homeStylesSource, /\.upload-preview-summary \{[^}]*rgba\(99,102,241/);
 
 assert.doesNotMatch(
   fragments.homeTavernBridgeScript,
