@@ -451,7 +451,7 @@ export const homeDetailModalRenderScript = [
   '  const compatibilityStatusHtml = compatibilityMeta ? `<div class="compatibility-status ${compatibilityMeta.className}">${compatibilityMeta.label}</div>` : "";',
   '  const precautionsText = String(project?.precautions || "").trim();',
   '  const precautionsHtml = precautionsText ? `<div class="detail-warning detail-precautions"><i class="fas fa-triangle-exclamation"></i><div><strong>安装注意事项</strong><span>${escapeHtml(precautionsText)}</span></div></div>` : "";',
-  '  const compatibilityEditButton = canManageProject(project) && project?.builtForReferenceVersionId ? `<button class="btn btn-outline detail-compatibility-btn" type="button" data-compatibility-edit="${project.id}"><i class="fas fa-shield-halved"></i> 更新版本状态</button>` : "";',
+  '  const compatibilityEditButton = isProjectEditable(project) && project?.builtForReferenceVersionId ? `<button class="btn btn-outline detail-compatibility-btn" type="button" data-compatibility-edit="${project.id}"><i class="fas fa-shield-halved"></i> 更新版本状态</button>` : "";',
   '  const likeHint = !state.currentUser ? "登录后可点赞" : (view.likes.liked ? "取消点赞" : "点赞项目");',
   '  const detailStats = isLocalOnly',
   '    ? `<div class="detail-warning"><i class="fas fa-hard-drive"></i><span>这个 DLC 已安装在本机，但原来的工坊记录已经找不到。确认对应项目后才能安全使用新版项目资料。</span></div>`',

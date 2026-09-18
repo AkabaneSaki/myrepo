@@ -421,6 +421,7 @@ export const homeScript = String.raw`
     const userMenu = document.getElementById('userMenu');
     const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
     const releaseNoticeBtn = document.getElementById('releaseNoticeBtn');
+    const scriptDependencyHealthBtns = Array.from(document.querySelectorAll('.script-dependency-health-btn'));
     const mobileSearchInput = document.getElementById('projectSearchInputMobile');
     const mobileToolSheet = document.getElementById('mobileToolSheet');
     const mobileToolBackdrop = document.getElementById('mobileToolBackdrop');
@@ -455,6 +456,12 @@ export const homeScript = String.raw`
     if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
     if (releaseNoticeBtn) releaseNoticeBtn.onclick = openReleaseNoticeModal;
+    scriptDependencyHealthBtns.forEach(button => {
+      button.onclick = event => {
+        event.stopPropagation();
+        openScriptDependencyHealthModal();
+      };
+    });
 
     const closeMobileTool = () => {
       if (!mobileToolSheet || !mobileToolBackdrop) return;

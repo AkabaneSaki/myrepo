@@ -45,6 +45,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
   .tavern-status--connecting { color:#FDE68A; border-color:rgba(245,158,11,0.35); }
   .tavern-status--disconnected { color:#CBD5E1; }
   .tavern-status--error { color:#FCA5A5; border-color:rgba(239,68,68,0.35); }
+  .tavern-status--action { cursor:pointer; font:inherit; appearance:none; -webkit-appearance:none; }
+  .tavern-status--action:hover,.tavern-status--action:focus-visible { background:rgba(239,68,68,.12); outline:none; }
+  .dependency-health-list { display:flex; flex-direction:column; gap:14px; }
+  .dependency-health-item { display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.025); }
+  .dependency-health-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .dependency-health-heading strong { color:#ececea; }
+  .dependency-health-heading span { color:#FCA5A5; font-size:.84rem; }
+  .dependency-health-item p { margin:0; color:#aaa8a3; line-height:1.55; }
+  .dependency-health-note { padding:9px 10px; border-radius:8px; background:rgba(255,255,255,.035); }
   .header-search input { width:100%; background:transparent; border:none; color:#E2E8F0; outline:none; font-size:0.95rem; }
 
 .header-search i { color:#94A3B8; }
