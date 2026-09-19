@@ -176,7 +176,7 @@ const advertisedVersionMatch = fragments.homeLayoutRenderScript.match(/WORKSHOP_
 assert.ok(clientVersionMatch, 'Creative Workshop client self-version must be readable');
 assert.ok(advertisedVersionMatch, 'Workshop advertised release version must be readable');
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT|test-dist\/CreativeWorkshop\/index\.js/);
-assert.match(fragments.homeModalsScript, /记得自行修改版本号/);
+assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
 assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
