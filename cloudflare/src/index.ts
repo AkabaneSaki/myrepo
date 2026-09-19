@@ -1,5 +1,6 @@
 import { fromHono } from 'chanfana';
 import { Hono } from 'hono';
+import workshopConfig from '../../config/workshop.json';
 
 // 类型定义
 import type { Env } from './env';
@@ -268,11 +269,15 @@ openapi.post('/api/admin/character-references/:referenceId/versions', AdminChara
 openapi.put('/api/admin/discover-banner', AdminDiscoverBannerUpdate);
 openapi.post('/api/admin/discover-banner/upload', AdminDiscoverBannerUpload);
 
+const WORKSHOP_STAGING_HOSTS = new Set(
+  [workshopConfig.endpoints.staging, ...(workshopConfig.endpoints.stagingAliases || [])]
+    .map(value => new URL(value).hostname.toLowerCase()),
+);
+
 // Staging-only QA hook for #38. Production hosts always return 404.
 app.post('/api/internal/staging/rankings/rebuild', async c => {
   const hostname = new URL(c.req.url).hostname.toLowerCase();
-  const isStagingHost = hostname === 'workshop-test.uika.cc.cd'
-    || hostname === 'poemofdestinycreativeworkshop-master-staging.johnjohnson67076.workers.dev';
+  const isStagingHost = WORKSHOP_STAGING_HOSTS.has(hostname);
   const qaHeader = c.req.header('x-workshop-staging-qa');
   if (!isStagingHost || qaHeader !== 'rebuild-daily-ranking') {
     return c.json({ error: 'Not found' }, 404);

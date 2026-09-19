@@ -5,6 +5,11 @@ on:
     paths:
       - 'src/**'
       - 'util/**'
+      - 'config/workshop.json'
+      - 'scripts/build-workshop-legacy-shim.mjs'
+      - 'scripts/check-workshop-bundles.mjs'
+      - 'scripts/check-workshop-compat.mjs'
+      - 'scripts/check-workshop-config.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'webpack.config.cjs'
@@ -38,5 +43,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build dist
-        run: pnpm build
+      - name: Verify Workshop source of truth
+        run: pnpm check:workshop-config
+
+      - name: Build all client artifact lifecycles
+        run: pnpm build:all
+
+      - name: Verify release, compatibility and staging artifacts
+        run: pnpm check:workshop-bundles

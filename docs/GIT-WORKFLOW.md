@@ -1,6 +1,6 @@
 # Git / Staging / Release SOP
 
-This repository uses a fork-first workflow with a mandatory staging acceptance gate before owner production integration.
+This repository uses a fork-first workflow. Feature releases require the normal staging acceptance gate before owner production integration; production patch hotfixes follow the separate hotfix validation and forward-port policy below.
 
 Git repository state and runtime deployment state are separate systems. Always report and verify them separately.
 
@@ -20,6 +20,24 @@ Branch meaning:
 
 Never infer repository ownership from a remote name. Verify URLs before the first remote operation of every session.
 
+## Task-intent routing declaration
+
+Before code mutation, the agent must classify and verify the mission:
+
+```text
+[Task: <mission type / objective> | Baseline: <verified source line> | Direction: <intended Git flow>]
+```
+
+Routing is mandatory:
+
+- normal development / staging-line fix → Baseline `origin/staging`; Direction `staging → task → staging → production`
+- production hotfix / patch release → Baseline exact current production / `upstream/main`; Direction `main → hotfix → main`
+- read-only audit → Baseline current verified target; Direction `read-only`
+
+Optional synchronization after a production hotfix is reported separately, for example `Sync: forward-port → origin/staging`. It is not part of the production-hotfix Direction.
+
+If the declared Task/Baseline/Direction does not match the requested operation, stop before editing and correct the routing.
+
 ## 2. Mandatory terminology contract
 
 Do not use the single word `staging` when more than one meaning is possible.
@@ -38,15 +56,13 @@ Do not use the single word `staging` when more than one meaning is possible.
 | **production Worker** | Owner production Cloudflare Worker |
 | **promote to production** | PR/merge into owner main, then deploy exact merged owner-main commit |
 
-Current project staging runtime identifiers:
+Current runtime identifiers must be read from their owning source instead of copied into this SOP:
 
-```text
-staging Worker = poemofdestinycreativeworkshop-master-staging
-staging site   = workshop-test.uika.cc.cd
-Cloudflare     = Johnjohnson personal staging environment
-```
+- staging site URL and aliases: `config/workshop.json`
+- staging Worker/account/config/source policy: `.cotel/local/one-click-deploy/profiles/master-staging.json`
+- production Worker/account/config/source policy: `.cotel/local/one-click-deploy/profiles/production.json`
 
-These runtime identifiers must still be verified before deployment; they are not inferred from Git remotes.
+Verify those sources before deployment; never infer runtime identity from Git remotes or from stale documentation.
 
 ### Forbidden ambiguous reporting
 
@@ -181,14 +197,74 @@ Do not develop features directly on `origin/main`.
 
 Do not force-push either main branch merely to make history look clean.
 
-## 7. Normal feature / fix workflow
+### Release version policy
 
-This is the default workflow for ordinary changes:
+Creative Workshop client SemVer and Worker/web deployment identity are separate.
+
+The only live client-version source is `config/workshop.json`:
+
+- `client.stable` = newest released client tag.
+- `client.minimum` = oldest client allowed to enter the Workshop.
+- `client.staging` = active staging-client line.
+
+Do not write the current numbers again in this SOP. Read the manifest.
+
+#### Mandatory version decision
+
+Before touching client SemVer, ask:
+
+> Does this change require a SillyTavern user to change the `@version` in their Creative Workshop import in order to receive the change?
+
+If **no**:
 
 ```text
-1. refresh upstream/main
-2. sync origin/main if needed
-3. create task branch from refreshed upstream/main
+Worker/web/backend change
+→ tests
+→ Git SHA
+→ Worker deployment
+→ Worker Version ID
+→ client stable/minimum/staging unchanged
+```
+
+Examples: web UI, copy, CSS, ranking, admin pages, Worker routes, D1/R2 logic, server-side validation, server-only hotfixes.
+
+If **yes**:
+
+- client bugfix → patch,
+- new backwards-compatible client capability → minor,
+- incompatible client / bridge contract → major.
+
+A new `stable` release does not automatically raise `minimum`. Raise `minimum` only when older clients are genuinely unsafe or incompatible.
+
+Use exact Git SHA / Worker Version to distinguish Worker builds. Never consume client patch numbers as deployment/build counters.
+
+#### Production hotfix while a newer client line is in staging
+
+Keep the production and staging source lines separate, but decide the client bump from the artifact change:
+
+1. Start from the exact current production source / refreshed `upstream/main`.
+2. Create the production hotfix/release branch from that production baseline.
+3. Direction is `main → hotfix → main`; staging is not part of the hotfix path.
+4. If the fix is Worker/web-only, keep all client versions unchanged.
+5. If the fix changes the production client artifact and users must update their import, create the next appropriate client release.
+6. Validate the production fix on the correct preview/hotfix path when needed; do not roll the normal staging Worker backward.
+7. Merge the finished hotfix back into owner main and deploy production from the exact merged owner-main commit.
+8. Only after production is complete, forward-port the finished logical fix into `origin/staging` if the future line still needs it.
+9. If forward-port cherry-pick conflicts, recreate the equivalent fix on staging instead of merging either line wholesale.
+10. Release tags are immutable.
+
+Forbidden: implement a production hotfix on `origin/staging` first and then backport/cherry-pick it into production.
+
+See `docs/WORKSHOP-RELEASE-SOP.md` for the complete client-release decision tree and reporting format.
+
+## 7. Normal feature / staging-fix workflow
+
+This is the default workflow for feature work and fixes targeting the active staging feature line. Production patch hotfixes are the explicit exception and follow the release-version hotfix flow above.
+
+```text
+1. refresh origin/staging and upstream/main
+2. confirm this task targets the active staging/feature line, not production
+3. create task branch from refreshed origin/staging
 4. implement
 5. local tests + review
 6. stage explicit files only
@@ -296,20 +372,22 @@ The helper must verify the exact latest `origin/staging`, expected staging Cloud
 
 `.cotel/local/` is persistent machine-local operational state and is not the portable source of truth. `.ai-bridge/` is reserved for current-session AI handoff state only. If the helper is missing on another machine, reproduce the same fail-closed checks rather than weakening the SOP.
 
-## 10. Preview / experimental deployment exception
+## 10. Preview / experimental / hotfix-validation deployment exception
 
-A task branch may be deployed before `origin/staging` only when all of these are true:
+The normal staging Worker still follows the `origin/staging` source-of-truth rule. Separate preview Workers may be used for isolated experiments, and separate hotfix Workers may be used to validate a production patch line while `origin/staging` is already on the next feature version.
+
+For an experimental task branch, deployment before `origin/staging` is allowed only when all of these are true:
 
 - the purpose is explicitly experimental,
 - the runtime is separately named preview/temporary infrastructure,
 - it cannot be confused with the Master staging Worker,
 - the report explicitly says the code is **not in `origin/staging`**.
 
-Never use this exception silently.
+Never use these exceptions silently. A hotfix-validation Worker must be separately named and must not be presented as the normal staging Worker.
 
 ## 11. Production promotion workflow
 
-Production order is:
+For a normal feature release, production order is:
 
 ```text
 staging accepted by Master
@@ -330,18 +408,18 @@ Do not deploy production from:
 - an unmerged PR head,
 - a dirty worktree.
 
-Production should normally run an exact commit already present in owner main.
+Production should normally run an exact commit already present in owner main. A production patch hotfix also ends in owner main before production deploy, but it is validated on its own hotfix path when the normal staging Worker is already serving the next feature line.
 
 ### One-click production shortcut on the primary machine
 
-For routine Workshop production deployment after staging acceptance and owner-main promotion, use:
+For routine Workshop production deployment after the applicable validation gate and owner-main promotion, use:
 
 ```text
 C:\Project\myrepo-git\.cotel\local\CHECK_PRODUCTION.cmd
 C:\Project\myrepo-git\.cotel\local\DEPLOY_PRODUCTION.cmd
 ```
 
-These shortcuts wrap the same composable deploy engine. The normal production source is refreshed `upstream/main` after Master staging acceptance and owner-main promotion. A stable owner semver tag should anchor each released version. The helper may still select an explicitly authorized owner `release/*` branch or owner release tag for exceptional recovery work, but historical release branches are temporary workspaces rather than long-term backups.
+These shortcuts wrap the same composable deploy engine. The normal production source is refreshed `upstream/main` after the applicable validation gate and owner-main promotion: Master staging acceptance for a feature release, or the dedicated hotfix validation path for a production patch. A stable owner semver tag should anchor each released version. The helper may still select an explicitly authorized owner `release/*` branch or owner release tag for exceptional recovery work, but historical release branches are temporary workspaces rather than long-term backups.
 
 
 The production profile accepts only source selectors allowed by policy (currently `upstream/main`, `upstream/release/*`, or an owner semver release tag). The engine fetches and resolves that exact source, temporarily locks the checkout to the exact commit, verifies the expected production Cloudflare account/Worker/D1/KV/R2, checks/applies migrations, performs a Wrangler dry-run, deploys only after all checks pass, and restores the original checkout afterward. `CHECK_PRODUCTION.cmd` performs the same preflight without applying migrations or deploying.
@@ -447,7 +525,7 @@ Before production deploy:
 
 - exact owner-main commit known,
 - owner main contains intended change,
-- staging acceptance already completed unless explicitly waived,
+- feature release: staging acceptance already completed; production hotfix: hotfix validation completed under the release-version hotfix policy,
 - tests green,
 - production Cloudflare account/profile verified,
 - Worker and bindings verified,
@@ -497,7 +575,7 @@ Never let the phrase "staging done" substitute for this separation.
 
 Use the user fork for development, `origin/staging` as the Master acceptance integration branch, and owner main as the production source of truth.
 
-The normal chain is:
+The normal feature-release chain is:
 
 ```text
 task branch

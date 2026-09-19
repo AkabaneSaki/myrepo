@@ -4,8 +4,18 @@
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "build": "webpack --config webpack.config.cjs --mode production",
-    "watch": "webpack --config webpack.config.cjs --mode development --watch"
+    "build": "pnpm build:release",
+    "build:stable": "webpack --config webpack.config.cjs --mode production --env target=stable",
+    "build:compat": "node scripts/build-workshop-legacy-shim.mjs",
+    "build:release": "pnpm build:stable && pnpm build:compat",
+    "build:staging": "webpack --config webpack.config.cjs --mode production --env target=staging",
+    "build:all": "pnpm build:release && pnpm build:staging",
+    "watch:stable": "webpack --config webpack.config.cjs --mode development --watch --env target=stable",
+    "watch:staging": "webpack --config webpack.config.cjs --mode development --watch --env target=staging",
+    "check:workshop-config": "node scripts/check-workshop-config.mjs",
+    "check:workshop-release": "node scripts/check-workshop-bundles.mjs release && node scripts/check-workshop-compat.mjs",
+    "check:workshop-staging": "node scripts/check-workshop-bundles.mjs staging",
+    "check:workshop-bundles": "node scripts/check-workshop-bundles.mjs all && node scripts/check-workshop-compat.mjs"
   },
   "devDependencies": {
     "ts-loader": "9.5.2",

@@ -1,4 +1,10 @@
-const base = 'https://poemofdestinycreativeworkshop-master-staging.johnjohnson67076.workers.dev';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const manifest = JSON.parse(await readFile(resolve(scriptDir, '../../config/workshop.json'), 'utf8'));
+const base = manifest.endpoints.staging;
 
 const listRes = await fetch(`${base}/api/projects?page=0&pageSize=20&sort=published`);
 if (!listRes.ok) throw new Error(`project list HTTP ${listRes.status}: ${await listRes.text()}`);
@@ -15,4 +21,4 @@ if (list.projects[0]?.id) {
   console.log(`project detail OK: id=${list.projects[0].id}, worldbookPreview=${wb}, regexPreview=${rx}`);
 }
 
-console.log('Master Worker HTTP smoke OK');
+console.log(`Master Worker HTTP smoke OK: ${base}`);

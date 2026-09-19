@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(await readFile(resolve(root, 'config/workshop.json'), 'utf8'));
-const stableBundle = await readFile(resolve(root, manifest.client.publicPath), 'utf8');
-const stagingBundle = await readFile(resolve(root, manifest.client.stagingPublicPath), 'utf8');
-const legacyShim = await readFile(resolve(root, manifest.client.legacyShimPath), 'utf8');
+const target = String(process.argv[2] || 'all').trim();
+
+assert.ok(['release', 'staging', 'all'].includes(target), 'usage: check-workshop-bundles.mjs <release|staging|all>');
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
@@ -26,37 +26,51 @@ function assertBundle(label, source, expectedVersion, expectedEndpoint) {
   );
 }
 
-assertBundle('stable', stableBundle, manifest.client.stable, manifest.endpoints.production);
-assertBundle('staging', stagingBundle, manifest.client.staging, manifest.endpoints.staging);
+async function verifyRelease() {
+  const stableBundle = await readFile(resolve(root, manifest.client.publicPath), 'utf8');
+  const legacyShim = await readFile(resolve(root, manifest.client.legacyShimPath), 'utf8');
 
-assert.ok(!stableBundle.includes(manifest.client.staging), 'stable bundle unexpectedly contains staging client version');
-assert.ok(!stableBundle.includes(manifest.endpoints.staging), 'stable bundle unexpectedly contains staging endpoint');
+  assertBundle('stable', stableBundle, manifest.client.stable, manifest.endpoints.production);
+  assert.ok(!stableBundle.includes(manifest.client.staging), 'stable bundle unexpectedly contains staging client version');
+  assert.ok(!stableBundle.includes(manifest.endpoints.staging), 'stable bundle unexpectedly contains staging endpoint');
 
-const migration = (manifest.client.migrations || []).find(item => item.mode === 'self-rewrite');
-assert.ok(migration, 'missing self-rewrite migration for legacy shim');
-assert.ok(legacyShim.includes(migration.fromPath), 'legacy shim does not embed migration fromPath');
-assert.ok(legacyShim.includes(migration.toPath), 'legacy shim does not embed migration toPath');
-assert.ok(legacyShim.includes(manifest.client.stable), 'legacy shim does not embed stable target version');
-assert.match(legacyShim, /updateScriptTreesWith/);
-assert.match(legacyShim, /getScriptId/);
-assert.ok(legacyShim.length < 12 * 1024, 'legacy shim unexpectedly looks like a full Workshop bundle');
+  const migration = (manifest.client.migrations || []).find(item => item.mode === 'self-rewrite');
+  assert.ok(migration, 'missing self-rewrite migration for compatibility endpoint');
+  assert.ok(legacyShim.includes(migration.fromPath), 'compatibility shim does not embed migration fromPath');
+  assert.ok(legacyShim.includes(migration.toPath), 'compatibility shim does not embed migration toPath');
+  assert.ok(legacyShim.includes(manifest.client.stable), 'compatibility shim does not embed stable target version');
+  assert.match(legacyShim, /updateScriptTreesWith/);
+  assert.match(legacyShim, /getScriptId/);
+  assert.ok(legacyShim.length < 12 * 1024, 'compatibility shim unexpectedly looks like a full Workshop bundle');
 
-const legacyRoot = resolve(root, manifest.client.legacyShimPath.split('/')[0]);
-const legacyFiles = (await readdir(legacyRoot, { recursive: true, withFileTypes: true }))
-  .filter(entry => entry.isFile())
-  .map(entry => relative(root, resolve(entry.parentPath || entry.path, entry.name)).replaceAll('\\', '/'))
-  .sort();
+  const compatibilityRoot = resolve(root, manifest.client.legacyShimPath.split('/')[0]);
+  const compatibilityFiles = (await readdir(compatibilityRoot, { recursive: true, withFileTypes: true }))
+    .filter(entry => entry.isFile())
+    .map(entry => relative(root, resolve(entry.parentPath || entry.path, entry.name)).replaceAll('\\', '/'))
+    .sort();
 
-assert.deepEqual(
-  legacyFiles,
-  [manifest.client.legacyShimPath],
-  'legacy test-dist tree must contain only the one migration shim',
-);
+  assert.deepEqual(
+    compatibilityFiles,
+    [manifest.client.legacyShimPath],
+    'historical compatibility tree must contain only the one migration shim',
+  );
 
-console.log(
-  'Workshop bundles verified: stable=' + manifest.client.stable
-    + ', minimum=' + manifest.client.minimum
-    + ', staging=' + manifest.client.staging
-    + ', stablePath=' + manifest.client.publicPath
-    + ', legacyShim=' + manifest.client.legacyShimPath,
-);
+  console.log(
+    'Workshop release artifacts verified: stable=' + manifest.client.stable
+      + ', minimum=' + manifest.client.minimum
+      + ', stablePath=' + manifest.client.publicPath
+      + ', compatibilityPath=' + manifest.client.legacyShimPath,
+  );
+}
+
+async function verifyStaging() {
+  const stagingBundle = await readFile(resolve(root, manifest.client.stagingPublicPath), 'utf8');
+  assertBundle('staging', stagingBundle, manifest.client.staging, manifest.endpoints.staging);
+  console.log(
+    'Workshop staging artifact verified: staging=' + manifest.client.staging
+      + ', stagingPath=' + manifest.client.stagingPublicPath,
+  );
+}
+
+if (target === 'release' || target === 'all') await verifyRelease();
+if (target === 'staging' || target === 'all') await verifyStaging();

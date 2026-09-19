@@ -84,7 +84,7 @@ myrepo/
 
 如果你已经构建并发布了对应脚本文件，可以在 SillyTavern 的酒馆助手直接使用 CDN 地址接入：
 
-- 创意工坊：`import 'https://testingcf.jsdelivr.net/gh/Akabanesaki/myrepo@main/dist/CreativeWorkshop/index.js'`
+- 创意工坊：正式版本号与公开 bundle 路径以 `config/workshop.json` 的 `client.stable` / `client.publicPath` 为准。历史 `test-dist/CreativeWorkshop/index.js` 仅作为兼容迁移入口，不是第二套正式构建。
 - 自适应正则：`import 'https://testingcf.jsdelivr.net/gh/Akabanesaki/myrepo@main/dist/AutoDialogueBeautifier/index.js'`
 
 > 当前仓库内主要保存的是源码与后端工程。如果要直接用于生产环境，通常还需要你自己的构建与发布流程。
@@ -96,7 +96,7 @@ myrepo/
 [`cloudflare/package.json`](cloudflare/package.json) 中定义了以下常用命令：
 
 - `npm run dev`：启动本地 Worker 开发环境
-- `npm run deploy`：部署到 Cloudflare Workers
+- staging / production 部署：必须使用仓库规定的 guarded deployment helper；不要从 `cloudflare/package.json` 直接执行 Wrangler deploy。
 - `npm run cf-typegen`：生成 Wrangler 类型
 
 ### 数据库初始化
