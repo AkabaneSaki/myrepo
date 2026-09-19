@@ -136,32 +136,6 @@ function getScriptDependencyHealthSummary() {
   };
 }
 
-function getScriptDependencySuggestedImport(item) {
-  if (!item?.importUrl || !item?.latestVersion || item?.refKind !== 'semver') return null;
-  let url;
-  try {
-    url = new URL(String(item.importUrl));
-  } catch {
-    return null;
-  }
-  const host = url.hostname.toLowerCase();
-  const segments = url.pathname.split('/').filter(Boolean);
-  if (host.endsWith('jsdelivr.net') && segments[0] === 'gh' && segments.length >= 3) {
-    const repoAndRef = segments[2];
-    const atIndex = repoAndRef.lastIndexOf('@');
-    if (atIndex < 1) return null;
-    segments[2] = repoAndRef.slice(0, atIndex) + '@' + item.latestVersion;
-    url.pathname = '/' + segments.join('/');
-    return url.toString();
-  }
-  if (host === 'raw.githubusercontent.com' && segments.length >= 4) {
-    segments[2] = item.latestVersion;
-    url.pathname = '/' + segments.join('/');
-    return url.toString();
-  }
-  return null;
-}
-
 function syncInstallSubscription(projectId, subscribed) {
   if (!projectId || !state.currentUser) return Promise.resolve();
 
@@ -238,6 +212,9 @@ function handleBridgeMessage(event) {
       setTavernConnectionStatus('connected');
       setTavernClientVersion(data.payload?.clientVersion);
       renderApp();
+      if (shouldShowWorkshopReleaseNotice(WORKSHOP_RELEASE_VERSION)) {
+        openReleaseNoticeModal();
+      }
       break;
     case 'bridge:context':
       syncContextFromBridge(data.payload || {});

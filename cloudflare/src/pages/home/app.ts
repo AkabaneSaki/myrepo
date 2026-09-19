@@ -402,6 +402,7 @@ export const homeScript = String.raw`
     const logoutBtn = document.getElementById('logoutBtn');
     const workshopCloseBtn = document.getElementById('workshopCloseBtn');
     const uploadBtn = document.getElementById('uploadBtn');
+    const myProjectsUploadBtn = document.getElementById('myProjectsUploadBtn');
     const myProjectsMenuBtn = document.getElementById('myProjectsMenuBtn');
     const adminPanelBtn = document.getElementById('adminPanelBtn');
     const bannerSettingsBtn = document.getElementById('bannerSettingsBtn');
@@ -420,7 +421,6 @@ export const homeScript = String.raw`
     const userMenuTrigger = document.getElementById('userMenuTrigger');
     const userMenu = document.getElementById('userMenu');
     const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
-    const releaseNoticeBtn = document.getElementById('releaseNoticeBtn');
     const scriptDependencyHealthBtns = Array.from(document.querySelectorAll('.script-dependency-health-btn'));
     const mobileSearchInput = document.getElementById('projectSearchInputMobile');
     const mobileToolSheet = document.getElementById('mobileToolSheet');
@@ -455,7 +455,6 @@ export const homeScript = String.raw`
     };
     if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
-    if (releaseNoticeBtn) releaseNoticeBtn.onclick = openReleaseNoticeModal;
     scriptDependencyHealthBtns.forEach(button => {
       button.onclick = event => {
         event.stopPropagation();
@@ -610,7 +609,7 @@ export const homeScript = String.raw`
       openDlcRepairModal();
     };
     if (logoutBtn) logoutBtn.onclick = logout;
-    if (uploadBtn) uploadBtn.onclick = event => {
+    const openUploadProject = event => {
       event.stopPropagation();
       state.userMenuOpen = false;
       try {
@@ -620,6 +619,8 @@ export const homeScript = String.raw`
         showToast('无法打开上传窗口: ' + (error?.message || String(error)), 'error');
       }
     };
+    if (uploadBtn) uploadBtn.onclick = openUploadProject;
+    if (myProjectsUploadBtn) myProjectsUploadBtn.onclick = openUploadProject;
     const toggleMyProjectsView = async () => {
       state.showOnlyMyProjects = !state.showOnlyMyProjects;
       if (state.showOnlyMyProjects) state.showSubscribedAndInstalledProjects = false;

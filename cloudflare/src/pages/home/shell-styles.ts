@@ -9,6 +9,37 @@ export const homeShellStyles = String.raw`
 .detail-description,
 .entry-title { font-family:var(--workshop-content-font); }
 .desktop-sidebar { display:none; }
+.my-projects-page-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin:2px 0 14px;
+  padding:2px 2px 12px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.my-projects-page-head > div { min-width:0; }
+.my-projects-page-head small {
+  display:block;
+  margin-bottom:2px;
+  color:#73726e;
+  font-size:.68rem;
+  font-weight:700;
+}
+.my-projects-page-head h2 {
+  margin:0;
+  color:#ececea;
+  font-size:1.08rem;
+  font-weight:800;
+}
+.my-projects-upload-btn {
+  flex:none;
+  min-height:42px;
+  padding:0 16px;
+  gap:8px;
+  border-radius:10px;
+  font-weight:760;
+}
 
 @media (min-width:1024px) {
   .container {
@@ -173,6 +204,17 @@ export const homeShellStyles = String.raw`
   .sidebar-view-state > span { min-width:0; display:flex; flex-direction:column; }
   .sidebar-view-state small { color:#66645f; font-size:.58rem; }
   .sidebar-view-state strong { color:#d5c2a5; font-size:.73rem; }
+
+  .sidebar-view-actions { margin-top:0; }
+  .sidebar-view-actions .sidebar-nav-btn { min-height:38px; }
+  .sidebar-view-actions .sidebar-back-shortcut {
+    color:#aaa8a3;
+  }
+  .sidebar-view-actions .sidebar-back-shortcut:hover {
+    border-color:rgba(255,255,255,.065);
+    background:rgba(255,255,255,.035);
+    color:#ececea;
+  }
 
   .sidebar-spacer { flex:1; min-height:18px; }
 
