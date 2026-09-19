@@ -1,10 +1,5 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
-/******/ 	var __webpack_modules__ = ({
-
-/***/ 429:
-/***/ (() => {
-
 
 ;// ./util/iframe_srcdoc.html
 const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
@@ -28,24 +23,19 @@ function createScriptIdIframe() {
 }
 
 ;// ./src/CreativeWorkshop/services/config.ts
-const DEFAULT_CREATIVE_WORKSHOP_URL = 'https://poemofdestinycreativeworkshop.1528779666.workers.dev';
+const DEFAULT_CREATIVE_WORKSHOP_URL = "https://workshop-test.uika.cc.cd";
 const CREATIVE_WORKSHOP_URL_VARIABLE_KEY = 'creative_workshop_worker_url';
-const FORCED_CREATIVE_WORKSHOP_URL_KEY = '__CREATIVE_WORKSHOP_FORCED_URL__';
 function normalizeCreativeWorkshopUrl(url) {
     return url.trim().replace(/\/+$/, '');
 }
 function getCreativeWorkshopUrl() {
-    const forcedUrl = globalThis[FORCED_CREATIVE_WORKSHOP_URL_KEY];
-    if (_.isString(forcedUrl) && forcedUrl.trim()) {
-        return normalizeCreativeWorkshopUrl(forcedUrl);
-    }
     const scriptId = getScriptId();
     const variables = getVariables({ type: 'script', script_id: scriptId });
     const customUrl = _.get(variables, CREATIVE_WORKSHOP_URL_VARIABLE_KEY);
     if (_.isString(customUrl) && customUrl.trim()) {
         return normalizeCreativeWorkshopUrl(customUrl);
     }
-    return DEFAULT_CREATIVE_WORKSHOP_URL;
+    return normalizeCreativeWorkshopUrl(DEFAULT_CREATIVE_WORKSHOP_URL);
 }
 function getCreativeWorkshopOrigin() {
     return new URL(getCreativeWorkshopUrl()).origin;
@@ -68,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = '2.1.1';
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev";
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
@@ -2879,39 +2869,7 @@ $(() => {
     });
 });
 
-
-/***/ })
-
-/******/ 	});
-/************************************************************************/
-/******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
-/******/ 	
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-/******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
-/******/ 		if (cachedModule !== undefined) {
-/******/ 			return cachedModule.exports;
-/******/ 		}
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
-/******/ 			// no module.id needed
-/******/ 			// no module.loaded needed
-/******/ 			exports: {}
-/******/ 		};
-/******/ 	
-/******/ 		// Execute the module function
-/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
-/******/ 	
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-/******/ 	
-/************************************************************************/
-/* harmony import */ var _index__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(429);
-globalThis.__CREATIVE_WORKSHOP_FORCED_URL__ =
-    'https://workshop-test.uika.cc.cd';
+;// ./src/CreativeWorkshop/staging.ts
 
 
 /******/ })()
