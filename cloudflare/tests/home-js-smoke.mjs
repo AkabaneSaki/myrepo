@@ -197,6 +197,8 @@ assert.doesNotMatch(fragments.homeModalsScript, /characterFacetsGroup/);
 assert.match(fragments.homeModalsScript, /封面展示标签（可选）/);
 assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences\)/);
 assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences, project\)/);
+assert.match(fragments.homeModalsScript, /if \(hasNewFile \|\| hasNewRegex\) \{\s*const publishCheck = await openCreatorPublishCheck\(characterReferences, project\)/);
+assert.match(fragments.homeModalsScript, /showToast\(updateResult\.draftProjectId \? '修改已提交审核，主页仍显示旧版本'/);
 assert.match(fragments.homePublishCheckScript, /发布前检查/);
 assert.match(fragments.homePublishCheckScript, /parseOriginalBaselineItem/);
 assert.match(fragments.homePublishCheckScript, /tags\[0\] !== '本体'/);
