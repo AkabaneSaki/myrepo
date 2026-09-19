@@ -99,13 +99,13 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
             worldbooks[worldbookName] ||= [];
             worldbooks[worldbookName].push({
               uid: 999,
-              name: '[WS][DLC][事件]最新版',
+              name: '[DLC][事件][秋日祭][WS]最新版',
               extra: {
                 cw_project_id: projectId,
                 cw_project_name_display: detail.project.name,
                 cw_project_version: detail.project.version,
                 cw_entry_key: `${projectId}:latest-entry`,
-                cw_name_format_version: '4',
+                cw_name_format_version: '2',
               },
             });
           },
@@ -272,39 +272,6 @@ officialBaseline.entries = [
   const report = await harness.api.scanCreativeWorkshopRepairCandidates();
   assert.equal(report.candidates.length, 1, 'v3 entries with different visible categories must still group by Workshop metadata');
   assert.equal(report.candidates[0].name, '圣堂');
-  assert.equal(report.candidates[0].entryCount, 2);
-  assert.equal(report.candidates[0].workshopSourceMarkerCount, 2);
-}
-
-{
-  const v4Entries = [
-    {
-      uid: 401,
-      name: '[WS][DLC][角色]姚（圣堂,廿廿）',
-      extra: {
-        cw_project_id: 'saint-project-v4',
-        cw_project_name_display: '圣堂 v4',
-        cw_project_version: '1.0.0',
-        cw_entry_key: 'saint-project-v4:uid:0',
-        cw_name_format_version: '4',
-      },
-    },
-    {
-      uid: 402,
-      name: '[WS][DLC][势力][圣堂]势力介绍',
-      extra: {
-        cw_project_id: 'saint-project-v4',
-        cw_project_name_display: '圣堂 v4',
-        cw_project_version: '1.0.0',
-        cw_entry_key: 'saint-project-v4:uid:1',
-        cw_name_format_version: '4',
-      },
-    },
-  ];
-  const harness = createHarness({ worldbooks: { DLC: v4Entries } });
-  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
-  assert.equal(report.candidates.length, 1, 'v4 WS-first entries must remain visible to repair scan');
-  assert.equal(report.candidates[0].name, '圣堂 v4');
   assert.equal(report.candidates[0].entryCount, 2);
   assert.equal(report.candidates[0].workshopSourceMarkerCount, 2);
 }

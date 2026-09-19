@@ -1,6 +1,6 @@
 export const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'] as const;
 export const CREATIVE_WORKSHOP_EXTENSION_TYPES = ['规则', '内容'] as const;
-export const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 4;
+export const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 3;
 
 export type CreativeWorkshopProjectType = (typeof CREATIVE_WORKSHOP_PROJECT_TYPES)[number];
 export type CreativeWorkshopExtensionType = (typeof CREATIVE_WORKSHOP_EXTENSION_TYPES)[number];
@@ -73,36 +73,17 @@ function readLeadingBracketSegment(value: string, offset: number): { value: stri
 }
 
 function getExistingDlcCategory(entryName: string): string | null {
-  const first = readLeadingBracketSegment(entryName, 0);
-  if (!first) return null;
-
-  // v4: [WS][DLC][category]author content
-  if (first.value === 'WS') {
-    const dlc = readLeadingBracketSegment(entryName, first.end);
-    if (!dlc || dlc.value !== 'DLC') return null;
-    return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
-  }
-
-  if (first.value !== 'DLC') return null;
-  return readLeadingBracketSegment(entryName, first.end)?.value || null;
+  const dlc = readLeadingBracketSegment(entryName, 0);
+  if (!dlc || dlc.value !== 'DLC') return null;
+  return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
 }
 
 function stripExistingDlcHeader(entryName: string): string {
-  const first = readLeadingBracketSegment(entryName, 0);
-  if (!first) return entryName;
+  const dlc = readLeadingBracketSegment(entryName, 0);
+  if (!dlc || dlc.value !== 'DLC') return entryName;
 
-  // v4: [WS][DLC][category]author content
-  if (first.value === 'WS') {
-    const dlc = readLeadingBracketSegment(entryName, first.end);
-    if (!dlc || dlc.value !== 'DLC') return entryName;
-    const category = readLeadingBracketSegment(entryName, dlc.end);
-    return category ? entryName.slice(category.end) : entryName.slice(dlc.end);
-  }
-
-  if (first.value !== 'DLC') return entryName;
-
-  const category = readLeadingBracketSegment(entryName, first.end);
-  if (!category) return entryName.slice(first.end);
+  const category = readLeadingBracketSegment(entryName, dlc.end);
+  if (!category) return entryName.slice(dlc.end);
 
   const third = readLeadingBracketSegment(entryName, category.end);
   if (!third) return entryName.slice(category.end);
@@ -140,5 +121,5 @@ export function formatCreativeWorkshopEntryName(
   if (projectType === '系统核心') authorContent = stripLegacyCorePrefix(authorContent);
 
   const category = getExistingDlcCategory(entryName) || getCreativeWorkshopDlcCategory(project);
-  return `[WS][DLC][${category}]${authorContent}`;
+  return `[DLC][${category}][WS]${authorContent}`;
 }
