@@ -1,6 +1,6 @@
 {
   "client": {
-    "stable": "2.1.2",
+    "stable": "2.1.3",
     "minimum": "2.1.2",
     "staging": "2.2.0-dev",
     "publicPath": "dist/CreativeWorkshop/index.js",

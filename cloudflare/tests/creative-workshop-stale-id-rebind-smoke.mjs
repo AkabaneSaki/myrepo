@@ -36,7 +36,7 @@ const desired = [{
   legacyKey: newProjectId + ':0',
   sourceName: '角色设定',
   payload: {
-    name: '[DLC][角色][WS]角色设定',
+    name: '[WS][DLC][角色]角色设定',
     comment: '角色设定',
     content: 'new',
     extra: {
@@ -57,6 +57,7 @@ const desired = [{
   assert.equal(result.length, 1);
   assert.equal(result[0].uid, 42, 'confirmed stale-ID rebind should preserve the existing worldbook UID');
   assert.equal(result[0].content, 'new');
+  assert.equal(result[0].name, '[WS][DLC][角色]角色设定');
   assert.equal(result[0].extra.cw_project_id, newProjectId);
   assert.equal(result[0].extra.cw_entry_key, newProjectId + ':entry-1');
 }

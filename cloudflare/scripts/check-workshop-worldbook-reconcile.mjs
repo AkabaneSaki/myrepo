@@ -47,10 +47,10 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
         legacyKey: `${projectId}:0`,
         sourceName: '爱丽丝',
         payload: entry({
-          name: '[DLC][角色][AAA][WS]爱丽丝',
+          name: '[WS][DLC][角色]爱丽丝',
           comment: '爱丽丝',
           content: 'new',
-          extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:1`, cw_name_format_version: 2 },
+          extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:1`, cw_name_format_version: 4 },
         }),
       }),
       desired({
@@ -58,10 +58,10 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
         legacyKey: `${projectId}:1`,
         sourceName: '新增',
         payload: entry({
-          name: '[DLC][角色][AAA][WS]新增',
+          name: '[WS][DLC][角色]新增',
           comment: '新增',
           content: 'added',
-          extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:2`, cw_name_format_version: 2 },
+          extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:2`, cw_name_format_version: 4 },
         }),
       }),
     ],
@@ -73,8 +73,9 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
   assert.ok(updated);
   assert.equal(updated.uid, 10, 'existing entry uid must be preserved');
   assert.equal(updated.content, 'new');
+  assert.equal(updated.name, '[WS][DLC][角色]爱丽丝', 'existing legacy entry must be renamed to the current WS-first format');
   assert.equal(updated.extra.keep_me, 'yes', 'unrelated extra metadata must be preserved');
-  assert.equal(updated.extra.cw_name_format_version, 2);
+  assert.equal(updated.extra.cw_name_format_version, 4);
   assert.equal(result.filter(item => item.extra?.cw_entry_key === `${projectId}:uid:1`).length, 1, 'duplicates must be removed');
   assert.equal(result.some(item => item.extra?.cw_entry_key === `${projectId}:uid:gone`), false, 'removed remote entry must be deleted');
   assert.equal(result.some(item => item.extra?.cw_project_id === 'other-project'), true, 'unrelated project entry must remain');
@@ -99,7 +100,7 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
         legacyKey: `${projectId}:0`,
         sourceName: '旧索引条目',
         payload: entry({
-          name: '[DLC][角色][AAA][WS]旧索引条目',
+          name: '[WS][DLC][角色]旧索引条目',
           comment: '旧索引条目',
           extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:stable` },
         }),
@@ -111,6 +112,7 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
 
   assert.equal(result.length, 1);
   assert.equal(result[0].uid, 20, 'legacy index key migration must preserve uid');
+  assert.equal(result[0].name, '[WS][DLC][角色]旧索引条目');
   assert.equal(result[0].extra.cw_entry_key, `${projectId}:uid:stable`);
 }
 
@@ -132,7 +134,7 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
         legacyKey: `${projectId}:0`,
         sourceName: '远古条目',
         payload: entry({
-          name: '[DLC][角色][AAA][WS]远古条目',
+          name: '[WS][DLC][角色]远古条目',
           comment: '远古条目',
           extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:ancient` },
         }),

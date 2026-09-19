@@ -99,13 +99,13 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
             worldbooks[worldbookName] ||= [];
             worldbooks[worldbookName].push({
               uid: 999,
-              name: '[DLC][事件][秋日祭][WS]最新版',
+              name: '[WS][DLC][事件]最新版',
               extra: {
                 cw_project_id: projectId,
                 cw_project_name_display: detail.project.name,
                 cw_project_version: detail.project.version,
                 cw_entry_key: `${projectId}:latest-entry`,
-                cw_name_format_version: '2',
+                cw_name_format_version: '4',
               },
             });
           },
@@ -241,6 +241,40 @@ officialBaseline.entries = [
   assert.equal(projectIdMeta.status, 'missing');
   assert.equal(entryKeyMeta.status, 'partial');
   assert.ok(candidate.problems.some(problem => problem.includes('缺少 cw_project_id')));
+}
+
+{
+  const v4Entries = [
+    {
+      uid: 291,
+      name: '[WS][DLC][角色]姚（圣堂,廿廿）',
+      extra: {
+        cw_project_id: 'v4-project',
+        cw_project_name_display: 'V4项目',
+        cw_project_version: '1.0.0',
+        cw_entry_key: 'v4-project:uid:0',
+        cw_name_format_version: '4',
+      },
+    },
+    {
+      uid: 292,
+      name: '[WS][DLC][势力][圣堂]势力介绍',
+      extra: {
+        cw_project_id: 'v4-project',
+        cw_project_name_display: 'V4项目',
+        cw_project_version: '1.0.0',
+        cw_entry_key: 'v4-project:uid:1',
+        cw_name_format_version: '4',
+      },
+    },
+  ];
+  const harness = createHarness({ worldbooks: { DLC: v4Entries } });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(report.candidates.length, 1, 'v4 WS-first entries must be recognized by Repair');
+  assert.equal(report.candidates[0].name, 'V4项目');
+  assert.equal(report.candidates[0].entryCount, 2);
+  assert.equal(report.candidates[0].dlcHeaderCount, 2);
+  assert.equal(report.candidates[0].workshopSourceMarkerCount, 2);
 }
 
 {
@@ -399,7 +433,8 @@ assert.match(protocolSource, /bridge:repair:project/);
 assert.match(bridgeSource, /scanCreativeWorkshopRepairCandidates/);
 assert.match(bridgeSource, /repairCreativeWorkshopProject/);
 assert.match(repairUiSource, /buildDlcRepairReportText/);
-assert.match(repairUiSource, /Promise\.all\(selected\.map/);
+assert.match(repairUiSource, /resolveWorkshopRepairCandidates\(requests\)/, 'select all must use the bounded batch resolver');
+assert.doesNotMatch(repairUiSource, /Promise\.all\(selected\.map\(item => analyzeDlcRepairItem/, 'select all must not fan out one resolver request per DLC');
 assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matching may run in parallel, but local replacement must be sequential');
 assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
