@@ -1,5 +1,34 @@
 # Repository Operating Rules
 
+## Mandatory task-intent header
+
+Every project-related agent reply must begin with these three lines:
+
+```text
+[当前主场: <persona>]
+[Workspace: <project> | Worktree: <worktree> | Branch: <branch> | <verified state>]
+[Task: <mission type / concise objective> | Baseline: <verified source line> | Direction: <intended promotion / forward-port direction>]
+```
+
+The third line is an execution-routing declaration, not decoration. It must show the agent's intent before code mutation.
+
+Routing rules:
+
+- **Normal development / staging-line fix**
+  - Baseline: latest verified `origin/staging`.
+  - Direction: `staging → task → staging → production`.
+- **Production hotfix / patch release**
+  - Baseline: exact verified `upstream/main` / current production source.
+  - Direction: `main → hotfix → main`.
+  - Optional post-hotfix sync: only after production is complete, forward-port the finished fix to `origin/staging` if the future line still needs it. This sync is not part of the hotfix Direction.
+- **Read-only audit / investigation**
+  - Baseline: the verified branch/worktree being inspected.
+  - Direction: `read-only` unless the user authorizes a repair path.
+
+Never infer Task, Baseline, Direction, worktree, or branch from a previous turn. Verify them before mutation. If the declared Task/Baseline/Direction does not match the requested operation, stop before editing and correct the routing declaration.
+
+A production hotfix must never be implemented on `origin/staging` first and then backported/cherry-picked into production.
+
 These rules apply to all agents and automated sessions working in this repository.
 
 ## Canonical Git topology
@@ -11,17 +40,18 @@ These rules apply to all agents and automated sessions working in this repositor
   - `upstream` = owner repository (`AkabaneSaki/myrepo`)
 - Normally, `upstream/main` is the canonical production source branch.
 - `origin/main` should be kept synchronized with `upstream/main`; do not use the fork `main` as a task-development branch.
-- `origin/staging` is the long-lived integration branch used for Master staging validation before any owner PR.
+- `origin/staging` is the long-lived integration branch used for Master validation of normal feature-line work before its owner PR. Production hotfixes use the separate main-based path defined below.
 
-### Release transition — 2.1
+### Release and branch-routing policy
 
-The temporary 2.0.15 recovery exception is retired for active development. The immutable `2.0.15` release tag remains the historical production backup; do not keep old hotfix/release branches merely as archives.
-
-- The forward development line already contains the required 2.0.15 reliability protections for project/cache freshness, worldbook update reconciliation/install identity, and per-project install/update/uninstall mutation serialization. Preserve equivalent protections during later refactors.
-- `origin/main` remains a synchronized mirror of `upstream/main`; never reset or force-push either main branch back to 2.0.15.
-- 2.1 follows the normal release flow: task branch -> `origin/staging` -> Master staging acceptance -> owner PR / `upstream/main` -> stable 2.1 tag -> production deployment.
-- Until Master explicitly accepts the 2.1 staging build and the exact accepted changes are present in `upstream/main`, do not deploy 2.1 to production or treat a newer main commit as an approved release.
-- After 2.1 is released, production source returns fully to the normal rule: the exact accepted `upstream/main` commit plus its stable release tag. No 2.0.15 branch exception remains.
+- Creative Workshop SemVer belongs to the **SillyTavern client artifact**, not to the Worker/web deployment.
+- Current client release values are read only from `config/workshop.json`; do not copy the live values into SOP prose.
+- Historical release tags are immutable.
+- **Normal development / staging-line fixes start from refreshed `origin/staging`, not `upstream/main`.**
+- **Production hotfixes / patch releases start from exact current production / refreshed `upstream/main`, never from `origin/staging`.**
+- Never implement a production hotfix on staging first and backport it into production.
+- After a production hotfix is complete, forward-port the finished logical fix to `origin/staging` only if the future line still needs it.
+- Worker/web/backend-only changes do not consume client SemVer while the existing client remains compatible.
 
 Before the first Git remote operation in every session, verify both actual remote URLs. Never infer ownership from a remote name alone.
 
@@ -132,16 +162,16 @@ Before commit, merge, rebase, push, tag, PR preparation, deploy, or branch clean
 4. Refresh owner main explicitly with:
    `git fetch upstream main:refs/remotes/upstream/main`
    Do not rely on `FETCH_HEAD` as proof that `upstream/main` is current.
-5. Compare the task branch against refreshed `upstream/main`.
+5. Compare the task branch against its declared Baseline: `origin/staging` for normal development, `upstream/main` / exact production source for a production hotfix.
 6. Never use `git add .` in a dirty multi-task workspace. Stage explicit reviewed paths only.
 7. Never force-push `upstream/main` or `origin/main`.
 8. Before `deploy staging`, refresh/verify `origin/staging` and record the exact deploy SHA.
 
 ## Normal task / staging / production flow
 
-1. Refresh `upstream/main`.
-2. Synchronize `origin/main` with `upstream/main` when needed.
-3. Create a short-lived task branch from refreshed `upstream/main`.
+1. Refresh `origin/staging` and `upstream/main`.
+2. Confirm this is normal development, not a production hotfix.
+3. Create a short-lived task branch from refreshed `origin/staging`.
 4. Implement, test, and review.
 5. Commit only the intended files.
 6. Push the task branch to `origin` when useful for backup/review.
