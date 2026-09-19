@@ -171,19 +171,22 @@ assert.equal(d4PreviewEntry.order, 99);
 assert.equal(d4PreviewEntry.constant, true);
 
 const clientVersionSource = await readFile(resolve('../src/CreativeWorkshop/version.ts'), 'utf8');
-const clientVersionMatch = clientVersionSource.match(/CREATIVE_WORKSHOP_CLIENT_VERSION\s*=\s*'([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)'/);
-const advertisedVersionMatch = fragments.homeLayoutRenderScript.match(/WORKSHOP_RELEASE_VERSION = \"([0-9]+\.[0-9]+\.[0-9]+)\"/);
-assert.ok(clientVersionMatch, 'Creative Workshop client self-version must be readable');
-assert.ok(advertisedVersionMatch, 'Workshop advertised release version must be readable');
-assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT|test-dist\/CreativeWorkshop\/index\.js/);
+const workshopConfig = JSON.parse(await readFile(resolve('../config/workshop.json'), 'utf8'));
+assert.match(clientVersionSource, /__CREATIVE_WORKSHOP_CLIENT_VERSION__/);
+assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_STABLE_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.stable/);
+assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_MINIMUM_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.minimum/);
+assert.match(workshopConfig.client.stable, /^\d+\.\d+\.\d+$/);
+assert.match(workshopConfig.client.minimum, /^\d+\.\d+\.\d+$/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT|WORKSHOP_RELEASE_VERSION/);
 assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
 assert.match(fragments.homeModalsScript, /releaseUpdateAcknowledgeBtn[\s\S]*requestCloseWorkshop\(\)/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
 assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
 assert.doesNotMatch(fragments.homeModalsScript, /releaseUpdateCode|data-dependency-copy|getScriptDependencySuggestedImport/);
-assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(WORKSHOP_RELEASE_VERSION\)[\s\S]*openReleaseNoticeModal\(\)/);
-assert.match(fragments.homeTavernBridgeScript, /【命定之诗】角色管理库/);
+assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(WORKSHOP_MINIMUM_CLIENT_VERSION\)[\s\S]*openReleaseNoticeModal\(\)/);
+assert.match(fragments.homeTavernBridgeScript, /WORKSHOP_CONFIG\.scriptDependencies/);
+assert.match(fragments.homeModalsScript, /WORKSHOP_CONFIG\.client\.migrations/);
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\"[^>]*accept=\"\.json\"[^>]*multiple/);
@@ -770,10 +773,11 @@ const taxonomyLabelUi = Function(
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: '规则' }), '扩展 · 规则');
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: null }), '扩展');
 
-const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', `return (${appExpression});`)(
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
   JSON.stringify(testProjectTaxonomy),
+  JSON.stringify(workshopConfig),
 );
 assert.equal(typeof homeScript, 'string');
 new Function(homeScript);

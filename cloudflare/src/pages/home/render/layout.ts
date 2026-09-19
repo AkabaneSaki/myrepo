@@ -1,5 +1,6 @@
 export const homeLayoutRenderScript = [
-  'const WORKSHOP_RELEASE_VERSION = "2.1.1";',
+  'const WORKSHOP_STABLE_CLIENT_VERSION = WORKSHOP_CONFIG.client.stable;',
+  'const WORKSHOP_MINIMUM_CLIENT_VERSION = WORKSHOP_CONFIG.client.minimum;',
 
   'function isDesktopWorkshopLayout() {',
   '  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;',
