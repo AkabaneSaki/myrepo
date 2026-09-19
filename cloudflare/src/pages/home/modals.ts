@@ -118,7 +118,7 @@ export const homeModalsScript = [
   '  overlay.dataset.workshopReleaseModal = "true";',
   '  overlay.querySelector(".close-btn")?.remove();',
   '  overlay.addEventListener("click", event => { if (event.target === overlay) event.stopImmediatePropagation(); }, true);',
-  '  overlay.querySelector("#releaseUpdateAcknowledgeBtn")?.addEventListener("click", () => overlay.remove());',
+  '  overlay.querySelector("#releaseUpdateAcknowledgeBtn")?.addEventListener("click", () => requestCloseWorkshop());',
   '  overlay.querySelector("#releaseUpdateLookAgainBtn")?.addEventListener("click", () => showToast("可以唷～那再看一眼", "warning"));',
   '  return overlay;',
   '}',

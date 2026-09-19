@@ -178,6 +178,7 @@ assert.ok(advertisedVersionMatch, 'Workshop advertised release version must be r
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT|test-dist\/CreativeWorkshop\/index\.js/);
 assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
+assert.match(fragments.homeModalsScript, /releaseUpdateAcknowledgeBtn[\s\S]*requestCloseWorkshop\(\)/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
 assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
 assert.doesNotMatch(fragments.homeModalsScript, /releaseUpdateCode|data-dependency-copy|getScriptDependencySuggestedImport/);
