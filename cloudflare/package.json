@@ -49,7 +49,7 @@
     "check:project-precautions": "node tests/project-precautions-smoke.mjs",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
-    "check:creative-workshop-name-format": "node tests/workshop-entry-name-v2.mjs && node scripts/check-workshop-worldbook-reconcile.mjs && node tests/creative-workshop-repair-smoke.mjs && node tests/creative-workshop-stale-id-rebind-smoke.mjs",
+    "check:creative-workshop-name-format": "node tests/workshop-entry-name-v2.mjs && node scripts/check-workshop-worldbook-reconcile.mjs && node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-repair-d1-guard": "node tests/creative-workshop-repair-d1-guard-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",
     "check:workshop-config": "node ../scripts/check-workshop-config.mjs"

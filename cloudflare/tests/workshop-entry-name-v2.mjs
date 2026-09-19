@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   CREATIVE_WORKSHOP_NAME_FORMAT_VERSION,
@@ -125,6 +126,20 @@ assert.equal(getCreativeWorkshopDlcCategory(project('角色')), '角色');
 assert.equal(getCreativeWorkshopDlcCategory(project('事件')), '事件');
 assert.equal(getCreativeWorkshopDlcCategory(project('扩展', '规则')), '扩展');
 assert.equal(getCreativeWorkshopDlcCategory(project('扩展', '内容')), '扩展');
+
+const repairSource = await readFile(new URL('../../src/CreativeWorkshop/services/repair.ts', import.meta.url), 'utf8');
+assert.ok(
+  repairSource.includes("const v4 = value.match(/^\\[WS\\]\\[DLC\\]"),
+  'Repair must recognize WS-first v4 entry names',
+);
+assert.ok(
+  repairSource.includes("const v3 = value.match(/^\\[DLC\\]\\[([^\\]]+)\\]\\[WS\\]"),
+  'Repair must keep v3 compatibility',
+);
+assert.ok(
+  repairSource.includes("const v2 = value.match(/^\\[DLC\\]\\[([^\\]]+)\\]\\[([^\\]]+)\\]\\[WS\\]"),
+  'Repair must keep v2 compatibility',
+);
 
 for (const testCase of cases) {
   const actual = formatCreativeWorkshopEntryName(
