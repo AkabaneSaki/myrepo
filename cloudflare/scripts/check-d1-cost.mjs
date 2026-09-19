@@ -18,7 +18,7 @@ const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
 const scenarios = [
-  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 12, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
+  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 30, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '分类 · 角色发现', params: { page: 0, pageSize: 12, sort: 'discover', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '深分页 · 发现第 11 页', params: { page: 10, pageSize: 12, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
