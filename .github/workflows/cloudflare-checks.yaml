@@ -55,5 +55,8 @@ jobs:
       - name: DLC Repair D1 guard smoke
         run: npm run check:creative-workshop-repair-d1-guard
 
+      - name: CreativeWorkshop WS-first name format
+        run: npm run check:creative-workshop-name-format
+
       - name: CreativeWorkshop syntax
         run: npm run check:creative-workshop-syntax

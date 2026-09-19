@@ -196,6 +196,15 @@ function parseDlcEntryName(name: unknown): CandidateEntryRow['header'] {
   if (!_.isString(name)) return null;
   const value = String(name);
 
+  const v4 = value.match(/^\[WS\]\[DLC\]\[([^\]]+)\]/);
+  if (v4) {
+    return {
+      category: v4[1],
+      projectName: null,
+      workshopSourceMarker: true,
+    };
+  }
+
   const v3 = value.match(/^\[DLC\]\[([^\]]+)\]\[WS\]/);
   if (v3) {
     return {
