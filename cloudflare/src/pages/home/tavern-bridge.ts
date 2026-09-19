@@ -7,7 +7,7 @@ const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
 const installSubscriptionSyncChains = new Map();
 const SCRIPT_DEPENDENCY_REGISTRY = new Map([
-  ['uikawinwing/CharInfo-Manager', { name: 'CharInfo Manager', latestVersion: '0.3.2' }],
+  ['uikawinwing/CharInfo-Manager', { name: '【命定之诗】角色管理库', latestVersion: '0.3.2' }],
 ]);
 
 state.tavern.scriptDependenciesSupported = false;

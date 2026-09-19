@@ -183,6 +183,7 @@ assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
 assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
 assert.doesNotMatch(fragments.homeModalsScript, /releaseUpdateCode|data-dependency-copy|getScriptDependencySuggestedImport/);
 assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(WORKSHOP_RELEASE_VERSION\)[\s\S]*openReleaseNoticeModal\(\)/);
+assert.match(fragments.homeTavernBridgeScript, /【命定之诗】角色管理库/);
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\"[^>]*accept=\"\.json\"[^>]*multiple/);
