@@ -18,6 +18,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .release-update-lead { color:#b8b6b1; }
 .release-update-steps { margin-left:22px; display:flex; flex-direction:column; gap:9px; }
 .release-update-steps code { color:#c9ae87; }
+.release-update-migration-note { color:#e9c46a; font-weight:760; }
 .release-update-version-warning { color:#e9c46a; font-size:1rem; font-weight:800; text-align:center; }
 .release-update-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:4px; }
 .release-update-actions > * { flex:1; min-height:44px; }

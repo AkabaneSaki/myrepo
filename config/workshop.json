@@ -1,0 +1,37 @@
+{
+  "client": {
+    "stable": "2.1.2",
+    "minimum": "2.1.2",
+    "staging": "2.2.0-dev",
+    "publicPath": "dist/CreativeWorkshop/index.js",
+    "migrations": [
+      {
+        "beforeVersion": "2.1.2",
+        "fromPath": "test-dist/CreativeWorkshop/index.js",
+        "toPath": "dist/CreativeWorkshop/index.js",
+        "mode": "self-rewrite",
+        "message": "这次只需要把版本号改成最新版本；如果仍是旧 test-dist 路径，迁移器会自动改成 dist。自动迁移失败时，再手动删掉 test-。"
+      }
+    ],
+    "stagingPublicPath": "dist/CreativeWorkshop-staging/index.js",
+    "legacyShimPath": "test-dist/CreativeWorkshop/index.js"
+  },
+  "endpoints": {
+    "production": "https://poemofdestinycreativeworkshop.1528779666.workers.dev",
+    "staging": "https://workshop-test.uika.cc.cd",
+    "stagingAliases": [
+      "https://poemofdestinycreativeworkshop-master-staging.johnjohnson67076.workers.dev"
+    ]
+  },
+  "scriptDependencies": [
+    {
+      "key": "uikawinwing/CharInfo-Manager",
+      "displayName": "【命定之诗】角色管理库",
+      "latestVersion": "0.3.2"
+    }
+  ],
+  "release": {
+    "repository": "AkabaneSaki/myrepo",
+    "cdnBase": "https://testingcf.jsdelivr.net/gh"
+  }
+}

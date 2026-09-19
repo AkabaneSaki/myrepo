@@ -6,9 +6,12 @@ const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
 const installSubscriptionSyncChains = new Map();
-const SCRIPT_DEPENDENCY_REGISTRY = new Map([
-  ['uikawinwing/CharInfo-Manager', { name: '【命定之诗】角色管理库', latestVersion: '0.3.2' }],
-]);
+const SCRIPT_DEPENDENCY_REGISTRY = new Map(
+  (WORKSHOP_CONFIG.scriptDependencies || []).map(item => [
+    String(item.key || ''),
+    { name: String(item.displayName || item.key || '脚本'), latestVersion: String(item.latestVersion || '') },
+  ]),
+);
 
 state.tavern.scriptDependenciesSupported = false;
 state.tavern.scriptDependenciesLoaded = false;
@@ -212,7 +215,7 @@ function handleBridgeMessage(event) {
       setTavernConnectionStatus('connected');
       setTavernClientVersion(data.payload?.clientVersion);
       renderApp();
-      if (shouldShowWorkshopReleaseNotice(WORKSHOP_RELEASE_VERSION)) {
+      if (shouldShowWorkshopReleaseNotice(WORKSHOP_MINIMUM_CLIENT_VERSION)) {
         openReleaseNoticeModal();
       }
       break;
