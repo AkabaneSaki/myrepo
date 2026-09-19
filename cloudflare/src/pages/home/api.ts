@@ -1,6 +1,11 @@
 export const homeApiScript = String.raw`
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 const UPLOAD_SIZE_ERROR = '文件过大，最大 10MB';
+const REPAIR_RESOLVE_CACHE_TTL_MS = 5 * 60 * 1000;
+const REPAIR_RESOLVE_LOCK_STORAGE_PREFIX = 'creative_workshop_repair_locked_until_v1:';
+const REPAIR_DAILY_LOCK_MESSAGE = '好啦別再点了喵！截图然后去DC找我吧喵！';
+const repairResolveCache = new Map();
+let repairLockNoticeShownFor = '';
 
 function assertUploadSize(file) {
   if (file && Number(file.size) > MAX_UPLOAD_SIZE) {
@@ -73,7 +78,11 @@ async function apiFetch(endpoint, options = {}) {
   const { rawText, data } = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(resolveApiErrorMessage(response.status, rawText, data, '请求失败(' + response.status + ')'));
+    const requestError = new Error(resolveApiErrorMessage(response.status, rawText, data, '请求失败(' + response.status + ')'));
+    requestError.status = response.status;
+    requestError.code = data?.code || '';
+    requestError.lockedUntil = data?.lockedUntil || null;
+    throw requestError;
   }
 
   return data || {};
@@ -255,7 +264,122 @@ async function fetchProjects(forceRefresh = false, options = {}) {
 }
 
 function normalizeRepairProjectName(value) {
-  return String(value || '').trim().toLocaleLowerCase();
+  return String(value || '').trim().toLowerCase();
+}
+
+function getRepairResolveLockStorageKey() {
+  const identity = String(state.currentUser?.id || 'anonymous').trim() || 'anonymous';
+  return REPAIR_RESOLVE_LOCK_STORAGE_PREFIX + identity;
+}
+
+function getRepairResolveLockedUntil() {
+  try {
+    const storageKey = getRepairResolveLockStorageKey();
+    const value = String(localStorage.getItem(storageKey) || '').trim();
+    const lockedUntil = Date.parse(value);
+    if (!value || !Number.isFinite(lockedUntil) || lockedUntil <= Date.now()) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+    return new Date(lockedUntil).toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function setRepairResolveLockedUntil(value) {
+  const lockedUntil = Date.parse(String(value || ''));
+  if (!Number.isFinite(lockedUntil) || lockedUntil <= Date.now()) return null;
+  const normalized = new Date(lockedUntil).toISOString();
+  try {
+    localStorage.setItem(getRepairResolveLockStorageKey(), normalized);
+  } catch {}
+  return normalized;
+}
+
+function showRepairResolveLockNotice(lockedUntil) {
+  const normalized = setRepairResolveLockedUntil(lockedUntil) || getRepairResolveLockedUntil();
+  const noticeKey = normalized || 'locked';
+  if (repairLockNoticeShownFor !== noticeKey) {
+    repairLockNoticeShownFor = noticeKey;
+    alert(REPAIR_DAILY_LOCK_MESSAGE);
+  }
+  return normalized;
+}
+
+function createRepairResolveLockedError(lockedUntil) {
+  const error = new Error(REPAIR_DAILY_LOCK_MESSAGE);
+  error.code = 'REPAIR_DAILY_LOCKED';
+  error.lockedUntil = lockedUntil || null;
+  return error;
+}
+
+function getRepairResolveCacheKey(candidate) {
+  const projectId = String(candidate?.projectId || '').trim();
+  const name = normalizeRepairProjectName(candidate?.name);
+  return projectId + '|' + name;
+}
+
+async function resolveWorkshopRepairCandidates(candidates) {
+  const input = (Array.isArray(candidates) ? candidates : []).slice(0, 50).map((candidate, index) => ({
+    candidateId: String(candidate?.candidateId || ('candidate-' + index)).trim(),
+    projectId: String(candidate?.projectId || '').trim(),
+    name: String(candidate?.name || '').trim(),
+  })).filter(candidate => candidate.candidateId);
+
+  if (!input.length) return [];
+
+  const existingLock = getRepairResolveLockedUntil();
+  if (existingLock) {
+    showRepairResolveLockNotice(existingLock);
+    throw createRepairResolveLockedError(existingLock);
+  }
+
+  const now = Date.now();
+  const resolvedByCandidateId = new Map();
+  const pending = [];
+  input.forEach(candidate => {
+    const cacheKey = getRepairResolveCacheKey(candidate);
+    const cached = repairResolveCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      resolvedByCandidateId.set(candidate.candidateId, cached.result);
+      return;
+    }
+    if (cached) repairResolveCache.delete(cacheKey);
+    pending.push(candidate);
+  });
+
+  if (pending.length) {
+    let data;
+    try {
+      data = await apiFetch('/api/projects/repair-resolve', {
+        method: 'POST',
+        body: JSON.stringify({ candidates: pending }),
+      });
+    } catch (error) {
+      if (error?.code === 'REPAIR_DAILY_LOCKED') {
+        showRepairResolveLockNotice(error.lockedUntil);
+      }
+      throw error;
+    }
+
+    const serverResults = new Map((Array.isArray(data.results) ? data.results : []).map(result => [
+      String(result?.candidateId || ''),
+      result,
+    ]));
+    pending.forEach(candidate => {
+      const result = serverResults.get(candidate.candidateId)
+        || { candidateId: candidate.candidateId, status: 'none', method: 'exact_name', projects: [] };
+      repairResolveCache.set(getRepairResolveCacheKey(candidate), {
+        expiresAt: now + REPAIR_RESOLVE_CACHE_TTL_MS,
+        result,
+      });
+      resolvedByCandidateId.set(candidate.candidateId, result);
+    });
+  }
+
+  return input.map(candidate => resolvedByCandidateId.get(candidate.candidateId)
+    || { candidateId: candidate.candidateId, status: 'none', method: 'exact_name', projects: [] });
 }
 
 function buildRepairSearchTerm(value) {
@@ -283,41 +407,31 @@ async function searchWorkshopProjectsByName(query) {
 }
 
 async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
-  const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
-  const detectedIds = detectedProjectId && isWorkshopUuid(detectedProjectId) ? [detectedProjectId] : [];
-
-  if (!manualQuery && detectedIds.length) {
-    try {
-      const exactData = await apiFetch('/api/projects/batch', {
-        method: 'POST',
-        body: JSON.stringify({ projectIds: detectedIds.slice(0, 50) }),
-      });
-      const exactProjects = Array.isArray(exactData.projects) ? exactData.projects : [];
-      if (exactProjects.length === 1) {
-        return { status: 'unique', method: 'project_id', projects: exactProjects };
-      }
-      if (exactProjects.length > 1) {
-        return { status: 'ambiguous', method: 'project_id', projects: exactProjects };
-      }
-    } catch (error) {
-      console.warn('[CreativeWorkshop] repair project-id match failed', { candidate, error });
+  if (manualQuery) {
+    const { projects, exactNameMatches } = await searchWorkshopProjectsByName(manualQuery);
+    if (exactNameMatches.length === 1) {
+      return { status: 'candidates', method: 'manual_exact_name', projects: exactNameMatches };
     }
+    if (exactNameMatches.length > 1) {
+      return { status: 'ambiguous', method: 'manual_exact_name', projects: exactNameMatches };
+    }
+    if (projects.length > 0) {
+      return { status: 'candidates', method: 'manual_search', projects };
+    }
+    return { status: 'none', method: 'manual_search', projects: [] };
   }
 
-  const query = String(manualQuery || candidate?.name || candidate?.legacyProjectName || '').trim();
-  if (!query) return { status: 'none', method: 'none', projects: [] };
-  const { projects, exactNameMatches } = await searchWorkshopProjectsByName(query);
+  const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
+  const projectId = detectedProjectId && isWorkshopUuid(detectedProjectId) ? detectedProjectId : '';
+  const name = String(candidate?.name || candidate?.legacyProjectName || '').trim();
+  if (!projectId && !name) return { status: 'none', method: 'none', projects: [] };
 
-  if (exactNameMatches.length === 1) {
-    return { status: 'candidates', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
-  }
-  if (exactNameMatches.length > 1) {
-    return { status: 'ambiguous', method: manualQuery ? 'manual_exact_name' : 'exact_name', projects: exactNameMatches };
-  }
-  if (projects.length > 0) {
-    return { status: 'candidates', method: manualQuery ? 'manual_search' : 'name_search', projects };
-  }
-  return { status: 'none', method: manualQuery ? 'manual_search' : 'name_search', projects: [] };
+  const [result] = await resolveWorkshopRepairCandidates([{
+    candidateId: String(candidate?.candidateId || projectId || name),
+    projectId,
+    name,
+  }]);
+  return result || { status: 'none', method: 'exact_name', projects: [] };
 }
 
 async function fetchInstalledProjectDetails() {
@@ -348,7 +462,7 @@ async function fetchInstalledProjectDetails() {
 
   const foundRemoteIds = new Set(remoteProjects.map(project => project?.id).filter(Boolean));
   const missingIdSet = new Set(missingProjectIds);
-  const nameSearchCache = new Map();
+  const rebindRequests = [];
   for (const localProject of installedProjects) {
     const currentProjectId = localProject.projectId || localProject.id;
     if (!missingIdSet.has(currentProjectId) || foundRemoteIds.has(currentProjectId)) continue;
@@ -358,15 +472,24 @@ async function fetchInstalledProjectDetails() {
       setInstalledProjectRebindCandidates(installedProjectId, []);
       continue;
     }
+    rebindRequests.push({
+      candidateId: installedProjectId,
+      projectId: isWorkshopUuid(installedProjectId) ? installedProjectId : '',
+      name: projectNameHint,
+    });
+  }
+
+  if (rebindRequests.length) {
     try {
-      if (!nameSearchCache.has(projectNameHint)) {
-        nameSearchCache.set(projectNameHint, searchWorkshopProjectsByName(projectNameHint));
-      }
-      const result = await nameSearchCache.get(projectNameHint);
-      setInstalledProjectRebindCandidates(installedProjectId, result?.exactNameMatches || []);
+      const resolved = await resolveWorkshopRepairCandidates(rebindRequests);
+      const byCandidateId = new Map(resolved.map(result => [String(result?.candidateId || ''), result]));
+      rebindRequests.forEach(request => {
+        const result = byCandidateId.get(request.candidateId);
+        setInstalledProjectRebindCandidates(request.candidateId, Array.isArray(result?.projects) ? result.projects : []);
+      });
     } catch (error) {
-      console.warn('[CreativeWorkshop] stale installed project candidate lookup failed', { installedProjectId, error });
-      setInstalledProjectRebindCandidates(installedProjectId, []);
+      console.warn('[CreativeWorkshop] stale installed project batch candidate lookup failed', { error });
+      rebindRequests.forEach(request => setInstalledProjectRebindCandidates(request.candidateId, []));
     }
   }
 

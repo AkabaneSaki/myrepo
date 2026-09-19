@@ -21,6 +21,7 @@ import {
   MyProjects,
   MySubscriptions,
   ProjectBatchFetch,
+  ProjectRepairResolve,
   ProjectCoverPresentationUpdate,
   ProjectCoverUpload,
   ProjectCreate,
@@ -178,6 +179,7 @@ openapi.post('/api/auth/logout', AuthLogout);
 // ============ 项目接口 (公开) ============
 openapi.get('/api/projects', ProjectList);
 openapi.post('/api/projects/batch', ProjectBatchFetch);
+openapi.post('/api/projects/repair-resolve', ProjectRepairResolve);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 openapi.get('/api/site/discover-banner', DiscoverBannerGet);
 openapi.get('/api/character-references', CharacterReferenceList);

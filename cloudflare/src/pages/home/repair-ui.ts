@@ -103,7 +103,7 @@ function buildRepairMatchProjectsHtml(item) {
   }).join('') + '</div>';
 }
 
-function buildRepairCandidateHtml(item) {
+function buildRepairCandidateHtml(item, repairLocked = false) {
   const candidate = item.candidate;
   const problems = Array.isArray(candidate.problems) ? candidate.problems : [];
   const matchProject = item.match?.status === 'unique' ? item.match.projects?.[0] : null;
@@ -125,14 +125,14 @@ function buildRepairCandidateHtml(item) {
       + projectSummary
       + buildRepairMatchProjectsHtml(item)
       + ((item.match && item.match.status !== 'unique')
-        ? '<div class="repair-manual-search"><input type="text" data-repair-search-input="' + escapeHtml(candidate.candidateId) + '" value="' + escapeHtml(candidate.name || '') + '" placeholder="输入项目名称"><button type="button" class="btn btn-outline" data-repair-search="' + escapeHtml(candidate.candidateId) + '"><i class="fas fa-search"></i> 搜索</button></div>'
+        ? '<div class="repair-manual-search"><input type="text" data-repair-search-input="' + escapeHtml(candidate.candidateId) + '" value="' + escapeHtml(candidate.name || '') + '" placeholder="输入项目名称" ' + (repairLocked ? 'disabled' : '') + '><button type="button" class="btn btn-outline" data-repair-search="' + escapeHtml(candidate.candidateId) + '" ' + (repairLocked ? 'disabled' : '') + '><i class="fas fa-search"></i> 搜索</button></div>'
         : '')
       + '</div>'
     : '';
 
   return '<article class="repair-candidate ' + (item.selected ? 'selected' : '') + '" data-repair-candidate-card="' + escapeHtml(candidate.candidateId) + '">'
     + '<div class="repair-candidate-head">'
-    + '<label class="repair-select"><input type="checkbox" data-repair-select="' + escapeHtml(candidate.candidateId) + '" ' + (item.selected ? 'checked' : '') + '><span></span></label>'
+    + '<label class="repair-select"><input type="checkbox" data-repair-select="' + escapeHtml(candidate.candidateId) + '" ' + (item.selected ? 'checked' : '') + ' ' + (repairLocked ? 'disabled' : '') + '><span></span></label>'
     + '<div class="repair-candidate-title"><strong>' + escapeHtml(candidate.name || '未命名 DLC') + '</strong><small>' + escapeHtml(candidate.category || '未知分类') + ' · ' + escapeHtml(candidate.worldbookName || '未知世界书') + '</small></div>'
     + '<span class="repair-item-status">' + escapeHtml(getRepairStatusLabel(item.status)) + '</span>'
     + '</div>'
@@ -152,11 +152,11 @@ function buildRepairCandidateHtml(item) {
     + '</article>';
 }
 
-function buildPendingRepairHtml(report) {
+function buildPendingRepairHtml(report, repairLocked = false) {
   const pending = Array.isArray(report?.pending) ? report.pending : [];
   if (!pending.length) return '';
   return '<section class="repair-pending"><h3><i class="fas fa-clock-rotate-left"></i> 未完成的修复</h3><p>这些任务之前中断或失败，可以直接重新下载 Workshop 最新版并继续。</p>'
-    + pending.map(record => '<div class="repair-pending-row"><div><strong>' + escapeHtml(record.target?.candidateId || record.target?.projectId || '未知任务') + '</strong><small>' + escapeHtml(record.status || '') + (record.error ? ' · ' + escapeHtml(record.error) : '') + '</small></div><button type="button" class="btn btn-primary" data-repair-retry="' + escapeHtml(record.repairId || '') + '">重新下载并继续</button></div>').join('')
+    + pending.map(record => '<div class="repair-pending-row"><div><strong>' + escapeHtml(record.target?.candidateId || record.target?.projectId || '未知任务') + '</strong><small>' + escapeHtml(record.status || '') + (record.error ? ' · ' + escapeHtml(record.error) : '') + '</small></div><button type="button" class="btn btn-primary" data-repair-retry="' + escapeHtml(record.repairId || '') + '" ' + (repairLocked ? 'disabled' : '') + '>重新下载并继续</button></div>').join('')
     + '</section>';
 }
 
@@ -220,6 +220,8 @@ function renderDlcRepairModal() {
   const root = overlay.querySelector('#dlcRepairRoot');
   if (!root) return;
   const report = dlcRepairUiState.report;
+  const repairLockedUntil = getRepairResolveLockedUntil();
+  const repairLocked = Boolean(repairLockedUntil);
   if (!report) {
     root.innerHTML = '<div class="repair-loading"><i class="fas fa-spinner fa-spin"></i><strong>正在检查已启用的世界书...</strong><span>只在本机读取必要资料，不会上传世界书正文。</span></div>';
     return;
@@ -234,7 +236,7 @@ function renderDlcRepairModal() {
   const readyItems = selectedItems.filter(item => item.match?.status === 'unique' && isRepairCandidateSafe(item.candidate) && !['repairing', 'completed'].includes(item.status));
   const needsAttention = selectedItems.filter(item => item.match?.status !== 'unique' || !isRepairCandidateSafe(item.candidate));
   const candidateHtml = dlcRepairUiState.items.size
-    ? Array.from(dlcRepairUiState.items.values()).map(buildRepairCandidateHtml).join('')
+    ? Array.from(dlcRepairUiState.items.values()).map(item => buildRepairCandidateHtml(item, repairLocked)).join('')
     : '<div class="repair-empty"><i class="fas fa-circle-check"></i><strong>这些世界书里没有发现需要重装的 DLC</strong><p>如果你要找的 DLC 在其他世界书，点上方「改扫其他世界书」。</p></div>';
   const scannedLabel = scannedWorldbooks.length ? scannedWorldbooks.join('、') : '没有可扫描的世界书';
   const otherWorldbookOptions = availableWorldbooks.slice().sort((a, b) => String(a).localeCompare(String(b))).map(name => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('');
@@ -249,13 +251,18 @@ function renderDlcRepairModal() {
     ? '<div class="repair-baseline-note"><i class="fas fa-shield-halved"></i><div><strong>已自动保护原版内容</strong><span>不会把角色卡自带内容当成 DLC 删除' + (modifiedOfficialBaseline.length ? '；有 ' + modifiedOfficialBaseline.length + ' 个原版条目被改过，系统也不会自动处理它们' : '') + '。</span></div></div>'
     : '';
 
-  root.innerHTML = buildPendingRepairHtml(report)
+  const repairLockHtml = repairLocked
+    ? '<div class="repair-warning"><i class="fas fa-cat"></i> <strong>' + escapeHtml(REPAIR_DAILY_LOCK_MESSAGE) + '</strong><br><span>今天的自动修复查询已经锁住，下一次日界线后会自动恢复。可以先复制诊断资料并截图去 DC 找我。</span></div>'
+    : '';
+
+  root.innerHTML = buildPendingRepairHtml(report, repairLocked)
+    + repairLockHtml
     + baselineInfoHtml
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 有世界书暂时读不到：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
     + '<section class="repair-scan-card"><div class="repair-scan-summary"><div><span class="repair-kicker">已检查这些世界书</span><strong>' + escapeHtml(scannedLabel) + '</strong><small>打开页面时会自动检查你当前正在使用的世界书。</small></div><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重新扫描</button></div><details class="repair-other-book"><summary>没找到要修的 DLC？改扫其他世界书</summary><div class="repair-other-book-body"><select id="dlcRepairWorldbookSelect"><option value="">选择其他世界书</option>' + otherWorldbookOptions + '</select><small>选中一本后会自动扫描。</small></div></details></section>'
-    + '<div class="repair-toolbar"><div><strong>选择要重装的 DLC</strong><small>勾选后会自动查找对应的工坊项目；如果有多个可能结果，再让你确认。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairSelectAllBtn" ' + (!selectableItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas ' + (allSelected ? 'fa-square-minus' : 'fa-square-check') + '"></i> ' + (allSelected ? '取消全选' : '全选') + '</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制诊断资料</button></div></div>'
+    + '<div class="repair-toolbar"><div><strong>选择要重装的 DLC</strong><small>勾选后会自动查找对应的工坊项目；如果有多个可能结果，再让你确认。</small></div><div class="repair-toolbar-actions"><button type="button" class="btn btn-outline" id="dlcRepairSelectAllBtn" ' + (!selectableItems.length || dlcRepairUiState.busy || repairLocked ? 'disabled' : '') + '><i class="fas ' + (allSelected ? 'fa-square-minus' : 'fa-square-check') + '"></i> ' + (allSelected ? '取消全选' : '全选') + '</button><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制诊断资料</button></div></div>'
     + '<div class="repair-candidate-list">' + candidateHtml + '</div>'
-    + '<div class="repair-footer"><div><strong>' + escapeHtml(footerText) + '</strong></div><button type="button" class="btn btn-primary" id="dlcRepairRunBtn" ' + (!selectedItems.length || readyItems.length !== selectedItems.length || dlcRepairUiState.busy ? 'disabled' : '') + '><i class="fas fa-screwdriver-wrench"></i> 重装所选最新版</button></div>';
+    + '<div class="repair-footer"><div><strong>' + escapeHtml(footerText) + '</strong></div><button type="button" class="btn btn-primary" id="dlcRepairRunBtn" ' + (!selectedItems.length || readyItems.length !== selectedItems.length || dlcRepairUiState.busy || repairLocked ? 'disabled' : '') + '><i class="fas fa-screwdriver-wrench"></i> 重装所选最新版</button></div>';
 
   root.querySelectorAll('[data-repair-select]').forEach(input => {
     input.addEventListener('change', () => {
@@ -323,6 +330,10 @@ function renderDlcRepairModal() {
 async function analyzeDlcRepairItem(candidateId, manualQuery = '') {
   const item = getRepairItem(candidateId);
   if (!item) return;
+  if (getRepairResolveLockedUntil()) {
+    showRepairResolveLockNotice(getRepairResolveLockedUntil());
+    return;
+  }
   item.status = 'matching';
   item.error = null;
   renderDlcRepairModal();
@@ -330,9 +341,15 @@ async function analyzeDlcRepairItem(candidateId, manualQuery = '') {
     item.match = await findWorkshopProjectsForRepair(item.candidate, manualQuery);
     item.status = 'matched';
   } catch (error) {
-    item.match = { status: 'none', method: manualQuery ? 'manual_search_error' : 'auto_match_error', projects: [] };
-    item.status = 'failed';
-    item.error = error?.message || String(error);
+    if (error?.code === 'REPAIR_DAILY_LOCKED') {
+      item.match = null;
+      item.status = 'scanned';
+      item.error = null;
+    } else {
+      item.match = { status: 'none', method: manualQuery ? 'manual_search_error' : 'auto_match_error', projects: [] };
+      item.status = 'failed';
+      item.error = error?.message || String(error);
+    }
   }
   renderDlcRepairModal();
 }
@@ -342,10 +359,44 @@ async function analyzeSelectedDlcRepairs() {
     item.selected && !item.match && item.status !== 'matching' && isRepairCandidateSafe(item.candidate)
   );
   if (!selected.length) return;
+
+  const existingLock = getRepairResolveLockedUntil();
+  if (existingLock) {
+    showRepairResolveLockNotice(existingLock);
+    renderDlcRepairModal();
+    return;
+  }
+
+  selected.forEach(item => {
+    item.status = 'matching';
+    item.error = null;
+  });
   dlcRepairUiState.busy = true;
   renderDlcRepairModal();
+
   try {
-    await Promise.all(selected.map(item => analyzeDlcRepairItem(item.candidate.candidateId)));
+    const requests = selected.map(item => {
+      const detectedProjectId = String(item.candidate?.detectedProjectId || '').trim();
+      return {
+        candidateId: String(item.candidate.candidateId),
+        projectId: detectedProjectId && isWorkshopUuid(detectedProjectId) ? detectedProjectId : '',
+        name: String(item.candidate?.name || item.candidate?.legacyProjectName || '').trim(),
+      };
+    });
+    const resolved = await resolveWorkshopRepairCandidates(requests);
+    const byCandidateId = new Map(resolved.map(result => [String(result?.candidateId || ''), result]));
+    selected.forEach(item => {
+      item.match = byCandidateId.get(String(item.candidate.candidateId))
+        || { status: 'none', method: 'exact_name', projects: [] };
+      item.status = 'matched';
+    });
+  } catch (error) {
+    const locked = error?.code === 'REPAIR_DAILY_LOCKED';
+    selected.forEach(item => {
+      item.match = locked ? null : { status: 'none', method: 'auto_match_error', projects: [] };
+      item.status = locked ? 'scanned' : 'failed';
+      item.error = locked ? null : (error?.message || String(error));
+    });
   } finally {
     dlcRepairUiState.busy = false;
     renderDlcRepairModal();
@@ -353,6 +404,11 @@ async function analyzeSelectedDlcRepairs() {
 }
 
 async function runSelectedDlcRepairs() {
+  const existingLock = getRepairResolveLockedUntil();
+  if (existingLock) {
+    showRepairResolveLockNotice(existingLock);
+    return;
+  }
   const selected = Array.from(dlcRepairUiState.items.values()).filter(item => item.selected);
   const runnable = selected.filter(item => item.match?.status === 'unique' && isRepairCandidateSafe(item.candidate) && item.status !== 'completed');
   if (!runnable.length) {
@@ -398,6 +454,11 @@ async function runSelectedDlcRepairs() {
 }
 
 async function retryPendingDlcRepair(repairId) {
+  const existingLock = getRepairResolveLockedUntil();
+  if (existingLock) {
+    showRepairResolveLockNotice(existingLock);
+    return;
+  }
   const record = (dlcRepairUiState.report?.pending || []).find(item => item.repairId === repairId);
   if (!record?.target) return;
   dlcRepairUiState.busy = true;
