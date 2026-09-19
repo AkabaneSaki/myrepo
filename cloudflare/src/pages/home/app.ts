@@ -421,7 +421,6 @@ export const homeScript = String.raw`
     const userMenuTrigger = document.getElementById('userMenuTrigger');
     const userMenu = document.getElementById('userMenu');
     const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
-    const releaseNoticeBtn = document.getElementById('releaseNoticeBtn');
     const scriptDependencyHealthBtns = Array.from(document.querySelectorAll('.script-dependency-health-btn'));
     const mobileSearchInput = document.getElementById('projectSearchInputMobile');
     const mobileToolSheet = document.getElementById('mobileToolSheet');
@@ -456,7 +455,6 @@ export const homeScript = String.raw`
     };
     if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
-    if (releaseNoticeBtn) releaseNoticeBtn.onclick = openReleaseNoticeModal;
     scriptDependencyHealthBtns.forEach(button => {
       button.onclick = event => {
         event.stopPropagation();

@@ -18,6 +18,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .release-update-lead { color:#b8b6b1; }
 .release-update-steps { margin-left:22px; display:flex; flex-direction:column; gap:9px; }
 .release-update-steps code { color:#c9ae87; }
+.release-update-version-warning { color:#ef4444; font-size:1rem; font-weight:800; text-align:center; }
+.release-update-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:4px; }
+.release-update-actions > * { flex:1; min-height:44px; }
+.release-update-look-again { border:1px solid rgba(239,68,68,.55); border-radius:10px; background:rgba(127,29,29,.35); color:#fecaca; font:inherit; font-weight:800; cursor:pointer; }
+.release-update-look-again:hover { background:rgba(153,27,27,.5); border-color:rgba(248,113,113,.8); color:#fff; }
 .release-update-codebox { position:relative; }
 .release-update-code { display:block; width:100%; min-height:92px; resize:none; padding:14px 82px 14px 14px; border-radius:10px; background:#111214; border:1px solid rgba(255,255,255,.085); color:#c8c6c1; font:0.86rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; outline:none; }
 .release-update-code:focus { border-color:rgba(190,164,125,.42); box-shadow:0 0 0 2px rgba(190,164,125,.08); }
