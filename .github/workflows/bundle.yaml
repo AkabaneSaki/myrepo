@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bundle:
@@ -51,13 +51,3 @@ jobs:
 
       - name: Verify release, compatibility and staging artifacts
         run: pnpm check:workshop-bundles
-
-      - name: Commit hotfix release artifacts
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/CreativeWorkshop/index.js test-dist/CreativeWorkshop/index.js
-          if ! git diff --cached --quiet; then
-            git commit -m "build(workshop): bundle 2.1.3"
-            git push
-          fi
