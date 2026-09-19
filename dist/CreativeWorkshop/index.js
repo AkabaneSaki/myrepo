@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.1.3";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.1.2";
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
@@ -379,7 +379,7 @@ async function fetchCreativeWorkshopReferenceVersionItems(referenceVersionId) {
 ;// ./src/CreativeWorkshop/services/project-type.ts
 const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
 const CREATIVE_WORKSHOP_EXTENSION_TYPES = (/* unused pure expression or super */ null && (['规则', '内容']));
-const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 4;
+const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 3;
 function normalizeProjectType(value) {
     if (typeof value !== 'string')
         return null;
@@ -446,37 +446,18 @@ function readLeadingBracketSegment(value, offset) {
     return { value: match[1], end: offset + match[0].length };
 }
 function getExistingDlcCategory(entryName) {
-    const first = readLeadingBracketSegment(entryName, 0);
-    if (!first)
+    const dlc = readLeadingBracketSegment(entryName, 0);
+    if (!dlc || dlc.value !== 'DLC')
         return null;
-    // v4: [WS][DLC][category]author content
-    if (first.value === 'WS') {
-        const dlc = readLeadingBracketSegment(entryName, first.end);
-        if (!dlc || dlc.value !== 'DLC')
-            return null;
-        return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
-    }
-    if (first.value !== 'DLC')
-        return null;
-    return readLeadingBracketSegment(entryName, first.end)?.value || null;
+    return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
 }
 function stripExistingDlcHeader(entryName) {
-    const first = readLeadingBracketSegment(entryName, 0);
-    if (!first)
+    const dlc = readLeadingBracketSegment(entryName, 0);
+    if (!dlc || dlc.value !== 'DLC')
         return entryName;
-    // v4: [WS][DLC][category]author content
-    if (first.value === 'WS') {
-        const dlc = readLeadingBracketSegment(entryName, first.end);
-        if (!dlc || dlc.value !== 'DLC')
-            return entryName;
-        const category = readLeadingBracketSegment(entryName, dlc.end);
-        return category ? entryName.slice(category.end) : entryName.slice(dlc.end);
-    }
-    if (first.value !== 'DLC')
-        return entryName;
-    const category = readLeadingBracketSegment(entryName, first.end);
+    const category = readLeadingBracketSegment(entryName, dlc.end);
     if (!category)
-        return entryName.slice(first.end);
+        return entryName.slice(dlc.end);
     const third = readLeadingBracketSegment(entryName, category.end);
     if (!third)
         return entryName.slice(category.end);
@@ -508,7 +489,7 @@ function formatCreativeWorkshopEntryName(entryName, project, _projectName) {
     if (projectType === '系统核心')
         authorContent = stripLegacyCorePrefix(authorContent);
     const category = getExistingDlcCategory(entryName) || getCreativeWorkshopDlcCategory(project);
-    return `[WS][DLC][${category}]${authorContent}`;
+    return `[DLC][${category}][WS]${authorContent}`;
 }
 
 ;// ./src/CreativeWorkshop/services/regex-name.ts
@@ -1570,14 +1551,6 @@ function parseDlcEntryName(name) {
     if (!_.isString(name))
         return null;
     const value = String(name);
-    const v4 = value.match(/^\[WS\]\[DLC\]\[([^\]]+)\]/);
-    if (v4) {
-        return {
-            category: v4[1],
-            projectName: null,
-            workshopSourceMarker: true,
-        };
-    }
     const v3 = value.match(/^\[DLC\]\[([^\]]+)\]\[WS\]/);
     if (v3) {
         return {

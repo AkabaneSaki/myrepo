@@ -3,7 +3,7 @@
 
   const FROM_PATH = "test-dist/CreativeWorkshop/index.js";
   const TO_PATH = "dist/CreativeWorkshop/index.js";
-  const TARGET_VERSION = "2.1.3";
+  const TARGET_VERSION = "2.1.2";
   const FALLBACK_MESSAGE = "自动迁移失败。请回到酒馆助手，按更新提示手动修正 Creative Workshop import 路径，然后保存并刷新。";
   const SCOPES = ['character', 'preset', 'global'];
 
