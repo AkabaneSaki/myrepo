@@ -13,6 +13,7 @@ const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
 const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
 const RANKING_REBUILD_BUDGET = Object.freeze({ maxQueries: 20, maxRowsWritten: 25_000 });
 const RANKING_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
+const REPAIR_RESOLVE_BUDGET = Object.freeze({ maxQueries: 3, maxRowsRead: 250, maxRowsWritten: 3 });
 const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
@@ -232,6 +233,115 @@ function formatSql(sql) {
   return String(sql ?? '').replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
+async function resetRepairResolveDailyUsage() {
+  await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir, '--command', 'DELETE FROM repair_resolve_daily_usage',
+  ], 'D1 repair resolve usage reset');
+}
+
+async function runRepairResolveScenario() {
+  await resetRepairResolveDailyUsage();
+  await clearObservability();
+
+  const candidates = Array.from({ length: 50 }, (_, index) => {
+    const suffix = String(index + 1).padStart(12, '0');
+    return {
+      candidateId: 'unknown-dlc-' + (index + 1),
+      projectId: 'ffffffff-ffff-4fff-8fff-' + suffix,
+      name: 'D1-cost-unknown-dlc-' + (index + 1),
+    };
+  });
+
+  const response = await fetch(new URL('/api/projects/repair-resolve', ORIGIN), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'cf-connecting-ip': '198.51.100.77',
+    },
+    body: JSON.stringify({ candidates }),
+  });
+  const responseText = await response.text();
+  if (!response.ok) throw new Error(`DLC Repair · 50 unknown batch: HTTP ${response.status}: ${responseText.slice(0, 500)}`);
+
+  let responseJson = {};
+  try {
+    responseJson = JSON.parse(responseText);
+  } catch {
+    throw new Error('DLC Repair · 50 unknown batch: response was not valid JSON');
+  }
+  if (!Array.isArray(responseJson.results) || responseJson.results.length !== 50) {
+    throw new Error(`DLC Repair · 50 unknown batch: expected 50 results, got ${responseJson.results?.length ?? 'invalid'}`);
+  }
+  if (responseJson.results.some(result => result?.status !== 'none')) {
+    throw new Error('DLC Repair · 50 unknown batch: fixture unexpectedly matched a project');
+  }
+
+  await sleep(50);
+  const cost = await readD1Cost();
+  const reasons = [];
+  if (cost.queries > REPAIR_RESOLVE_BUDGET.maxQueries) reasons.push(`queries ${cost.queries} > ${REPAIR_RESOLVE_BUDGET.maxQueries}`);
+  if (cost.rowsRead > REPAIR_RESOLVE_BUDGET.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${REPAIR_RESOLVE_BUDGET.maxRowsRead}`);
+  if (cost.rowsWritten > REPAIR_RESOLVE_BUDGET.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${REPAIR_RESOLVE_BUDGET.maxRowsWritten}`);
+  if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
+  const sqlTexts = cost.details.map(query => String(query.sql || ''));
+  if (sqlTexts.some(sql => /LIKE/i.test(sql))) reasons.push('automatic repair resolver used LIKE');
+  if (sqlTexts.some(sql => /description|custom_tags|facets|author_name/i.test(sql) && /SELECT/i.test(sql))) {
+    reasons.push('automatic repair resolver touched fuzzy-search fields');
+  }
+  return { cost, reasons };
+}
+
+async function runRepairResolveLockScenario() {
+  const lockedIp = '198.51.100.88';
+  const subjectKey = 'anon:d8eded12d7d8fcea1c2223058ec5777d';
+  await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir,
+    '--command',
+    `INSERT OR REPLACE INTO repair_resolve_daily_usage (subject_key, day_key, resolve_count, updated_at)
+     VALUES ('${subjectKey}', date('now'), 40, CURRENT_TIMESTAMP)`,
+  ], 'D1 repair resolve lock seed');
+  await clearObservability();
+
+  const response = await fetch(new URL('/api/projects/repair-resolve', ORIGIN), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'cf-connecting-ip': lockedIp,
+    },
+    body: JSON.stringify({
+      candidates: [{
+        candidateId: 'locked-dlc',
+        projectId: 'ffffffff-ffff-4fff-8fff-999999999999',
+        name: 'D1-cost-locked-dlc',
+      }],
+    }),
+  });
+  const responseText = await response.text();
+  let responseJson = {};
+  try {
+    responseJson = JSON.parse(responseText);
+  } catch {
+    throw new Error('DLC Repair · daily lock: response was not valid JSON');
+  }
+
+  const reasons = [];
+  if (response.status !== 429) reasons.push(`HTTP ${response.status} != 429`);
+  if (responseJson.code !== 'REPAIR_DAILY_LOCKED') reasons.push(`code ${responseJson.code || 'missing'} != REPAIR_DAILY_LOCKED`);
+  if (responseJson.error !== '好啦別再点了喵！截图然后去DC找我吧喵！') reasons.push('lock message mismatch');
+  const lockedUntil = Date.parse(String(responseJson.lockedUntil || ''));
+  if (!Number.isFinite(lockedUntil) || lockedUntil <= Date.now()) reasons.push('lockedUntil is missing or not in the future');
+
+  await sleep(50);
+  const cost = await readD1Cost();
+  const sqlTexts = cost.details.map(query => String(query.sql || ''));
+  if (sqlTexts.some(sql => /FROM\s+projects/i.test(sql))) reasons.push('locked request still queried projects');
+  if (cost.queries > 1) reasons.push(`queries ${cost.queries} > 1`);
+  if (cost.rowsWritten > 0) reasons.push(`rows_written ${cost.rowsWritten} > 0 while locked`);
+  return { cost, reasons };
+}
+
 async function resetCurrentRankingDay() {
   const rankingDay = new Date().toISOString().slice(0, 10);
   const sql = [
@@ -364,6 +474,9 @@ try {
     scenarioResults.set(scenario.name, result);
     printCostResult(scenario.name, result);
   }
+
+  printCostResult('DLC Repair · 50 unknown batch', await runRepairResolveScenario());
+  printCostResult('DLC Repair · daily lock', await runRepairResolveLockScenario());
 
   const publishedIds = scenarioResults.get('首页 · 最新发布')?.projectIds || [];
   for (const rankedName of ['首页 · 发现推荐', '首页 · 玩家好评']) {

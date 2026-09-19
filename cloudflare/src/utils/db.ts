@@ -371,6 +371,63 @@ export const projectDb = {
   },
 
   /**
+   * Resolve DLC Repair identities without touching the public fuzzy-search path.
+   * One whole batch of up to 50 candidates uses at most two indexed D1 reads.
+   */
+  resolvePublicRepairCandidates: async (
+    c: AppContext,
+    projectIds: string[],
+    normalizedNames: string[],
+  ) => {
+    const uniqueProjectIds = Array.from(
+      new Set(projectIds.map(value => String(value || '').trim()).filter(Boolean)),
+    ).slice(0, 50);
+    const uniqueNames = Array.from(
+      new Set(normalizedNames.map(value => String(value || '').trim().toLowerCase()).filter(Boolean)),
+    ).slice(0, 50);
+    const byId: ReturnType<typeof parseProjectRow>[] = [];
+    const byName: ReturnType<typeof parseProjectRow>[] = [];
+
+    if (uniqueProjectIds.length > 0) {
+      const placeholders = uniqueProjectIds.map(() => '?').join(', ');
+      const results = await c.env.DB.prepare(
+        `
+          SELECT p.*, u.global_name
+          FROM projects p INDEXED BY idx_projects_public_id
+          LEFT JOIN users u ON p.author_id = u.id
+          WHERE p.id IN (${placeholders})
+            AND p.status = 'approved'
+            AND p.is_published = 1
+            AND p.visibility = 1
+        `,
+      )
+        .bind(...uniqueProjectIds)
+        .all<Record<string, unknown>>();
+      byId.push(...(results.results || []).map(parseProjectRow));
+    }
+
+    if (uniqueNames.length > 0) {
+      const placeholders = uniqueNames.map(() => '?').join(', ');
+      const results = await c.env.DB.prepare(
+        `
+          SELECT p.*, u.global_name
+          FROM projects p INDEXED BY idx_projects_public_normalized_name
+          LEFT JOIN users u ON p.author_id = u.id
+          WHERE lower(trim(p.name)) IN (${placeholders})
+            AND p.status = 'approved'
+            AND p.is_published = 1
+            AND p.visibility = 1
+        `,
+      )
+        .bind(...uniqueNames)
+        .all<Record<string, unknown>>();
+      byName.push(...(results.results || []).map(parseProjectRow));
+    }
+
+    return { byId, byName };
+  },
+
+  /**
    * 更新项目
    */
   update: async (

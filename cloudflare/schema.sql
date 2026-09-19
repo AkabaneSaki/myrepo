@@ -82,6 +82,12 @@ CREATE INDEX IF NOT EXISTS idx_projects_public_latest_approved
     ON projects(status, is_published, visibility, latest_approved_at DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_type_published
     ON projects(status, is_published, visibility, project_type, latest_approved_at DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_public_id
+    ON projects(id)
+    WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
+CREATE INDEX IF NOT EXISTS idx_projects_public_normalized_name
+    ON projects(lower(trim(name)))
+    WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
 CREATE INDEX IF NOT EXISTS idx_projects_author_status_reviewed
     ON projects(author_id, status, reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_character_reference
@@ -248,6 +254,17 @@ CREATE INDEX IF NOT EXISTS idx_project_subscribes_project_id ON project_subscrib
 CREATE INDEX IF NOT EXISTS idx_project_subscribes_user_id ON project_subscribes(user_id);
 CREATE INDEX IF NOT EXISTS idx_project_likes_user_project ON project_likes(user_id, project_id);
 CREATE INDEX IF NOT EXISTS idx_project_subscribes_user_project ON project_subscribes(user_id, project_id);
+
+CREATE TABLE IF NOT EXISTS repair_resolve_daily_usage (
+    subject_key TEXT NOT NULL,
+    day_key TEXT NOT NULL,
+    resolve_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (subject_key, day_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_repair_resolve_daily_usage_day
+    ON repair_resolve_daily_usage(day_key);
 
 CREATE TRIGGER IF NOT EXISTS trg_project_likes_after_insert
 AFTER INSERT ON project_likes

@@ -52,5 +52,8 @@ jobs:
       - name: Home regression smoke
         run: npm run check:home-js-smoke
 
+      - name: DLC Repair D1 guard smoke
+        run: npm run check:creative-workshop-repair-d1-guard
+
       - name: CreativeWorkshop syntax
         run: npm run check:creative-workshop-syntax
