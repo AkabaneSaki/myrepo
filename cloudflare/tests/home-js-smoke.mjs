@@ -250,6 +250,45 @@ assert.match(fragments.homeApiScript, /INSTALLED_PROJECT_BATCH_SIZE = 50/);
 assert.match(fragments.homeApiScript, /apiFetch\('\/api\/projects\/batch'/);
 assert.match(fragments.homeApiScript, /JSON\.stringify\(\{ projectIds \}\)/);
 assert.doesNotMatch(fragments.homeApiScript, /missingProjectIds\.map\(async projectId/);
+const discoveryRotationUi = Function(
+  `${fragments.homeApiScript}; return { DISCOVER_CANDIDATE_POOL_SIZE, DISCOVER_DISPLAY_COUNT, getDiscoverRotationBucket, selectDiscoverProjects };`,
+)();
+assert.equal(discoveryRotationUi.DISCOVER_CANDIDATE_POOL_SIZE, 30);
+assert.equal(discoveryRotationUi.DISCOVER_DISPLAY_COUNT, 10);
+const firstRotationTime = Date.parse('2026-09-20T00:30:00Z');
+assert.equal(
+  discoveryRotationUi.getDiscoverRotationBucket(firstRotationTime),
+  discoveryRotationUi.getDiscoverRotationBucket(Date.parse('2026-09-20T05:59:59Z')),
+  'one six-hour discovery window must stay stable',
+);
+assert.equal(
+  discoveryRotationUi.getDiscoverRotationBucket(Date.parse('2026-09-20T06:00:00Z')),
+  discoveryRotationUi.getDiscoverRotationBucket(firstRotationTime) + 1,
+  'the next six-hour window must advance the discovery seed',
+);
+const discoveryCandidates = Array.from({ length: 30 }, (_, index) => ({
+  id: `discover-${index + 1}`,
+  authorId: `author-${index + 1}`,
+}));
+const firstRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, firstRotationTime);
+const repeatedRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, Date.parse('2026-09-20T05:00:00Z'));
+const nextRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, Date.parse('2026-09-20T06:30:00Z'));
+assert.equal(firstRotation.length, 10);
+assert.deepEqual(firstRotation.map(project => project.id), repeatedRotation.map(project => project.id), 'refreshing inside one window must not reshuffle discovery');
+assert.deepEqual(firstRotation.slice(0, 2).map(project => project.id), ['discover-1', 'discover-2'], 'top two discovery projects remain anchors');
+assert.deepEqual(nextRotation.slice(0, 2).map(project => project.id), ['discover-1', 'discover-2'], 'anchors remain stable across windows');
+assert.notDeepEqual(firstRotation.map(project => project.id), nextRotation.map(project => project.id), 'crossing a six-hour boundary must rotate discovery');
+const changedProjectCount = firstRotation.filter(project => !nextRotation.some(next => next.id === project.id)).length;
+assert.ok(changedProjectCount >= 4, `expected a visible discovery rotation, only ${changedProjectCount} cards changed`);
+const crowdedAuthorCandidates = Array.from({ length: 30 }, (_, index) => ({
+  id: `crowded-${index + 1}`,
+  authorId: index < 10 ? 'same-author' : `other-author-${index}`,
+}));
+const crowdedRotation = discoveryRotationUi.selectDiscoverProjects(crowdedAuthorCandidates, firstRotationTime);
+const crowdedAuthorCounts = new Map();
+for (const project of crowdedRotation) crowdedAuthorCounts.set(project.authorId, (crowdedAuthorCounts.get(project.authorId) || 0) + 1);
+assert.ok([...crowdedAuthorCounts.values()].every(count => count <= 2), 'discovery rotation should keep the two-project creator cap when the pool has enough alternatives');
+assert.match(fragments.homeApiScript, /pageSize: DISCOVER_CANDIDATE_POOL_SIZE/);
 assert.match(fragments.homeCardsRenderScript, /const projectType = getBaseTag\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /const typeClass = getTypeClass\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\.slice\(0, 5\)/);
