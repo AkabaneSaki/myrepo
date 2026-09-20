@@ -178,8 +178,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .taxonomy-facet-group[open] summary::before { transform:rotate(90deg); }
 .taxonomy-facet-group summary small { margin-left:auto; color:rgba(226,232,240,.44); font-size:.7rem; font-weight:500; }
 .taxonomy-chip-list { display:flex; flex-wrap:wrap; gap:8px; padding:0 12px 12px; }
-.form-group .taxonomy-chip { display:inline-flex; max-width:100%; margin:0; font-weight:600; opacity:1; cursor:pointer; }
-.form-group .taxonomy-chip input { position:absolute; width:1px; height:1px; min-width:0; min-height:0; margin:0; padding:0; overflow:hidden; clip-path:inset(50%); border:0; border-radius:0; background:transparent; box-shadow:none; opacity:0; pointer-events:none; }
+.form-group .taxonomy-chip { position:relative; display:inline-flex; max-width:100%; margin:0; font-weight:600; opacity:1; cursor:pointer; }
+.form-group .taxonomy-chip input { position:absolute; inset:0; width:100%; height:100%; min-width:0; min-height:0; margin:0; padding:0; border:0; border-radius:inherit; background:transparent; box-shadow:none; opacity:0; pointer-events:none; }
 .taxonomy-chip span { display:inline-flex; align-items:center; min-height:32px; max-width:100%; padding:6px 10px; border:1px solid rgba(148,163,184,.2); border-radius:999px; background:rgba(30,41,59,.72); color:rgba(226,232,240,.74); font-size:.8rem; line-height:1.2; transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease; }
 .taxonomy-chip:hover span { border-color:rgba(129,140,248,.46); color:#E0E7FF; }
 .taxonomy-chip input:checked + span { border-color:rgba(129,140,248,.62); background:rgba(99,102,241,.22); color:#EEF2FF; box-shadow:0 0 0 1px rgba(129,140,248,.12) inset; }
@@ -217,7 +217,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .form-submit-btn { width:100%; padding:12px; justify-content:center; }
 
 /* Creator form workspace: upload/edit share one responsive layout. */
-.project-form-modal { align-items:center; padding:24px 32px; overflow:hidden; background:rgba(5,6,8,.78); backdrop-filter:blur(10px); }
+.project-form-modal { align-items:center; padding:24px 32px; overflow:clip; background:rgba(5,6,8,.78); backdrop-filter:blur(10px); }
 .project-form-modal .modal-content { width:min(100%,1180px); max-width:1180px; height:calc(100dvh - 48px); max-height:calc(100dvh - 48px); border-radius:14px; background:#18191c; border-color:rgba(255,255,255,.09); box-shadow:0 28px 80px rgba(0,0,0,.5); }
 .project-form-modal .modal-header { min-height:62px; padding:0 22px; background:#18191c; border-bottom:1px solid rgba(255,255,255,.07); }
 .project-form-modal .modal-header h2 { color:#e5e4e1; font-size:1rem; font-weight:760; }

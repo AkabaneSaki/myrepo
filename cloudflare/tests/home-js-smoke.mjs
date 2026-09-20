@@ -53,7 +53,10 @@ assert.match(fragments.homeLayoutRenderScript, /aria-hidden=.*inert/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.detail-keywords-block/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.keyword-chip/);
 assert.doesNotMatch(homeStylesSource, /\.upload-preview-summary \{[^}]*rgba\(99,102,241/);
-assert.match(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*min-height:0;[^}]*clip-path:inset\(50%\);[^}]*border:0;/);
+assert.match(homeStylesSource, /\.form-group \.taxonomy-chip \{[^}]*position:relative;/);
+assert.match(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*inset:0;[^}]*width:100%;[^}]*height:100%;[^}]*border:0;/);
+assert.doesNotMatch(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*clip-path:inset\(50%\)/);
+assert.match(homeStylesSource, /\.project-form-modal \{[^}]*overflow:clip;/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):focus,/);
 
