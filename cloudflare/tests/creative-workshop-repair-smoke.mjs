@@ -439,6 +439,7 @@ assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matchin
 assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
 assert.match(repairUiSource, /对应工坊项目/);
+assert.match(repairUiSource, /candidate\.problems\.length > 0/, 'repair UI must hide healthy DLCs');
 assert.match(repairUiSource, /dlcRepairSelectAllBtn/, 'repair UI must expose one-click select all');
 assert.match(repairUiSource, /选择此项目/, 'ambiguous Workshop candidates must have an explicit selection affordance');
 assert.match(repairUiSource, /dlcRepairWorldbookSelect/, 'repair UI must allow choosing another worldbook when automatic scan misses it');
