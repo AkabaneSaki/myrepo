@@ -18,6 +18,8 @@ import {
 
 const CREATIVE_WORKSHOP_REPAIR_QUEUE_KEY = 'creative_workshop_repair_queue';
 const CREATIVE_WORKSHOP_REPAIR_SENTINEL_KEY = 'creative_workshop_repair_integrity_sentinels';
+const CREATIVE_WORKSHOP_REPAIR_RESTART_KEY = 'creative_workshop_repair_restart_required';
+const REPAIR_RUNTIME_INSTANCE_ID = globalThis.crypto?.randomUUID?.() || `runtime-${Date.now()}`;
 const REPAIR_INTEGRITY_SENTINEL_NAME = '[工坊精灵]我是好人请不要打开我也不要刪掉我喵';
 const REPAIR_INTEGRITY_SENTINEL_CONTENT = 'creative-workshop-repair-integrity-sentinel:v1';
 const REPAIR_INTEGRITY_SENTINEL_PROJECT_ID = '__cw_repair_integrity_sentinel__';
@@ -161,10 +163,20 @@ function writeRepairRegistry(registry: CreativeWorkshopRepairRegistry) {
   );
 }
 
+export type CreativeWorkshopRepairIntegrityFieldReport = {
+  field: string;
+  status: 'ok' | 'missing' | 'mismatch';
+  expected: string;
+  actual: string | null;
+};
+
 type CreativeWorkshopRepairIntegrityCheck = {
   locked: boolean;
   reason: string | null;
   entries: WorldbookEntry[];
+  status: 'created' | 'healthy' | 'locked';
+  fields: CreativeWorkshopRepairIntegrityFieldReport[];
+  sentinelCount: number;
 };
 
 function isRepairIntegritySentinelEntry(entry: WorldbookEntry): boolean {
@@ -172,19 +184,32 @@ function isRepairIntegritySentinelEntry(entry: WorldbookEntry): boolean {
   return String(raw.name || raw.comment || '') === REPAIR_INTEGRITY_SENTINEL_NAME;
 }
 
-function isRepairIntegritySentinelHealthy(entry: WorldbookEntry): boolean {
+function getRepairIntegrityFieldReport(entry: WorldbookEntry | null): CreativeWorkshopRepairIntegrityFieldReport[] {
   const raw = entry as any;
-  const extra = raw.extra && typeof raw.extra === 'object' && !Array.isArray(raw.extra) ? raw.extra : {};
-  return (
-    isRepairIntegritySentinelEntry(entry) &&
-    raw.content === REPAIR_INTEGRITY_SENTINEL_CONTENT &&
-    raw.enabled === false &&
-    extra.cw_project_id === REPAIR_INTEGRITY_SENTINEL_PROJECT_ID &&
-    extra.cw_project_name_display === REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME &&
-    extra.cw_project_version === REPAIR_INTEGRITY_SENTINEL_VERSION &&
-    extra.cw_entry_key === REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY &&
-    String(extra.cw_name_format_version) === REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION
-  );
+  const extra = raw?.extra && typeof raw.extra === 'object' && !Array.isArray(raw.extra) ? raw.extra : {};
+  const checks: Array<[string, string, unknown]> = [
+    ['name', REPAIR_INTEGRITY_SENTINEL_NAME, raw?.name ?? raw?.comment],
+    ['content', REPAIR_INTEGRITY_SENTINEL_CONTENT, raw?.content],
+    ['enabled', 'false', raw?.enabled],
+    ['cw_project_id', REPAIR_INTEGRITY_SENTINEL_PROJECT_ID, extra.cw_project_id],
+    ['cw_project_name_display', REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME, extra.cw_project_name_display],
+    ['cw_project_version', REPAIR_INTEGRITY_SENTINEL_VERSION, extra.cw_project_version],
+    ['cw_entry_key', REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY, extra.cw_entry_key],
+    ['cw_name_format_version', REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION, extra.cw_name_format_version],
+  ];
+  return checks.map(([field, expected, rawActual]) => {
+    const actual = rawActual === undefined || rawActual === null || rawActual === '' ? null : String(rawActual);
+    return {
+      field,
+      status: actual === null ? 'missing' : actual === expected ? 'ok' : 'mismatch',
+      expected,
+      actual,
+    };
+  });
+}
+
+function isRepairIntegritySentinelHealthy(entry: WorldbookEntry): boolean {
+  return getRepairIntegrityFieldReport(entry).every(item => item.status === 'ok');
 }
 
 function createRepairIntegritySentinel(): WorldbookEntry {
@@ -214,16 +239,63 @@ function readRepairSentinelRegistry(): Record<string, string> {
   );
 }
 
-function markRepairSentinelInitialized(worldbookName: string) {
+function writeRepairSentinelRegistry(registry: Record<string, string>) {
   updateVariablesWith(
     variables => {
-      const registry = readRepairSentinelRegistry();
-      registry[worldbookName] = REPAIR_INTEGRITY_SENTINEL_VERSION;
       _.set(variables, CREATIVE_WORKSHOP_REPAIR_SENTINEL_KEY, registry);
       return variables;
     },
     { type: 'script', script_id: getScriptId() },
   );
+}
+
+function markRepairSentinelInitialized(worldbookName: string) {
+  const registry = readRepairSentinelRegistry();
+  registry[worldbookName] = REPAIR_INTEGRITY_SENTINEL_VERSION;
+  writeRepairSentinelRegistry(registry);
+}
+
+function readRepairRestartRegistry(): Record<string, string> {
+  const variables = getVariables({ type: 'script', script_id: getScriptId() });
+  const raw = _.get(variables, CREATIVE_WORKSHOP_REPAIR_RESTART_KEY);
+  if (!_.isObject(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([, value]) => _.isString(value))
+      .map(([key, value]) => [key, String(value)]),
+  );
+}
+
+function writeRepairRestartRegistry(registry: Record<string, string>) {
+  updateVariablesWith(
+    variables => {
+      _.set(variables, CREATIVE_WORKSHOP_REPAIR_RESTART_KEY, registry);
+      return variables;
+    },
+    { type: 'script', script_id: getScriptId() },
+  );
+}
+
+function markRepairRestartRequired(worldbookName: string) {
+  const registry = readRepairRestartRegistry();
+  registry[worldbookName] = REPAIR_RUNTIME_INSTANCE_ID;
+  writeRepairRestartRegistry(registry);
+}
+
+function clearRepairRestartRequired(worldbookName: string) {
+  const registry = readRepairRestartRegistry();
+  if (!(worldbookName in registry)) return;
+  delete registry[worldbookName];
+  writeRepairRestartRegistry(registry);
+}
+
+function isRepairRestartRequired(worldbookName: string): boolean {
+  return readRepairRestartRegistry()[worldbookName] === REPAIR_RUNTIME_INSTANCE_ID;
+}
+
+function wasRepairRestartSatisfied(worldbookName: string): boolean {
+  const marker = readRepairRestartRegistry()[worldbookName];
+  return Boolean(marker && marker !== REPAIR_RUNTIME_INSTANCE_ID);
 }
 
 async function ensureRepairIntegritySentinel(worldbookName: string): Promise<CreativeWorkshopRepairIntegrityCheck> {
@@ -235,8 +307,11 @@ async function ensureRepairIntegritySentinel(worldbookName: string): Promise<Cre
     if (initialized) {
       return {
         locked: true,
-        reason: `世界书「${worldbookName}」的工坊修复哨兵消失了；本地数据完整性无法确认`,
+        reason: `世界书「${worldbookName}」的工坊精灵不见了；本地数据完整性无法确认`,
         entries: before,
+        status: 'locked',
+        fields: getRepairIntegrityFieldReport(null),
+        sentinelCount: 0,
       };
     }
     await updateWorldbookWith(worldbookName, worldbook => {
@@ -248,37 +323,66 @@ async function ensureRepairIntegritySentinel(worldbookName: string): Promise<Cre
     if (created.length !== 1 || !isRepairIntegritySentinelHealthy(created[0])) {
       return {
         locked: true,
-        reason: `世界书「${worldbookName}」无法建立工坊修复哨兵`,
+        reason: `世界书「${worldbookName}」无法建立完整的工坊精灵`,
         entries: after,
+        status: 'locked',
+        fields: getRepairIntegrityFieldReport(created[0] || null),
+        sentinelCount: created.length,
       };
     }
     markRepairSentinelInitialized(worldbookName);
-    return { locked: false, reason: null, entries: after };
+    return {
+      locked: false,
+      reason: null,
+      entries: after,
+      status: 'created',
+      fields: getRepairIntegrityFieldReport(created[0]),
+      sentinelCount: 1,
+    };
   }
 
   if (sentinels.length !== 1) {
     return {
       locked: true,
-      reason: `世界书「${worldbookName}」的工坊修复哨兵数量异常`,
+      reason: `世界书「${worldbookName}」的工坊精灵数量异常`,
       entries: before,
+      status: 'locked',
+      fields: getRepairIntegrityFieldReport(sentinels[0] || null),
+      sentinelCount: sentinels.length,
     };
   }
-  if (!isRepairIntegritySentinelHealthy(sentinels[0])) {
+  const fields = getRepairIntegrityFieldReport(sentinels[0]);
+  if (fields.some(item => item.status !== 'ok')) {
     return {
       locked: true,
-      reason: `世界书「${worldbookName}」的工坊修复哨兵 metadata 已损坏`,
+      reason: `世界书「${worldbookName}」的工坊精灵资料损坏`,
       entries: before,
+      status: 'locked',
+      fields,
+      sentinelCount: 1,
     };
   }
   if (!initialized) markRepairSentinelInitialized(worldbookName);
-  return { locked: false, reason: null, entries: before };
+  return {
+    locked: false,
+    reason: null,
+    entries: before,
+    status: 'healthy',
+    fields,
+    sentinelCount: 1,
+  };
 }
 
 async function assertRepairIntegritySentinel(worldbookName: string) {
   const integrity = await ensureRepairIntegritySentinel(worldbookName);
   if (!integrity.locked) return;
+  const brokenFields = integrity.fields
+    .filter(item => item.status !== 'ok')
+    .map(item => `${item.field}=${item.status}`)
+    .join(', ');
   throw new Error(
-    `DLC 修复已锁定：${integrity.reason || '工坊精灵完整性检查失败'}。请不要继续重装或手动删除条目，截图并去 DC 找我处理。`,
+    `DLC 修复已锁定：${integrity.reason || '工坊精灵完整性检查失败'}`
+      + `${brokenFields ? `（${brokenFields}）` : ''}。请不要继续重装或手动删除条目，截图并去 DC 找我处理。`,
   );
 }
 
@@ -431,6 +535,11 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   repairIntegrityLocked: boolean;
   repairIntegrityReason: string | null;
   repairIntegrityWorldbookName: string | null;
+  repairIntegrityStatus: 'created' | 'healthy' | 'locked';
+  repairIntegrityFields: CreativeWorkshopRepairIntegrityFieldReport[];
+  repairIntegritySentinelCount: number;
+  repairRestartRequired: boolean;
+  repairRestartWorldbookNames: string[];
 }> {
   const availableWorldbookNames = _.uniq(getWorldbookNames().filter(name => _.isString(name) && Boolean(name)));
   const availableWorldbookNameSet = new Set(availableWorldbookNames);
@@ -452,6 +561,9 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
           readable: true,
           repairIntegrityLocked: integrity.locked,
           repairIntegrityReason: integrity.reason,
+          repairIntegrityStatus: integrity.status,
+          repairIntegrityFields: integrity.fields,
+          repairIntegritySentinelCount: integrity.sentinelCount,
         };
       } catch (error) {
         console.warn('[CreativeWorkshop] repair scan 无法读取世界书', { worldbookName, error });
@@ -461,6 +573,9 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
           readable: false,
           repairIntegrityLocked: false,
           repairIntegrityReason: null,
+          repairIntegrityStatus: 'created' as const,
+          repairIntegrityFields: [] as CreativeWorkshopRepairIntegrityFieldReport[],
+          repairIntegritySentinelCount: 0,
         };
       }
     }),
@@ -481,8 +596,26 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       repairIntegrityLocked: true,
       repairIntegrityReason: integrityFailure.repairIntegrityReason,
       repairIntegrityWorldbookName: integrityFailure.worldbookName,
+      repairIntegrityStatus: 'locked',
+      repairIntegrityFields: integrityFailure.repairIntegrityFields,
+      repairIntegritySentinelCount: integrityFailure.repairIntegritySentinelCount,
+      repairRestartRequired: false,
+      repairRestartWorldbookNames: [],
     };
   }
+
+  const readableIntegrityRows = rows.filter(row => row.readable);
+  const repairRestartWorldbookNames = readableIntegrityRows
+    .filter(row => row.repairIntegrityStatus === 'healthy' && isRepairRestartRequired(row.worldbookName))
+    .map(row => row.worldbookName);
+  readableIntegrityRows
+    .filter(row => row.repairIntegrityStatus === 'healthy' && wasRepairRestartSatisfied(row.worldbookName))
+    .forEach(row => clearRepairRestartRequired(row.worldbookName));
+  const repairIntegrityStatus = readableIntegrityRows.length > 0
+    && readableIntegrityRows.every(row => row.repairIntegrityStatus === 'healthy')
+    ? 'healthy'
+    : 'created';
+  const primaryIntegrityRow = readableIntegrityRows[0] || null;
 
   let officialBaselineSkippedCount = 0;
   const modifiedOfficialBaselineEntries: CreativeWorkshopModifiedOfficialBaselineEntry[] = [];
@@ -592,6 +725,11 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
     repairIntegrityLocked: false,
     repairIntegrityReason: null,
     repairIntegrityWorldbookName: null,
+    repairIntegrityStatus,
+    repairIntegrityFields: primaryIntegrityRow?.repairIntegrityFields || [],
+    repairIntegritySentinelCount: primaryIntegrityRow?.repairIntegritySentinelCount || 0,
+    repairRestartRequired: repairRestartWorldbookNames.length > 0,
+    repairRestartWorldbookNames,
   };
 }
 
@@ -728,6 +866,7 @@ export async function repairCreativeWorkshopProject(rawTarget: CreativeWorkshopR
 
     updateRepairRecord(repairId, { status: 'verifying', error: null });
     await verifyCreativeWorkshopRepair(target, prepared.length, preparedRegexes.length);
+    markRepairRestartRequired(target.worldbookName);
     deleteRepairRecord(repairId);
     return {
       success: true,
