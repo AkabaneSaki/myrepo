@@ -4,6 +4,7 @@ const dlcRepairUiState = {
   report: null,
   items: new Map(),
   busy: false,
+  postRepairPromptShown: false,
 };
 
 function getRepairMetadataLabel(field) {
@@ -72,6 +73,39 @@ function closeDlcRepairModal() {
   dlcRepairUiState.items = new Map();
   dlcRepairUiState.busy = false;
   if (overlay?.isConnected) overlay.remove();
+}
+
+function buildRepairIntegrityFieldsHtml(report) {
+  const fields = Array.isArray(report?.repairIntegrityFields) ? report.repairIntegrityFields : [];
+  if (!fields.length) return '';
+  return '<details class="repair-details" open><summary>工坊精灵资料检查</summary>'
+    + '<div class="repair-metadata-grid">' + fields.map(item => {
+      const icon = item.status === 'ok' ? '✓' : item.status === 'missing' ? '✕' : '⚠';
+      const actual = item.actual === null || item.actual === undefined ? '缺失' : String(item.actual);
+      return '<div class="repair-metadata-row repair-metadata-' + escapeHtml(item.status) + '">'
+        + '<span class="repair-metadata-icon">' + icon + '</span>'
+        + '<code>' + escapeHtml(getRepairMetadataLabel(item.field)) + '</code>'
+        + '<span>' + escapeHtml(item.status === 'ok' ? '正常' : item.status === 'missing' ? '缺失' : '异常') + '</span>'
+        + '<span class="repair-metadata-values">现在：' + escapeHtml(actual) + '<br>应为：' + escapeHtml(String(item.expected || '')) + '</span>'
+        + '</div>';
+    }).join('') + '</div></details>';
+}
+
+function openDlcRepairRestartNotice() {
+  if (dlcRepairUiState.postRepairPromptShown) return null;
+  dlcRepairUiState.postRepairPromptShown = true;
+  const bodyHtml = '<div class="repair-restart-notice">'
+    + '<p><strong>好啦修理成功喵！現在重开酒馆，然后再來工坊DLC检查多次看看吧!</strong></p>'
+    + '<div class="release-update-actions">'
+    + '<button class="btn btn-primary" id="dlcRepairRestartAcknowledgeBtn" type="button">知道了喵</button>'
+    + '<button class="btn btn-outline" id="dlcRepairRestartLookAgainBtn" type="button">不行，再看一眼</button>'
+    + '</div></div>';
+  const overlay = openModal(bodyHtml, '<i class="fas fa-cat"></i> 工坊精灵');
+  overlay.querySelector('.close-btn')?.remove();
+  overlay.addEventListener('click', event => { if (event.target === overlay) event.stopImmediatePropagation(); }, true);
+  overlay.querySelector('#dlcRepairRestartAcknowledgeBtn')?.addEventListener('click', () => requestCloseWorkshop());
+  overlay.querySelector('#dlcRepairRestartLookAgainBtn')?.addEventListener('click', () => showToast('別再点了快点重开酒馆', 'warning'));
+  return overlay;
 }
 
 function buildRepairMetadataHtml(candidate) {
@@ -183,6 +217,12 @@ function buildDlcRepairReportText() {
   }
   lines.push('Unreadable worldbooks: ' + (unreadable.length ? unreadable.join(', ') : 'none'));
   lines.push('Pending repairs: ' + (Array.isArray(report.pending) ? report.pending.length : 0));
+  lines.push('Repair integrity: ' + (report.repairIntegrityStatus || 'unknown') + (report.repairIntegrityLocked ? ' LOCKED' : ''));
+  lines.push('Repair restart required: ' + (report.repairRestartRequired ? 'yes' : 'no'));
+  if (report.repairIntegrityReason) lines.push('Repair integrity reason: ' + report.repairIntegrityReason);
+  (Array.isArray(report.repairIntegrityFields) ? report.repairIntegrityFields : []).forEach(item => {
+    lines.push('Repair sentinel ' + item.field + ': ' + item.status + ' actual=' + (item.actual ?? 'missing') + ' expected=' + (item.expected ?? ''));
+  });
   lines.push('');
 
   dlcRepairUiState.items.forEach(item => {
@@ -230,7 +270,8 @@ function renderDlcRepairModal() {
   }
 
   const repairIntegrityLocked = Boolean(report.repairIntegrityLocked);
-  const repairUnavailable = repairLocked || repairIntegrityLocked;
+  const repairRestartRequired = Boolean(report.repairRestartRequired);
+  const repairUnavailable = repairLocked || repairIntegrityLocked || repairRestartRequired;
   const availableWorldbooks = Array.isArray(report.availableWorldbookNames) ? report.availableWorldbookNames : [];
   const scannedWorldbooks = Array.isArray(report.scannedWorldbookNames) ? report.scannedWorldbookNames : [];
   const unreadable = Array.isArray(report.unreadableWorldbookNames) ? report.unreadableWorldbookNames : [];
@@ -259,12 +300,20 @@ function renderDlcRepairModal() {
     ? '<div class="repair-warning"><i class="fas fa-cat"></i> <strong>' + escapeHtml(REPAIR_DAILY_LOCK_MESSAGE) + '</strong><br><span>今天的自动修复查询已经锁住，下一次日界线后会自动恢复。可以先复制诊断资料并截图去 DC 找我。</span></div>'
     : '';
   const repairIntegrityLockHtml = repairIntegrityLocked
-    ? '<div class="repair-warning"><i class="fas fa-shield-halved"></i> <strong>DLC 修复已锁定</strong><br><span>工坊精灵完整性检查失败：' + escapeHtml(report.repairIntegrityReason || '本地 Workshop metadata 异常') + '。请不要继续重装或手动删除条目，截图并去 DC 找我处理。</span></div>'
+    ? '<div class="repair-warning"><i class="fas fa-shield-halved"></i><div><strong>喵喵！我放在你家养的工坊精灵怎么丢了资料！修理按钮我幫你保管了！去DC找我</strong><span>' + escapeHtml(report.repairIntegrityReason || '本地 Workshop metadata 异常') + '</span></div></div>' + buildRepairIntegrityFieldsHtml(report)
+    : '';
+  const repairRestartHtml = repairRestartRequired
+    ? '<div class="repair-warning"><i class="fas fa-rotate"></i><div><strong>还没重开酒馆喵！</strong><span>先重开酒馆，再回来检查工坊精灵。</span></div></div>'
+    : '';
+  const repairIntegrityPassHtml = !repairIntegrityLocked && !repairRestartRequired && report.repairIntegrityStatus === 'healthy'
+    ? '<div class="repair-baseline-note"><i class="fas fa-circle-check"></i><div><strong>你过关！</strong><span>工坊精灵的资料完整，DLC Repair 可以正常使用喵。</span></div></div>'
     : '';
 
   root.innerHTML = buildPendingRepairHtml(report, repairUnavailable)
     + repairLockHtml
     + repairIntegrityLockHtml
+    + repairRestartHtml
+    + repairIntegrityPassHtml
     + baselineInfoHtml
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 有世界书暂时读不到：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
     + '<section class="repair-scan-card"><div class="repair-scan-summary"><div><span class="repair-kicker">已检查这些世界书</span><strong>' + escapeHtml(scannedLabel) + '</strong><small>打开页面时会自动检查你当前正在使用的世界书。</small></div><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重新扫描</button></div><details class="repair-other-book"><summary>没找到要修的 DLC？改扫其他世界书</summary><div class="repair-other-book-body"><select id="dlcRepairWorldbookSelect"><option value="">选择其他世界书</option>' + otherWorldbookOptions + '</select><small>选中一本后会自动扫描。</small></div></details></section>'
@@ -455,10 +504,15 @@ async function runSelectedDlcRepairs() {
     if (dlcRepairUiState.items.size > 0) renderDlcRepairModal();
   }
   dlcRepairUiState.busy = false;
-  if (dlcRepairUiState.items.size === 0) closeDlcRepairModal();
-  else renderDlcRepairModal();
-  if (failed) showToast('DLC 修复完成：' + completed + ' 成功，' + failed + ' 失败；失败项可直接重试', 'warning');
-  else showToast('已重装 ' + completed + ' 个 DLC 的 Workshop 最新版');
+  if (failed) {
+    renderDlcRepairModal();
+    showToast('DLC 修复完成：' + completed + ' 成功，' + failed + ' 失败；失败项可直接重试', 'warning');
+  } else if (completed > 0) {
+    closeDlcRepairModal();
+    openDlcRepairRestartNotice();
+  } else {
+    renderDlcRepairModal();
+  }
 }
 
 async function retryPendingDlcRepair(repairId) {
@@ -473,10 +527,8 @@ async function retryPendingDlcRepair(repairId) {
   renderDlcRepairModal();
   try {
     await requestDlcRepairProject(record.target);
-    showToast('未完成的 DLC 修复已继续并完成');
-    await loadDlcRepairScan();
-    const hasPending = Array.isArray(dlcRepairUiState.report?.pending) && dlcRepairUiState.report.pending.length > 0;
-    if (dlcRepairUiState.items.size === 0 && !hasPending) closeDlcRepairModal();
+    closeDlcRepairModal();
+    openDlcRepairRestartNotice();
   } catch (error) {
     showToast('继续修复失败：' + (error?.message || String(error)), 'error');
   } finally {

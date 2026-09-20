@@ -46,10 +46,10 @@ function makeLodash() {
   };
 }
 
-function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false, boundWorldbookNames = null } = {}) {
+function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false, boundWorldbookNames = null, initialVariables = {} } = {}) {
   const worldbooks = Object.fromEntries(Object.entries(initialWorldbooks || {}).map(([name, entries]) => [name, structuredClone(entries)]));
   let regexes = structuredClone(initialRegexes);
-  let variables = {};
+  let variables = structuredClone(initialVariables);
   let applyAttempts = 0;
   const installRecords = new Map();
 
@@ -156,6 +156,7 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
     worldbooks,
     regexes: () => structuredClone(regexes),
     installRecords,
+    variables: () => structuredClone(variables),
     applyAttempts: () => applyAttempts,
   };
 }
@@ -264,6 +265,8 @@ officialBaseline.entries = [
   const lockedReport = await harness.api.scanCreativeWorkshopRepairCandidates();
   assert.equal(lockedReport.repairIntegrityLocked, true, 'damaged sentinel metadata must lock DLC Repair');
   assert.equal(lockedReport.candidates.length, 0, 'integrity lock must suppress all repair candidates');
+  const brokenEntryKey = lockedReport.repairIntegrityFields.find(item => item.field === 'cw_entry_key');
+  assert.equal(brokenEntryKey?.status, 'missing', 'integrity report must identify the exact missing sentinel metadata');
   await assert.rejects(
     () => harness.api.repairCreativeWorkshopProject({
       candidateId: 'DLC::秋日祭',
@@ -398,6 +401,17 @@ officialBaseline.entries = [
   assert.deepEqual(harness.regexes().map(regex => regex.id).sort(), ['creative_workshop:new-project-id:0', 'keep-regex']);
   assert.equal(harness.api.getCreativeWorkshopPendingRepairs().length, 0);
   assert.equal(harness.installRecords.get('new-project-id')?.installedVersion, '9.9.9');
+  const sameRuntimeReport = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(sameRuntimeReport.repairRestartRequired, true, 'successful repair must require a Tavern restart before passing integrity check');
+
+  const restartedHarness = createHarness({
+    worldbooks: harness.worldbooks,
+    regexes: harness.regexes(),
+    initialVariables: harness.variables(),
+  });
+  const restartedReport = await restartedHarness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(restartedReport.repairRestartRequired, false, 'a fresh runtime must satisfy the restart guard');
+  assert.equal(restartedReport.repairIntegrityStatus, 'healthy', 'healthy sentinel after restart must pass the device integrity check');
 }
 
 {
@@ -478,7 +492,13 @@ assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
 assert.match(repairUiSource, /对应工坊项目/);
 assert.match(repairUiSource, /candidate\.problems\.length > 0/, 'repair UI must hide healthy DLCs');
-assert.match(repairUiSource, /DLC 修复已锁定/, 'repair UI must show the integrity lock instead of allowing reinstall');
+assert.match(repairUiSource, /喵喵！我放在你家养的工坊精灵怎么丢了资料！修理按钮我幫你保管了！去DC找我/, 'repair UI must show the integrity lock instead of allowing reinstall');
+assert.match(repairUiSource, /好啦修理成功喵！現在重开酒馆，然后再來工坊DLC检查多次看看吧!/, 'first successful repair must ask for a Tavern restart');
+assert.match(repairUiSource, /知道了喵/);
+assert.match(repairUiSource, /不行，再看一眼/);
+assert.match(repairUiSource, /別再点了快点重开酒馆/);
+assert.match(repairUiSource, /你过关！/, 'healthy sentinel after restart must show the pass message');
+assert.match(repairUiSource, /buildRepairIntegrityFieldsHtml/, 'broken sentinel UI must show field-level metadata details');
 assert.match(repairUiSource, /dlcRepairSelectAllBtn/, 'repair UI must expose one-click select all');
 assert.match(repairUiSource, /选择此项目/, 'ambiguous Workshop candidates must have an explicit selection affordance');
 assert.match(repairUiSource, /dlcRepairWorldbookSelect/, 'repair UI must allow choosing another worldbook when automatic scan misses it');
