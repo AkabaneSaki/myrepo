@@ -454,7 +454,7 @@ try {
   const eligibleProjectCount = await readEligibleProjectCount();
   const rankingRebuildBudget = {
     ...RANKING_REBUILD_BUDGET,
-    maxRowsRead: 3 * eligibleProjectCount + 500,
+    maxRowsRead: 3 * eligibleProjectCount + 502,
   };
   await resetCurrentRankingDay();
   await assertPortAvailable();
