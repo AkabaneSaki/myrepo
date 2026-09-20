@@ -56,7 +56,7 @@ assert.doesNotMatch(homeStylesSource, /\.upload-preview-summary \{[^}]*rgba\(99,
 assert.match(homeStylesSource, /\.form-group \.taxonomy-chip \{[^}]*position:relative;/);
 assert.match(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*inset:0;[^}]*width:100%;[^}]*height:100%;[^}]*border:0;/);
 assert.doesNotMatch(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*clip-path:inset\(50%\)/);
-assert.match(homeStylesSource, /\.project-form \.display-tag-picker \{[^}]*overflow-anchor:none;/);
+assert.match(homeStylesSource, /\.project-form-modal \{[^}]*overflow:clip;/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):focus,/);
 
@@ -203,8 +203,6 @@ assert.doesNotMatch(fragments.homeModalsScript, /id=\"extensionType\"/);
 assert.match(fragments.homeModalsScript, /data-facet-group/);
 assert.match(fragments.homeModalsScript, /taxonomy-chip/);
 assert.match(fragments.homeModalsScript, /creator-tag-picker/);
-assert.match(fragments.homeModalsScript, /displayTagPicker\.closest\("\.project-form-layout"\)/);
-assert.match(fragments.homeModalsScript, /scrollContainer\.scrollTop = previousScrollTop/);
 assert.match(fragments.homeModalsScript, /data-preset-tag/);
 assert.match(fragments.homeModalsScript, /PROJECT_TAXONOMY\.extensionTypes/);
 assert.match(fragments.homeModalsScript, /PROJECT_TAXONOMY\.characterFacets/);

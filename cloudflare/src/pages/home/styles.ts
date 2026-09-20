@@ -217,7 +217,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .form-submit-btn { width:100%; padding:12px; justify-content:center; }
 
 /* Creator form workspace: upload/edit share one responsive layout. */
-.project-form-modal { align-items:center; padding:24px 32px; overflow:hidden; background:rgba(5,6,8,.78); backdrop-filter:blur(10px); }
+.project-form-modal { align-items:center; padding:24px 32px; overflow:clip; background:rgba(5,6,8,.78); backdrop-filter:blur(10px); }
 .project-form-modal .modal-content { width:min(100%,1180px); max-width:1180px; height:calc(100dvh - 48px); max-height:calc(100dvh - 48px); border-radius:14px; background:#18191c; border-color:rgba(255,255,255,.09); box-shadow:0 28px 80px rgba(0,0,0,.5); }
 .project-form-modal .modal-header { min-height:62px; padding:0 22px; background:#18191c; border-bottom:1px solid rgba(255,255,255,.07); }
 .project-form-modal .modal-header h2 { color:#e5e4e1; font-size:1rem; font-weight:760; }
@@ -247,7 +247,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .project-form .form-group input:not([type="checkbox"]):not([type="radio"]):focus,.project-form .form-group textarea:focus,.project-form .form-group select:focus { border-color:rgba(190,164,125,.52); background:#151619; box-shadow:0 0 0 3px rgba(190,164,125,.07); }
 .project-form .form-hint { margin-top:7px; color:#77756f; font-size:.7rem; line-height:1.5; }
 .project-form #displayTagsGroup { margin-top:2px; }
-.project-form .display-tag-picker { min-height:48px; padding:9px 0 0; overflow-anchor:none; }
+.project-form .display-tag-picker { min-height:48px; padding:9px 0 0; }
 .project-form .display-tag-picker-empty { padding:11px 12px; border-color:rgba(255,255,255,.08); background:rgba(255,255,255,.015); color:#66645f; }
 .project-form .taxonomy-facet-group { background:#151619; border-color:rgba(255,255,255,.08); border-radius:9px; }
 .project-form .taxonomy-facet-group summary { padding:10px 11px; }
