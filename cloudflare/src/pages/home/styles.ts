@@ -179,7 +179,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .taxonomy-facet-group summary small { margin-left:auto; color:rgba(226,232,240,.44); font-size:.7rem; font-weight:500; }
 .taxonomy-chip-list { display:flex; flex-wrap:wrap; gap:8px; padding:0 12px 12px; }
 .form-group .taxonomy-chip { display:inline-flex; max-width:100%; margin:0; font-weight:600; opacity:1; cursor:pointer; }
-.form-group .taxonomy-chip input { position:absolute; width:1px; height:1px; margin:0; padding:0; opacity:0; pointer-events:none; }
+.form-group .taxonomy-chip input { position:absolute; width:1px; height:1px; min-width:0; min-height:0; margin:0; padding:0; overflow:hidden; clip-path:inset(50%); border:0; border-radius:0; background:transparent; box-shadow:none; opacity:0; pointer-events:none; }
 .taxonomy-chip span { display:inline-flex; align-items:center; min-height:32px; max-width:100%; padding:6px 10px; border:1px solid rgba(148,163,184,.2); border-radius:999px; background:rgba(30,41,59,.72); color:rgba(226,232,240,.74); font-size:.8rem; line-height:1.2; transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease; }
 .taxonomy-chip:hover span { border-color:rgba(129,140,248,.46); color:#E0E7FF; }
 .taxonomy-chip input:checked + span { border-color:rgba(129,140,248,.62); background:rgba(99,102,241,.22); color:#EEF2FF; box-shadow:0 0 0 1px rgba(129,140,248,.12) inset; }
@@ -241,10 +241,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .project-form .form-group { min-width:0; margin:0; }
 .project-form .form-group > label { margin-bottom:7px; color:#aaa8a3; font-size:.76rem; font-weight:700; opacity:1; }
 .project-form .form-label-meta { margin-left:5px; color:#686762; font-size:.68rem; font-weight:600; }
-.project-form .form-group input,.project-form .form-group textarea,.project-form .form-group select { min-height:42px; padding:10px 12px; border:1px solid rgba(255,255,255,.09); border-radius:8px; outline:0; background:#121316; color:#e2e1dd; box-shadow:none; transition:border-color .16s ease,background .16s ease,box-shadow .16s ease; }
+.project-form .form-group input:not([type="checkbox"]):not([type="radio"]),.project-form .form-group textarea,.project-form .form-group select { min-height:42px; padding:10px 12px; border:1px solid rgba(255,255,255,.09); border-radius:8px; outline:0; background:#121316; color:#e2e1dd; box-shadow:none; transition:border-color .16s ease,background .16s ease,box-shadow .16s ease; }
 .project-form .form-group textarea { min-height:126px; resize:vertical; line-height:1.6; }
 .project-form .form-group input::placeholder,.project-form .form-group textarea::placeholder { color:#5f5e5a; }
-.project-form .form-group input:focus,.project-form .form-group textarea:focus,.project-form .form-group select:focus { border-color:rgba(190,164,125,.52); background:#151619; box-shadow:0 0 0 3px rgba(190,164,125,.07); }
+.project-form .form-group input:not([type="checkbox"]):not([type="radio"]):focus,.project-form .form-group textarea:focus,.project-form .form-group select:focus { border-color:rgba(190,164,125,.52); background:#151619; box-shadow:0 0 0 3px rgba(190,164,125,.07); }
 .project-form .form-hint { margin-top:7px; color:#77756f; font-size:.7rem; line-height:1.5; }
 .project-form #displayTagsGroup { margin-top:2px; }
 .project-form .display-tag-picker { min-height:48px; padding:9px 0 0; }
