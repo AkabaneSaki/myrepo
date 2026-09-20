@@ -51,7 +51,9 @@ function getRepairItem(candidateId) {
 }
 
 function initializeRepairItems(report) {
-  dlcRepairUiState.items = new Map((Array.isArray(report?.candidates) ? report.candidates : []).map(candidate => [
+  const problemCandidates = (Array.isArray(report?.candidates) ? report.candidates : [])
+    .filter(candidate => Array.isArray(candidate?.problems) && candidate.problems.length > 0);
+  dlcRepairUiState.items = new Map(problemCandidates.map(candidate => [
     candidate.candidateId,
     {
       candidate,
