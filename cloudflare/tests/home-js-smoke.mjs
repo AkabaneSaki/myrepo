@@ -53,6 +53,9 @@ assert.match(fragments.homeLayoutRenderScript, /aria-hidden=.*inert/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.detail-keywords-block/);
 assert.match(homeStylesSource, /\.project-form \.upload-file-preview \.keyword-chip/);
 assert.doesNotMatch(homeStylesSource, /\.upload-preview-summary \{[^}]*rgba\(99,102,241/);
+assert.match(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]*min-height:0;[^}]*clip-path:inset\(50%\);[^}]*border:0;/);
+assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),/);
+assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):focus,/);
 
 assert.doesNotMatch(
   fragments.homeTavernBridgeScript,
