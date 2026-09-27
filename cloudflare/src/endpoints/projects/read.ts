@@ -4,6 +4,7 @@ import type { AppContext } from '../../types';
 import { PROJECT_TYPES } from '../../config/project-taxonomy';
 import { projectDb } from '../../utils/db';
 import { getCurrentUserFromRequest } from '../../utils/jwt';
+import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
 import { readProjectContentForEdit } from './content';
 
@@ -314,11 +315,21 @@ async function readPrivateProjectRatingState(
 
 async function readProjectPreview(
   c: AppContext,
-  project: { downloadUrl?: string | null; id: string; publishedProjectId?: string | null },
+  project: {
+    downloadUrl?: string | null;
+    id: string;
+    publishedProjectId?: string | null;
+    worldbookEjsLengthEstimates?: Record<string, string>;
+  },
 ) {
   const projectObject = await readProjectContentForEdit(c, project, 'worldbook');
   const regexObject = await readProjectContentForEdit(c, project, 'regex');
-  const worldbookEntriesPreview = projectObject ? parseWorldbookEntriesPreview(await projectObject.text()) : [];
+  const worldbookEntriesPreview = projectObject
+    ? attachWorldbookEjsLengthEstimates(
+        parseWorldbookEntriesPreview(await projectObject.text()),
+        project.worldbookEjsLengthEstimates || {},
+      )
+    : [];
   const regexEntriesPreview = regexObject ? parseRegexEntriesPreview(await regexObject.text()) : [];
   return { worldbookEntriesPreview, regexEntriesPreview };
 }

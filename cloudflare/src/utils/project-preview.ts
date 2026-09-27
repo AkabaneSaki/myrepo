@@ -1,6 +1,6 @@
 import type { RegexEntryPreviewType, WorldbookEntryPreviewType } from '../types';
 import { extractProjectEntries } from './project-content.ts';
-import { inspectProjectEntry } from './project-inspection.ts';
+import { inspectProjectEntry, stripWorkshopMetadataBlocks } from './project-inspection.ts';
 
 function safeParseJson(text: string): unknown {
   try {
@@ -53,11 +53,14 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
   const raw = safeParseJson(projectFileText);
   return extractProjectEntries(raw, 'worldbook').map(({ entry: item, entryKey }, index) => {
     const inspection = inspectProjectEntry(item, 'worldbook');
+    const content = typeof item.content === 'string' ? item.content : typeof item.text === 'string' ? item.text : '';
+    const contentCharacterCount = inspection.hasEjs ? undefined : Array.from(stripWorkshopMetadataBlocks(content)).length;
     return {
       entryKey,
       uid: typeof item.uid === 'string' || typeof item.uid === 'number' ? String(item.uid) : String(index),
       comment: typeof item.comment === 'string' ? item.comment : typeof item.name === 'string' ? item.name : '无标题',
-      content: typeof item.content === 'string' ? item.content : typeof item.text === 'string' ? item.text : '',
+      content,
+      contentCharacterCount,
       key: Array.isArray(item.key)
         ? item.key.filter(key => typeof key === 'string')
         : Array.isArray(item.keys)

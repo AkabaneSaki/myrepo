@@ -52,6 +52,7 @@
     "cf-typegen": "wrangler types",
     "cf-typegen:local-test": "wrangler types --config wrangler.local-test.jsonc",
     "check:project-precautions": "node tests/project-precautions-smoke.mjs",
+    "check:project-ejs-length-estimates": "node tests/project-ejs-length-estimates-smoke.mjs",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",

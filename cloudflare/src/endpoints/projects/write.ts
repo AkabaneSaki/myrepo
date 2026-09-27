@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../../types';
 import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../../utils/db';
+import { validateWorldbookEjsLengthEstimatesInput } from '../../utils/project-entry-estimates';
 import { resolveProjectCompatibilitySelection, validateOriginalConflictReferenceItems } from '../../utils/character-reference.ts';
 import { getCurrentUserFromRequest } from '../../utils/jwt';
 import { r2Storage } from '../../utils/r2';
@@ -37,6 +38,7 @@ export class ProjectCreate extends OpenAPIRoute {
               displayTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).default([]),
               coverImage: Str({ required: false }),
+              worldbookEjsLengthEstimates: z.record(z.string().max(160)).optional(),
             }),
           },
         },
@@ -93,6 +95,8 @@ export class ProjectCreate extends OpenAPIRoute {
         ? rawBuiltForReferenceVersionId.trim() || null
         : rawBuiltForReferenceVersionId;
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
+      const estimateResult = validateWorldbookEjsLengthEstimatesInput(rawBody.worldbookEjsLengthEstimates);
+      if (estimateResult.error) return c.json({ error: estimateResult.error }, 400);
 
       const taxonomyResult = normalizeProjectTaxonomyInput(rawBody as Record<string, unknown>, {
         requireExtensionSubtypeForExplicitType: false,
@@ -165,6 +169,7 @@ export class ProjectCreate extends OpenAPIRoute {
         compatibilityUpdatedAt: compatibilitySelection.builtForReferenceVersionId ? new Date().toISOString() : null,
         conflictsWithOriginal,
         originalConflictReferenceItemIds,
+        worldbookEjsLengthEstimates: estimateResult.value,
         authorId: payload.userId,
         authorName: payload.username,
         authorAvatar: payload.avatar || '',
@@ -274,6 +279,7 @@ export class ProjectUpdate extends OpenAPIRoute {
               displayTags: z.array(z.string()).optional(),
               tags: z.array(z.string()).optional(),
               coverImage: Str({ required: false }),
+              worldbookEjsLengthEstimates: z.record(z.string().max(160)).optional(),
             }),
           },
         },
@@ -294,6 +300,8 @@ export class ProjectUpdate extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { projectId } = data.params;
+    const estimateResult = validateWorldbookEjsLengthEstimatesInput(data.body.worldbookEjsLengthEstimates);
+    if (estimateResult.error) return c.json({ error: estimateResult.error }, 400);
 
     // 检查项目是否存在且属于当前用户
     const project = await projectDb.get(c, projectId);
@@ -398,6 +406,9 @@ export class ProjectUpdate extends OpenAPIRoute {
     const { compatibilityConfirmed: _compatibilityConfirmed, ...bodyUpdates } = data.body;
     const updates = {
       ...bodyUpdates,
+      ...(data.body.worldbookEjsLengthEstimates !== undefined
+        ? { worldbookEjsLengthEstimates: estimateResult.value }
+        : {}),
       ...compatibilityUpdates,
       ...conflictUpdates,
       projectType: taxonomy.projectType,

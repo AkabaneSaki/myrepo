@@ -13,6 +13,11 @@ import {
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
 import { generateProjectRankingDay, getReadyProjectRankingBoard } from './project-daily-rankings';
+import {
+  normalizeWorldbookEjsLengthEstimates,
+  parseWorldbookEjsLengthEstimates,
+  type WorldbookEjsLengthEstimates,
+} from './project-entry-estimates';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
@@ -236,6 +241,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -274,8 +280,8 @@ export const projectDb = {
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
-				conflicts_with_original, original_conflict_reference_item_ids, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				conflicts_with_original, original_conflict_reference_item_ids, worldbook_ejs_length_estimates, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -321,6 +327,7 @@ export const projectDb = {
         project.compatibilityUpdatedAt || null,
         project.conflictsWithOriginal ? 1 : 0,
         JSON.stringify(project.originalConflictReferenceItemIds || []),
+        JSON.stringify(normalizeWorldbookEjsLengthEstimates(project.worldbookEjsLengthEstimates)),
         now(),
         now(),
       )
@@ -449,6 +456,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -536,6 +544,10 @@ export const projectDb = {
     if (updates.originalConflictReferenceItemIds !== undefined) {
       setClauses.push('original_conflict_reference_item_ids = ?');
       values.push(JSON.stringify(updates.originalConflictReferenceItemIds));
+    }
+    if (updates.worldbookEjsLengthEstimates !== undefined) {
+      setClauses.push('worldbook_ejs_length_estimates = ?');
+      values.push(JSON.stringify(normalizeWorldbookEjsLengthEstimates(updates.worldbookEjsLengthEstimates)));
     }
     if (updates.projectType !== undefined) {
       setClauses.push('project_type = ?');
@@ -1234,6 +1246,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -1267,6 +1280,7 @@ export const projectDb = {
         compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
         conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : existingDraft.conflictsWithOriginal,
         originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : existingDraft.originalConflictReferenceItemIds,
+        worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : existingDraft.worldbookEjsLengthEstimates,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
@@ -1300,6 +1314,7 @@ export const projectDb = {
       compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
       conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : published.conflictsWithOriginal,
       originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
+      worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : published.worldbookEjsLengthEstimates,
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -1611,5 +1626,6 @@ export function parseProjectRow(row: Record<string, unknown>) {
         return [];
       }
     })(),
+    worldbookEjsLengthEstimates: parseWorldbookEjsLengthEstimates(row.worldbook_ejs_length_estimates),
   };
 }

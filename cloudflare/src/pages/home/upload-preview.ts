@@ -1,11 +1,33 @@
 export const homeUploadPreviewScript = String.raw`
 const uploadPreviewObjectUrls = new WeakMap();
 
-function getUploadWorldbookEntries(parsed) {
+function getUploadWorldbookEntryRefs(parsed) {
   const entries = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.entries : null;
-  if (Array.isArray(entries)) return entries;
-  if (entries && typeof entries === 'object' && !Array.isArray(entries)) return Object.values(entries);
+  if (Array.isArray(entries)) {
+    return entries.map((entry, index) => ({ entry, index, objectKey: null }));
+  }
+  if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+    return Object.entries(entries).map(([objectKey, entry], index) => ({ entry, index, objectKey }));
+  }
   return [];
+}
+
+function getUploadWorldbookEntryKey(entry, index, objectKey) {
+  if (objectKey !== null && objectKey !== undefined) return 'object:' + String(objectKey);
+  const extensions = entry?.extensions && typeof entry.extensions === 'object' && !Array.isArray(entry.extensions)
+    ? entry.extensions
+    : null;
+  const id = entry?.uid ?? extensions?.cw_entry_id;
+  return id !== null && id !== undefined ? 'uid:' + String(id) : 'index:' + index;
+}
+
+function getUploadWorldbookInspectableContent(entry) {
+  const content = typeof entry?.content === 'string' ? entry.content : typeof entry?.text === 'string' ? entry.text : '';
+  return content.replace(/<%# poem-workshop-meta:v1-start\n[\s\S]*?\npoem-workshop-meta:v1-end %>/g, '');
+}
+
+function uploadWorldbookEntryHasEjs(entry) {
+  return /<%[\s\S]*?%>/.test(getUploadWorldbookInspectableContent(entry));
 }
 
 function getUploadRegexEntries(parsed) {
@@ -52,12 +74,18 @@ function finiteUploadNumber(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function normalizeUploadWorldbookEntry(entry, index) {
+function normalizeUploadWorldbookEntry(entry, index, entryKey) {
   const positionRecord = entry?.position && typeof entry.position === 'object' && !Array.isArray(entry.position)
     ? entry.position
     : null;
+  const hasEjs = uploadWorldbookEntryHasEjs(entry);
+  const inspectableContent = getUploadWorldbookInspectableContent(entry);
   return {
     ...entry,
+    entryKey,
+    hasEjs,
+    authorEstimatedLength: '',
+    contentCharacterCount: hasEjs ? undefined : Array.from(inspectableContent).length,
     comment: typeof entry?.comment === 'string' ? entry.comment : typeof entry?.name === 'string' ? entry.name : '无标题',
     content: typeof entry?.content === 'string' ? entry.content : typeof entry?.text === 'string' ? entry.text : '',
     key: Array.isArray(entry?.key)
@@ -116,7 +144,7 @@ function renderWorldbookUploadPreview(container, prepared) {
   container.hidden = false;
   const entries = prepared?.entries || [];
   container.innerHTML = '<div class="upload-preview-summary"><span><i class="fas fa-file-code"></i> ' + escapeHtml(prepared.file.name) + '</span><span class="upload-preview-summary-actions"><strong>' + entries.length + ' 条世界书</strong><button class="upload-preview-clear-btn" type="button" data-upload-preview-clear="worldbook" title="取消选择">×</button></span></div>'
-    + renderDetailSection('世界书条目', 'fa-scroll', entries, renderDetailEntry, '无条目内容');
+    + renderDetailSection('世界书条目', 'fa-scroll', entries, renderDetailEntry, '无条目内容', null, false, null, { estimateEditable: true });
   bindUploadPreviewEntryToggles(container);
 }
 
@@ -164,7 +192,9 @@ async function renderCoverUploadPreview(container, file) {
 
 async function prepareWorldbookUpload(file) {
   const parsed = await validateJsonUpload(file, 'worldbook');
-  const entries = getUploadWorldbookEntries(parsed).map((entry, index) => normalizeUploadWorldbookEntry(entry, index));
+  const entries = getUploadWorldbookEntryRefs(parsed).map(({ entry, index, objectKey }) =>
+    normalizeUploadWorldbookEntry(entry, index, getUploadWorldbookEntryKey(entry, index, objectKey)),
+  );
   return { file, parsed, entries };
 }
 

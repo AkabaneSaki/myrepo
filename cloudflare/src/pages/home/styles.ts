@@ -1312,6 +1312,16 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 .project-detail-modal .detail-entry-nav-title-row strong { min-width:0; flex:1; }
 .project-detail-modal .detail-entry-ejs-badge { min-width:0; flex:none; display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border:1px solid rgba(190,166,204,.24); border-radius:999px; background:rgba(154,123,170,.10); color:#d4c3dc; font-size:.58rem; font-weight:760; line-height:1.2; letter-spacing:.03em; }
 .project-detail-modal .detail-entry-panel-heading .detail-entry-ejs-badge { margin-left:auto; }
+.ejs-length-estimate { display:flex; align-items:flex-start; gap:9px; padding:10px 12px; border:1px solid rgba(190,166,204,.18); border-radius:9px; background:rgba(154,123,170,.06); color:var(--cw-text-secondary); }
+.ejs-length-estimate > i { margin-top:3px; color:#b79fc2; }
+.ejs-length-estimate > span { min-width:0; display:flex; flex-direction:column; gap:2px; }
+.ejs-length-estimate small,.ejs-length-estimate em { color:var(--cw-text-muted); font-size:.66rem; font-style:normal; }
+.ejs-length-estimate strong { color:var(--cw-text-primary); font-size:.8rem; font-weight:720; overflow-wrap:anywhere; }
+.ejs-length-estimate-editor { display:grid; gap:7px; padding:11px 12px; border:1px solid rgba(190,166,204,.2); border-radius:9px; background:rgba(154,123,170,.055); }
+.ejs-length-estimate-editor > span { display:flex; flex-direction:column; gap:2px; }
+.ejs-length-estimate-editor > span strong { color:var(--cw-text-primary); font-size:.78rem; }
+.ejs-length-estimate-editor > span small,.ejs-length-estimate-editor > em { color:var(--cw-text-muted); font-size:.68rem; font-style:normal; }
+.ejs-length-estimate-editor input { width:100%; min-height:38px; padding:8px 10px; border:1px solid rgba(255,255,255,.12); border-radius:8px; background:rgba(0,0,0,.16); color:var(--cw-text-primary); }
 .project-detail-modal .detail-entry-nav-copy strong { overflow:hidden; color:inherit; font-size:.78rem; font-weight:680; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
 .project-detail-modal .detail-entry-nav-copy small { color:#77756f; font-size:.62rem; line-height:1.2; }
 .project-detail-modal .detail-entry-pane { min-width:0; padding:0 0 0 28px; scroll-margin-top:68px; }

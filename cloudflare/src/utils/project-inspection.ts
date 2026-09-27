@@ -46,7 +46,7 @@ function isValidWorkshopMetadataPayload(raw: string): boolean {
   }
 }
 
-function stripWorkshopMetadataBlocks(content: string): string {
+export function stripWorkshopMetadataBlocks(content: string): string {
   const validRanges: Array<{ start: number; end: number }> = [];
   let cursor = 0;
 

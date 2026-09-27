@@ -5,6 +5,7 @@ import type { AppContext } from '../types';
 import { projectDb, userDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
+import { attachWorldbookEjsLengthEstimates } from '../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
 
@@ -239,7 +240,12 @@ export class AdminReviewDetail extends OpenAPIRoute {
       isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'regex') : Promise.resolve(null),
     ]);
 
-    const worldbookEntriesPreview = currentWorldbookText ? parseWorldbookEntriesPreview(currentWorldbookText) : [];
+    const worldbookEntriesPreview = currentWorldbookText
+      ? attachWorldbookEjsLengthEstimates(
+          parseWorldbookEntriesPreview(currentWorldbookText),
+          project.worldbookEjsLengthEstimates || {},
+        )
+      : [];
     const regexEntriesPreview = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
     const reviewDiff = buildProjectReviewDiff({
       previousWorldbookText,
@@ -400,6 +406,7 @@ export class AdminReview extends OpenAPIRoute {
             compatibilityUpdatedAt: project.compatibilityUpdatedAt ?? null,
             conflictsWithOriginal: project.conflictsWithOriginal,
             originalConflictReferenceItemIds: project.originalConflictReferenceItemIds,
+            worldbookEjsLengthEstimates: project.worldbookEjsLengthEstimates,
             projectType: project.projectType,
             extensionType: project.extensionType,
             facets: project.facets,
