@@ -28,7 +28,6 @@ export class ProjectRatingSet extends OpenAPIRoute {
     },
     responses: {
       '200': { description: 'Private rating saved' },
-      '403': { description: 'Install required before rating' },
     },
   };
 
@@ -48,15 +47,6 @@ export class ProjectRatingSet extends OpenAPIRoute {
     }
     if (project.author_id === payload.userId) {
       return c.json({ error: '作者不能给自己的项目评分' }, 400);
-    }
-
-    const installed = await c.env.DB.prepare(
-      `SELECT 1 AS installed FROM project_subscribes WHERE project_id = ? AND user_id = ? LIMIT 1`,
-    )
-      .bind(projectId, payload.userId)
-      .first<{ installed: number }>();
-    if (!installed) {
-      return c.json({ error: '安装这个 DLC 后才能评分' }, 403);
     }
 
     const rating = Number(data.body.rating);

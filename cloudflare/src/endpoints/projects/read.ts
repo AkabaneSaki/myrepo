@@ -398,19 +398,17 @@ async function readPrivateProjectRatingState(
   const viewerState = await c.env.DB.prepare(
     `SELECT
        (SELECT rating FROM project_ratings WHERE project_id = ?1 AND user_id = ?2) AS my_rating,
-       (SELECT comment_text FROM project_ratings WHERE project_id = ?1 AND user_id = ?2) AS my_comment,
-       EXISTS(SELECT 1 FROM project_subscribes WHERE project_id = ?1 AND user_id = ?2) AS installed
+       (SELECT comment_text FROM project_ratings WHERE project_id = ?1 AND user_id = ?2) AS my_comment
     `,
   )
     .bind(project.id, payload.userId)
-    .first<{ my_rating: number | null; my_comment: string | null; installed: number }>();
-  const installed = Number(viewerState?.installed || 0) === 1;
+    .first<{ my_rating: number | null; my_comment: string | null }>();
   const projectRateable = project.status === 'approved' && project.isPublished !== false && project.visibility !== false;
   return {
     myRating: viewerState?.my_rating == null ? null : Number(viewerState.my_rating),
     myComment: String(viewerState?.my_comment || ''),
-    canRate: installed && projectRateable,
-    reason: installed ? (projectRateable ? '' : '这个项目当前不能评分') : '安装这个 DLC 后才能评分',
+    canRate: projectRateable,
+    reason: projectRateable ? '' : '这个项目当前不能评分',
     summary: null,
   };
 }

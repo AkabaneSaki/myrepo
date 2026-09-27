@@ -412,8 +412,8 @@ assert.match(fragments.homeDetailModalRenderScript, /data-private-rating-submit/
 assert.match(fragments.homeDetailModalRenderScript, /private-rating-comments/);
 assert.match(fragments.homeModalsScript, /setPrivateProjectRating\(projectId, rating, comment\)/);
 assert.match(fragments.homeModalsScript, /selectPrivateRating\(rating\)/);
-assert.match(fragments.homeModalsScript, /ratingNeedsInstallRepair/);
-assert.match(fragments.homeModalsScript, /setProjectSubscription\(detailProject\.id, true\)/);
+assert.doesNotMatch(fragments.homeModalsScript, /ratingNeedsInstallRepair/);
+assert.doesNotMatch(fragments.homeModalsScript, /setProjectSubscription\(detailProject\.id, true\)/);
 assert.match(fragments.homeModalsScript, /ratingStarsWrap\?\.classList\.add\("previewing"\)/);
 assert.match(fragments.homeModalsScript, /classList\.toggle\("preview"/);
 assert.match(fragments.homeCardsRenderScript, /view\.downloadsCount/);

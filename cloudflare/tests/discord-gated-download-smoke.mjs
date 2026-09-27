@@ -6,6 +6,7 @@ const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const [
   readEndpoint,
   repairEndpoint,
+  socialEndpoint,
   recommendationsEndpoint,
   apiScript,
   authFlow,
@@ -22,6 +23,7 @@ const [
 ] = await Promise.all([
   read('src/endpoints/projects/read.ts'),
   read('src/endpoints/projects/repair.ts'),
+  read('src/endpoints/projects/social.ts'),
   read('src/endpoints/recommendations.ts'),
   read('src/pages/home/api.ts'),
   read('src/pages/home/app/auth-flow.ts'),
@@ -66,6 +68,16 @@ assert.match(bridgeScript, /fetchProjectInstallInfo\(projectId, selection\?\.pro
 assert.match(bridgeScript, /downloadUrl: installInfo\.downloadUrl/);
 assert.match(bridgeScript, /fetchProjectInstallInfo\(projectId, projectVersion\)/);
 assert.match(bridgeScript, /fetchProjectInstallInfo\(projectId\)/);
+assert.doesNotMatch(bridgeScript, /syncInstallSubscription|已自动订阅更新|已取消更新订阅/);
+assert.doesNotMatch(detailModal, /ratingNeedsInstallRepair|setProjectSubscription\(detailProject\.id, true\)/);
+
+const ratingSetStart = socialEndpoint.indexOf('export class ProjectRatingSet');
+const likeToggleStart = socialEndpoint.indexOf('export class ProjectLikeToggle', ratingSetStart);
+const ratingSetSource = socialEndpoint.slice(ratingSetStart, likeToggleStart);
+assert.ok(ratingSetStart >= 0 && likeToggleStart > ratingSetStart);
+assert.match(ratingSetSource, /if \(!payload\) return c\.json\(\{ error: '请先登录' \}, 401\)/);
+assert.doesNotMatch(ratingSetSource, /project_subscribes|安装这个 DLC 后才能评分/);
+assert.doesNotMatch(readEndpoint, /AS installed\s*\n\s*`/);
 assert.match(updateModal, /await confirmProjectUpdate/);
 
 assert.match(hostSource, /payload\?\.downloadUrl/);
