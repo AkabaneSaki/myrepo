@@ -1,10 +1,11 @@
 import {
+  createCreativeWorkshopRegexIdentityResolver,
   getCreativeWorkshopBoundWorldbookNames,
   getCreativeWorkshopInstallRecords,
   getCreativeWorkshopRelevantWorldbookNames,
 } from './install-registry';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
-import { getCreativeWorkshopRegexIdentity } from './regex-name';
+
 
 export type CreativeWorkshopInstalledProject = {
   projectId: string;
@@ -105,8 +106,9 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
   );
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
   const managedRegexRows = regexes
-    .map(regex => ({ regex, identity: getCreativeWorkshopRegexIdentity(regex) }))
+    .map(regex => ({ regex, identity: resolveRegexIdentity(regex) }))
     .filter(row => Boolean(row.identity));
   const groupedRegexes = _.groupBy(
     managedRegexRows,

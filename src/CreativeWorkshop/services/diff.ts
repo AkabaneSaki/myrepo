@@ -1,20 +1,24 @@
-import { resolveCreativeWorkshopInstallWorldbook } from './install-registry';
+import {
+  createCreativeWorkshopRegexIdentityResolver,
+  resolveCreativeWorkshopInstallWorldbook,
+} from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 import { formatCreativeWorkshopEntryName } from './project-type';
 import {
+  getCreativeWorkshopRegexIdentityKey,
   getCreativeWorkshopWorldbookMetadataString,
   stripCreativeWorkshopWorldbookMetadata,
 } from './install-identity';
 import {
   getCreativeWorkshopManagedRegexStableIdentityKey,
-  getCreativeWorkshopRegexIdentity,
-  getCreativeWorkshopRegexStableIdentityKey,
+  getCreativeWorkshopRegexId,
+
   getReadableRegexName,
 } from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
-const DIFF_IDENTITY_VERSION = 3;
+const DIFF_IDENTITY_VERSION = 4;
 
 type CreativeWorkshopDiffCache = Record<
   string,
@@ -137,18 +141,25 @@ export async function getCreativeWorkshopProjectDiff(
       : normalized;
   });
 
-  const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
+  const allRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes);
+  const localRegexes = allRegexes
     .filter(regex => {
-      const identity = getCreativeWorkshopRegexIdentity(regex);
+      const identity = resolveRegexIdentity(regex);
       return identity?.projectId === projectId ||
         Boolean(legacyProjectName && identity?.projectId === legacyProjectName);
     })
-    .map(regex => ({
-      id: getCreativeWorkshopRegexStableIdentityKey(regex),
+    .map(regex => {
+      const identity = resolveRegexIdentity(regex);
+      return {
+      id: identity
+        ? getCreativeWorkshopRegexIdentityKey(identity.projectId, identity.entryKey)
+        : getCreativeWorkshopRegexId(regex),
       scriptName: String(regex.script_name || regex.id || ''),
       findRegex: regex.find_regex,
       replaceString: regex.replace_string,
-    }));
+      };
+    });
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
     id: getCreativeWorkshopManagedRegexStableIdentityKey(projectId, entry, index),
     scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),

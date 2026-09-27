@@ -1,5 +1,6 @@
 import officialWorldbookBaseline from '../../../data/official-card-baselines/poem-of-destiny/v4.3.3/worldbook-fingerprints.json';
 import {
+  createCreativeWorkshopRegexIdentityResolver,
   deleteCreativeWorkshopInstallRecord,
   getCreativeWorkshopBoundWorldbookNames,
   setCreativeWorkshopInstallRecord,
@@ -11,10 +12,11 @@ import {
 } from './regex';
 import {
   getCreativeWorkshopRegexId,
-  getCreativeWorkshopRegexIdentity,
+
 } from './regex-name';
 import {
   getCreativeWorkshopWorldbookMetadataString,
+  type CreativeWorkshopRegexIdentity,
   injectCreativeWorkshopWorldbookMetadata,
   stripCreativeWorkshopWorldbookMetadata,
 } from './install-identity';
@@ -675,6 +677,7 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   });
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
   const candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
     const entries = candidateRows.map(row => row.entry);
     const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
@@ -691,14 +694,14 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       ...entries.map(entry => readStringMetadata(entry, 'fate_project_name')).filter((value): value is string => Boolean(value)),
     ]);
     const matchingRegexes = regexes.filter(regex => {
-      const identity = getCreativeWorkshopRegexIdentity(regex);
+      const identity = resolveRegexIdentity(regex);
       const scriptName = _.isString((regex as any).script_name) ? String((regex as any).script_name) : '';
       if (identity && entryProjectIds.length > 0) return entryProjectIds.includes(identity.projectId);
       return scriptName.startsWith(`[工坊] ${name} -`);
     });
     const regexIdentities = matchingRegexes
-      .map(regex => getCreativeWorkshopRegexIdentity(regex))
-      .filter((identity): identity is NonNullable<ReturnType<typeof getCreativeWorkshopRegexIdentity>> => Boolean(identity));
+      .map(regex => resolveRegexIdentity(regex))
+      .filter((identity): identity is CreativeWorkshopRegexIdentity => Boolean(identity));
     const detectedProjectIds = _.uniq([
       ...entryProjectIds,
       ...(entryProjectIds.length === 0 ? regexIdentities.map(identity => identity.projectId) : []),
@@ -863,8 +866,9 @@ async function verifyCreativeWorkshopRepair(
   }
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
   const installedRegexCount = regexes.filter(
-    regex => getCreativeWorkshopRegexIdentity(regex)?.projectId === target.projectId,
+    regex => resolveRegexIdentity(regex)?.projectId === target.projectId,
   ).length;
   if (installedRegexCount !== expectedRegexCount) {
     throw new Error(`修复验证失败：应有 ${expectedRegexCount} 个新版正则，实际 ${installedRegexCount} 个`);

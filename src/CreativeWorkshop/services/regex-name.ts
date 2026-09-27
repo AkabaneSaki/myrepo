@@ -1,8 +1,6 @@
 import {
-  buildCreativeWorkshopRegexId,
+  createCreativeWorkshopRegexUuid,
   getCreativeWorkshopRegexIdentityKey,
-  parseCreativeWorkshopRegexId,
-  type CreativeWorkshopRegexIdentity,
 } from './install-identity';
 
 export function getReadableRegexName(projectName: string, entry: Record<string, any>, index: number) {
@@ -16,32 +14,12 @@ export function getCreativeWorkshopRegexEntryKey(entry: Record<string, any>, ind
   return `index:${index}`;
 }
 
-export function getCreativeWorkshopManagedRegexId(
-  projectId: string,
-  entry: Record<string, any>,
-  index: number,
-  installedVersion?: string | null,
-) {
-  return buildCreativeWorkshopRegexId(
-    projectId,
-    getCreativeWorkshopRegexEntryKey(entry, index),
-    installedVersion,
-  );
+export function getCreativeWorkshopManagedRegexId() {
+  return createCreativeWorkshopRegexUuid();
 }
 
 export function getCreativeWorkshopRegexId(regex: Record<string, any>) {
   return String(regex.id || regex.script_name || '');
-}
-
-export function getCreativeWorkshopRegexIdentity(regex: Record<string, any>): CreativeWorkshopRegexIdentity | null {
-  return parseCreativeWorkshopRegexId(getCreativeWorkshopRegexId(regex));
-}
-
-export function getCreativeWorkshopRegexStableIdentityKey(regex: Record<string, any>): string {
-  const identity = getCreativeWorkshopRegexIdentity(regex);
-  return identity
-    ? getCreativeWorkshopRegexIdentityKey(identity.projectId, identity.entryKey)
-    : getCreativeWorkshopRegexId(regex);
 }
 
 export function getCreativeWorkshopManagedRegexStableIdentityKey(

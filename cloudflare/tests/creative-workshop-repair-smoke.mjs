@@ -81,6 +81,7 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
       if (specifier.includes('worldbook-fingerprints.json')) return officialBaseline;
       if (specifier === './install-registry') {
         return {
+          createCreativeWorkshopRegexIdentityResolver: () => regex => identityApi.parseCreativeWorkshopRegexId(String(regex?.id || '')),
           deleteCreativeWorkshopInstallRecord: projectId => installRecords.delete(projectId),
           getCreativeWorkshopBoundWorldbookNames: () => Array.isArray(boundWorldbookNames)
             ? [...boundWorldbookNames]

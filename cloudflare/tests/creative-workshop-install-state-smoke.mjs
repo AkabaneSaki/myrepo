@@ -66,6 +66,7 @@ function loadInstallStateHarness({
     require(specifier) {
       if (specifier === './install-registry') {
         return {
+          createCreativeWorkshopRegexIdentityResolver: () => regex => identityApi.parseCreativeWorkshopRegexId(String(regex?.id || '')),
           getCreativeWorkshopInstallRecords: () => structuredClone(installRecords),
           getCreativeWorkshopRelevantWorldbookNames: () => [...relevantNames],
           getCreativeWorkshopBoundWorldbookNames: () => [...boundNames],

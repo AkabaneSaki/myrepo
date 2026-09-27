@@ -1,6 +1,7 @@
 export const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
 export const CREATIVE_WORKSHOP_WORLD_BOOK_META_END = '\npoem-workshop-meta:v1-end %>';
 const CREATIVE_WORKSHOP_REGEX_ID_PREFIX = 'creative_workshop:';
+const CREATIVE_WORKSHOP_REGEX_RECORD_PAYLOAD_PREFIX = 'poem-workshop-regex-meta:v1\n';
 
 export type CreativeWorkshopWorldbookMetadata = {
   cw_project_id: string;
@@ -12,10 +13,24 @@ export type CreativeWorkshopWorldbookMetadata = {
 };
 
 export type CreativeWorkshopRegexIdentity = {
-  schemaVersion: 0 | 1;
+  schemaVersion: 0 | 1 | 2;
   projectId: string;
   entryKey: string;
   installedVersion: string | null;
+};
+
+export type CreativeWorkshopRegexRecordEntry = {
+  regexId: string;
+  entryKey: string;
+  installedVersion: string | null;
+};
+
+export type CreativeWorkshopRegexRecordMetadata = {
+  schemaVersion: 1;
+  projectId: string;
+  projectNameDisplay: string;
+  installedVersion: string | null;
+  entries: CreativeWorkshopRegexRecordEntry[];
 };
 
 type CreativeWorkshopWorldbookMetadataBlock = {
@@ -225,6 +240,76 @@ export function getCreativeWorkshopWorldbookMetadataString(
   if (typeof value === 'string' && value) return value;
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return null;
+}
+
+export function isCreativeWorkshopUuid(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function createCreativeWorkshopRegexUuid(): string {
+  const id = globalThis.crypto?.randomUUID?.();
+  if (!isCreativeWorkshopUuid(id)) {
+    throw new Error('当前环境无法生成合法的 Workshop Regex UUID');
+  }
+  return id;
+}
+
+export function buildCreativeWorkshopRegexRecordPayload(
+  metadata: CreativeWorkshopRegexRecordMetadata,
+): string {
+  return CREATIVE_WORKSHOP_REGEX_RECORD_PAYLOAD_PREFIX + JSON.stringify(metadata);
+}
+
+export function parseCreativeWorkshopRegexRecordPayload(
+  raw: unknown,
+): CreativeWorkshopRegexRecordMetadata | null {
+  if (typeof raw !== 'string' || !raw.startsWith(CREATIVE_WORKSHOP_REGEX_RECORD_PAYLOAD_PREFIX)) return null;
+
+  try {
+    const parsed = asRecord(JSON.parse(raw.slice(CREATIVE_WORKSHOP_REGEX_RECORD_PAYLOAD_PREFIX.length)));
+    if (!parsed || parsed.schemaVersion !== 1) return null;
+    if (!isCreativeWorkshopUuid(parsed.projectId)) return null;
+    if (typeof parsed.projectNameDisplay !== 'string') return null;
+    if (
+      parsed.installedVersion !== null &&
+      parsed.installedVersion !== undefined &&
+      typeof parsed.installedVersion !== 'string'
+    ) return null;
+    if (!Array.isArray(parsed.entries)) return null;
+
+    const entries: CreativeWorkshopRegexRecordEntry[] = [];
+    const regexIds = new Set<string>();
+    const entryKeys = new Set<string>();
+    for (const value of parsed.entries) {
+      const entry = asRecord(value);
+      if (!entry || !isCreativeWorkshopUuid(entry.regexId)) return null;
+      if (typeof entry.entryKey !== 'string' || !entry.entryKey) return null;
+      if (
+        entry.installedVersion !== null &&
+        entry.installedVersion !== undefined &&
+        typeof entry.installedVersion !== 'string'
+      ) return null;
+      if (regexIds.has(entry.regexId) || entryKeys.has(entry.entryKey)) return null;
+      regexIds.add(entry.regexId);
+      entryKeys.add(entry.entryKey);
+      entries.push({
+        regexId: entry.regexId,
+        entryKey: entry.entryKey,
+        installedVersion: entry.installedVersion ?? null,
+      });
+    }
+
+    return {
+      schemaVersion: 1,
+      projectId: parsed.projectId,
+      projectNameDisplay: parsed.projectNameDisplay,
+      installedVersion: parsed.installedVersion ?? null,
+      entries,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function encodeRegexIdentityComponent(value: string): string {
