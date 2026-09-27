@@ -326,7 +326,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       return null;
     }
     if (nextPage > 0) {
-      setProjectPaginationLoadingMore(false);
+      setProjectPageLoading(false);
     } else {
       resetProjectPagination();
       setProjects([]);
@@ -565,13 +565,13 @@ async function fetchInstalledProjectDetails() {
 }
 
 async function goToProjectPage(page) {
-  if (state.projectPagination.loadingMore || !shouldShowProjectPagination()) {
+  if (state.projectPagination.loadingPage || !shouldShowProjectPagination()) {
     return;
   }
   if (!Number.isInteger(page) || page < 0 || page > 19) return;
   if (page === state.projectPagination.page) return;
   if (page > state.projectPagination.page && !state.projectPagination.hasMore) return;
-  setProjectPaginationLoadingMore(true);
+  setProjectPageLoading(true);
   renderApp();
   await fetchProjects(false, { page });
   document.querySelector('.projects-grid')?.scrollIntoView({ block: 'start' });

@@ -82,7 +82,7 @@ function createDefaultProjectPagination() {
     pageSize: 48,
     pageSizeLocked: false,
     hasMore: false,
-    loadingMore: false,
+    loadingPage: false,
     publicCounts: null,
   };
 }
@@ -244,7 +244,7 @@ function setProjectsPage(payload) {
   state.projectPagination.pageSizeLocked = true;
   state.projectPagination.hasMore = Boolean(payload?.hasMore);
   state.projectPagination.publicCounts = payload?.publicCounts || state.projectPagination.publicCounts;
-  state.projectPagination.loadingMore = false;
+  state.projectPagination.loadingPage = false;
   if (state.tavern.installedProjectsLoaded) {
     rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
   }
@@ -284,8 +284,8 @@ function isLatestProjectRequestToken(token) {
   return token === state.projectRequestToken;
 }
 
-function setProjectPaginationLoadingMore(loading) {
-  state.projectPagination.loadingMore = Boolean(loading);
+function setProjectPageLoading(loading) {
+  state.projectPagination.loadingPage = Boolean(loading);
 }
 
 function setProjectPendingAction(projectId, action) {
@@ -644,7 +644,7 @@ function renderProjectPagination() {
   const numbered = [];
   for (let page = firstNumber; page <= lastNumber; page++) {
     numbered.push('<button type="button" class="project-page-number' + (page === pagination.page ? ' active' : '')
-      + '" data-project-page="' + page + '"' + (page === pagination.page || pagination.loadingMore ? ' disabled' : '')
+      + '" data-project-page="' + page + '"' + (page === pagination.page || pagination.loadingPage ? ' disabled' : '')
       + ' aria-label="第 ' + (page + 1) + ' 页">' + (page + 1) + '</button>');
   }
   const byType = counts?.byType || {};
@@ -659,11 +659,11 @@ function renderProjectPagination() {
   return '<div class="project-pagination"><div class="project-pagination-summary">' + countText + morePages + '</div>'
     + '<nav class="project-pagination-controls" aria-label="项目页码">'
     + '<button type="button" data-project-page="' + (pagination.page - 1) + '"'
-    + (pagination.page === 0 || pagination.loadingMore ? ' disabled' : '') + '>上一页</button>'
+    + (pagination.page === 0 || pagination.loadingPage ? ' disabled' : '') + '>上一页</button>'
     + (firstNumber > 0 ? '<span aria-hidden="true">…</span>' : '') + numbered.join('')
     + (lastNumber < lastVisiblePage ? '<span aria-hidden="true">…</span>' : '')
     + '<button type="button" data-project-page="' + (pagination.page + 1) + '"'
-    + (!pagination.hasMore || pagination.loadingMore ? ' disabled' : '') + '>下一页</button>'
+    + (!pagination.hasMore || pagination.loadingPage ? ' disabled' : '') + '>下一页</button>'
     + '</nav></div>';
 }
 `;

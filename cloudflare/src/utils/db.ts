@@ -730,11 +730,12 @@ export const projectDb = {
   recountPublicCounts: async (c: AppContext) => {
     await c.env.DB.batch([
       c.env.DB.prepare(
-        `UPDATE public_project_counts
-         SET project_count = (SELECT COUNT(*) FROM projects
-                              WHERE status = 'approved' AND is_published = 1 AND visibility = 1),
-             revision = revision + 1
-         WHERE scope = '*'`,
+        `INSERT INTO public_project_counts (scope, project_count, revision)
+         SELECT '*', COUNT(*), 1 FROM projects
+         WHERE status = 'approved' AND is_published = 1 AND visibility = 1
+         ON CONFLICT(scope) DO UPDATE SET
+           project_count = excluded.project_count,
+           revision = public_project_counts.revision + 1`,
       ),
       c.env.DB.prepare("DELETE FROM public_project_counts WHERE scope <> '*'"),
       c.env.DB.prepare(
