@@ -26,7 +26,6 @@ export const homeAppActionsScript = String.raw`
 
     const userMenuTrigger = document.getElementById('userMenuTrigger');
     const userMenu = document.getElementById('userMenu');
-    const projectLoadMoreBtn = document.getElementById('projectLoadMoreBtn');
     const scriptDependencyHealthBtns = Array.from(document.querySelectorAll('.script-dependency-health-btn'));
     const mobileSearchInput = document.getElementById('projectSearchInputMobile');
     const mobileToolSheet = document.getElementById('mobileToolSheet');
@@ -796,7 +795,9 @@ export const homeAppActionsScript = String.raw`
       }, { once: true });
     }
 
-    if (projectLoadMoreBtn) projectLoadMoreBtn.onclick = () => loadMoreProjects();
+    document.querySelectorAll('[data-project-page]').forEach(button => {
+      button.onclick = () => void goToProjectPage(Number(button.dataset.projectPage));
+    });
 
     document.querySelectorAll('.project-card, .discover-card').forEach(card => {
       const openDetail = () => {

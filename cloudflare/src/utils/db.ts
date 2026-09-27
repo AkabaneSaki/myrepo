@@ -1,6 +1,7 @@
 import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
   LEGACY_BASE_TAG_BY_PROJECT_TYPE,
+  PROJECT_TYPES,
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
   normalizeCustomTags,
@@ -708,6 +709,45 @@ export const projectDb = {
   /**
    * 获取项目列表
    */
+  getPublicCounts: async (c: AppContext) => {
+    const rows = await c.env.DB.prepare(
+      'SELECT scope, project_count, revision FROM public_project_counts',
+    ).all<{ scope: string; project_count: number; revision: number }>();
+    const byType = Object.fromEntries(PROJECT_TYPES.map(type => [type, 0])) as Record<ProjectType, number>;
+    let total = 0;
+    let revision = 0;
+    for (const row of rows.results || []) {
+      if (row.scope === '*') {
+        total = Number(row.project_count);
+        revision = Number(row.revision);
+      } else if (PROJECT_TYPES.includes(row.scope as ProjectType)) {
+        byType[row.scope as ProjectType] = Number(row.project_count);
+      }
+    }
+    return { total, byType, revision };
+  },
+
+  recountPublicCounts: async (c: AppContext) => {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO public_project_counts (scope, project_count, revision)
+         SELECT '*', COUNT(*), 1 FROM projects
+         WHERE status = 'approved' AND is_published = 1 AND visibility = 1
+         ON CONFLICT(scope) DO UPDATE SET
+           project_count = excluded.project_count,
+           revision = public_project_counts.revision + 1`,
+      ),
+      c.env.DB.prepare("DELETE FROM public_project_counts WHERE scope <> '*'"),
+      c.env.DB.prepare(
+        `INSERT INTO public_project_counts (scope, project_count)
+         SELECT project_type, COUNT(*) FROM projects
+         WHERE status = 'approved' AND is_published = 1 AND visibility = 1
+         GROUP BY project_type`,
+      ),
+    ]);
+    return projectDb.getPublicCounts(c);
+  },
+
   list: async (
     c: AppContext,
     options: {

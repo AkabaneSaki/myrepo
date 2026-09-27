@@ -97,9 +97,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .metric-filter-panel select { width:100%; min-width:0; height:34px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:#17181b; color:#d8d6d1; padding:0 7px; }
 .metric-filter-panel--mobile { margin-top:10px; padding:12px 0 0; }
 .projects-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:24px; margin-top:24px; }
-.project-load-more { margin-top:28px; display:flex; flex-direction:column; align-items:center; gap:10px; }
-.project-load-more-btn { min-width:220px; justify-content:center; }
-.project-load-more-meta { font-size:0.82rem; color:rgba(226,232,240,0.68); }
+.project-pagination { margin:28px 0 12px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+.project-pagination-summary { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 10px; color:var(--cw-text-secondary); font-size:.82rem; text-align:center; }
+.project-pagination-summary small { display:block; width:100%; font-size:.76rem; }
+.project-pagination-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; }
+.project-pagination-controls button { min-width:38px; min-height:38px; padding:6px 10px; border:1px solid rgba(255,255,255,.14); border-radius:9px; background:rgba(255,255,255,.04); color:var(--cw-text-primary); cursor:pointer; }
+.project-pagination-controls button.active { background:#4f46e5; color:#fff; border-color:#818cf8; }
+.project-pagination-controls button:disabled { opacity:.48; cursor:default; }
+.project-pagination-controls button:focus-visible { outline:2px solid #818cf8; outline-offset:2px; }
+.admin-public-recount-btn { margin:8px 0 0; }
 .project-card { background:linear-gradient(145deg, #1E293B, #0F172A); border:1px solid rgba(255,255,255,0.08); border-radius:20px; overflow:hidden; transition:all 0.25s; display:flex; flex-direction:column; cursor:pointer; }
   .project-card:hover { transform:translateY(-6px); border-color:rgba(99,102,241,0.5); box-shadow:0 20px 25px -5px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.3); }
   .project-card:focus-visible { outline:2px solid #818CF8; outline-offset:3px; }
@@ -1451,7 +1457,7 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 }
 body { color:var(--cw-text-primary); }
 .project-name,.card-text-preview p { color:var(--cw-text-primary); }
-.card-creator,.card-status-line,.card-quality-signal,.project-tags .tag,.project-load-more-meta { color:var(--cw-text-secondary); }
+.card-creator,.card-status-line,.card-quality-signal,.project-tags .tag { color:var(--cw-text-secondary); }
 .card-text-preview__type,.card-text-preview__hint,.card-signals { color:var(--cw-text-muted); }
 .card-footer .action-btn { color:var(--cw-text-primary); }
 

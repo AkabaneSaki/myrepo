@@ -1,8 +1,9 @@
-import { Bool, Num, OpenAPIRoute, Str } from 'chanfana';
+import { Bool, OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../../types';
 import { PROJECT_TYPES } from '../../config/project-taxonomy';
 import { projectDb } from '../../utils/db';
+import { getDiscoveryRotationKey } from '../../utils/project-daily-rankings';
 import { getCurrentUserFromRequest } from '../../utils/jwt';
 import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
@@ -20,12 +21,12 @@ export class ProjectList extends OpenAPIRoute {
     summary: 'List Approved Projects',
     request: {
       query: z.object({
-        page: Num({ description: 'Page number', default: 0 }),
-        pageSize: Num({ description: 'Page size', default: 20 }),
+        page: z.coerce.number().int().min(0).max(19).default(0),
+        pageSize: z.coerce.number().int().min(1).max(50).default(20),
         projectType: z.enum(PROJECT_TYPES).optional().describe('Filter by project type'),
-        tag: Str({ required: false }).describe('Filter by tag'),
-        tags: Str({ required: false }).describe('Filter by multiple tags (AND, comma-separated)'),
-        search: Str({ required: false }).describe('Search keyword'),
+        tag: z.string().max(120).optional().describe('Filter by tag'),
+        tags: z.string().max(512).optional().describe('Filter by multiple tags (AND, comma-separated)'),
+        search: z.string().max(80).optional().describe('Search keyword'),
         minLikes: z.coerce.number().int().min(0).max(1_000_000).optional().describe('Minimum likes'),
         minDownloads: z.coerce.number().int().min(0).max(1_000_000).optional().describe('Minimum downloads'),
         sort: projectListSortSchema.default('discover').describe('Sort mode'),
@@ -41,6 +42,7 @@ export class ProjectList extends OpenAPIRoute {
               hasMore: z.boolean(),
               page: z.number(),
               pageSize: z.number(),
+              publicCounts: z.object({ total: z.number(), byType: z.record(z.number()) }),
               projects: z.array(
                 z.object({
                   id: z.string(),
@@ -83,6 +85,22 @@ export class ProjectList extends OpenAPIRoute {
     const data = await this.getValidatedData<typeof this.schema>();
     const { page, pageSize, projectType, tag, tags, search, minLikes, minDownloads, sort } = data.query;
     const payload = await getCurrentUserFromRequest(c);
+    const publicCounts = await projectDb.getPublicCounts(c);
+    const cacheable = !payload && page < 3 && [5, 10, 20, 48, 49, 50].includes(pageSize)
+      && ['discover', 'published', 'updated', 'downloads', 'likes'].includes(sort)
+      && !tag && !tags && !search?.trim() && !minLikes && !minDownloads;
+    const cacheUrl = new URL(c.req.url);
+    cacheUrl.pathname = '/__cache/public-project-list';
+    cacheUrl.search = new URLSearchParams({
+      page: String(page), pageSize: String(pageSize), sort,
+      projectType: projectType || '', revision: String(publicCounts.revision),
+      rotation: sort === 'discover' ? getDiscoveryRotationKey() : '',
+    }).toString();
+    const cacheRequest = new Request(cacheUrl.toString());
+    if (cacheable) {
+      const cached = await caches.default.match(cacheRequest);
+      if (cached) return c.json(await cached.json());
+    }
     const tagFilters = String(tags || '')
       .split(',')
       .map(value => value.trim())
@@ -112,11 +130,19 @@ export class ProjectList extends OpenAPIRoute {
         : null,
     }));
 
-    return {
+    const response = {
       success: true,
       ...result,
+      hasMore: page < 19 && result.hasMore,
+      publicCounts: { total: publicCounts.total, byType: publicCounts.byType },
       projects,
     };
+    if (cacheable) {
+      await caches.default.put(cacheRequest, new Response(JSON.stringify(response), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
+      }));
+    }
+    return response;
   }
 }
 
