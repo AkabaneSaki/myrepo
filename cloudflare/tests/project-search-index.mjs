@@ -69,16 +69,16 @@ for (const size of [1_000, 10_000]) {
   assert.match(plan(sample, shortSql, '"魔 法"'), /VIRTUAL TABLE INDEX/);
   assert.match(plan(sample, tagSql, '魔法'), /idx_project_search_tags_tag_project/);
   const searchListSql = `${searchSql} AND p.status = 'approved' AND p.is_published = 1
-    AND p.visibility = 1 ORDER BY p.latest_approved_at DESC, p.updated_at DESC LIMIT 21`;
+    AND p.visibility = 1 ORDER BY p.created_at DESC, p.id DESC LIMIT 21`;
   assert.match(plan(sample, searchListSql, '"魔法学院"'), /VIRTUAL TABLE INDEX/);
   assert.doesNotMatch(plan(sample, searchListSql, '"魔法学院"'), /SCAN p\b/);
   const shortListSql = `${shortSql} AND p.status = 'approved' AND p.is_published = 1
-    AND p.visibility = 1 ORDER BY p.latest_approved_at DESC, p.updated_at DESC LIMIT 21`;
+    AND p.visibility = 1 ORDER BY p.created_at DESC, p.id DESC LIMIT 21`;
   assert.match(plan(sample, shortListSql, '"魔 法"'), /VIRTUAL TABLE INDEX/);
   assert.doesNotMatch(plan(sample, shortListSql, '"魔 法"'), /SCAN p\b/);
   assert.match(plan(sample, `SELECT id FROM projects p WHERE status = 'approved' AND is_published = 1
-    AND visibility = 1 ORDER BY latest_approved_at DESC, updated_at DESC LIMIT 20`),
-    /idx_projects_public_latest_approved/);
+    AND visibility = 1 ORDER BY created_at DESC, id DESC LIMIT 20`),
+    /idx_projects_public_created/);
   sample.close();
 }
 

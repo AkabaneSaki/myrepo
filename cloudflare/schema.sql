@@ -73,17 +73,17 @@ CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
 CREATE INDEX IF NOT EXISTS idx_projects_author ON projects(author_id);
 CREATE INDEX IF NOT EXISTS idx_projects_created ON projects(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_created
-    ON projects(status, is_published, visibility, created_at DESC, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_projects_public_updated
-    ON projects(status, is_published, visibility, updated_at DESC, created_at DESC);
+    ON projects(status, is_published, visibility, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_downloads
     ON projects(status, is_published, visibility, downloads_count DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_likes
     ON projects(status, is_published, visibility, likes_count DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_latest_approved
-    ON projects(status, is_published, visibility, latest_approved_at DESC, updated_at DESC);
+    ON projects(status, is_published, visibility, latest_approved_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_type_published
-    ON projects(status, is_published, visibility, project_type, latest_approved_at DESC, updated_at DESC);
+    ON projects(status, is_published, visibility, project_type, latest_approved_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_public_type_created
+    ON projects(status, is_published, visibility, project_type, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_public_id
     ON projects(id)
     WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
