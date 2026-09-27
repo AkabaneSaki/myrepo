@@ -10,7 +10,8 @@ const SNAPSHOT_DATE = '2026-09-15';
 const SNAPSHOT_FILE = 'creative_workshop.sql';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
-const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
+const DEFAULT_BUDGET = Object.freeze({ maxQueries: 2, maxRowsRead: 600, maxRowsWritten: 0 });
+const PUBLIC_COUNT_LOOKUP_MAX_ROWS = 8;
 const DISCOVERY_ROTATION_BUDGET = Object.freeze({ maxQueries: 16, maxRowsWritten: 100 });
 const DISCOVERY_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
 const REPAIR_RESOLVE_BUDGET = Object.freeze({ maxQueries: 3, maxRowsRead: 250, maxRowsWritten: 3 });
@@ -20,6 +21,7 @@ const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler
 const scenarios = [
   { name: '首页 · 随机发现', params: { page: 0, pageSize: 10, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 80 }, requireDiscoveryRotation: true },
   { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 最新发布 · 缓存命中', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxQueries: 1, maxRowsRead: PUBLIC_COUNT_LOOKUP_MAX_ROWS }, expectCacheHit: true },
   { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 点赞最多', params: { page: 0, pageSize: 20, sort: 'likes' }, budget: { maxRowsRead: 80 } },
@@ -357,6 +359,7 @@ async function resetDiscoveryFixtureState() {
     'DELETE FROM discovery_feature_history',
     'DELETE FROM project_daily_rankings',
     'DELETE FROM project_ranking_builds',
+    "UPDATE public_project_counts SET revision = revision + 1 WHERE scope = '*'",
   ].join('; ');
   await runWrangler([
     'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
@@ -445,6 +448,16 @@ async function runScenario(scenario) {
   if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
   if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
   const sqlTexts = cost.details.map(query => String(query.sql || ''));
+  const publicCountQueries = cost.details.filter(query => /\bFROM\s+public_project_counts\b/i.test(String(query.sql || '')));
+  if (publicCountQueries.length !== 1) {
+    reasons.push(`public_project_counts lookups ${publicCountQueries.length} != 1`);
+  } else if (Number(publicCountQueries[0].rows_read || 0) > PUBLIC_COUNT_LOOKUP_MAX_ROWS) {
+    reasons.push(`public_project_counts rows_read ${publicCountQueries[0].rows_read} > ${PUBLIC_COUNT_LOOKUP_MAX_ROWS}`);
+  }
+  if (scenario.expectCacheHit) {
+    const nonCountQueries = cost.details.filter(query => !/\bFROM\s+public_project_counts\b/i.test(String(query.sql || '')));
+    if (nonCountQueries.length > 0) reasons.push('cache hit still queried project list data');
+  }
   if (scenario.forbidDiscoveryBoard && sqlTexts.some(sql => sql.includes('project_daily_rankings'))) {
     reasons.push('legacy rating request unexpectedly used the discovery board');
   }
