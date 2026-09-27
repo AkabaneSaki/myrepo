@@ -1336,10 +1336,21 @@ export const projectDb = {
       coverPositionY?: number;
       coverZoom?: number;
     },
-  ) => {
+    attempt: number = 0,
+  ): Promise<string | null> => {
+    if (attempt >= 3) return null;
+
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
     const existingDraft = published.draftProjectId ? await projectDb.get(c, published.draftProjectId) : null;
+    if (published.draftProjectId && !existingDraft) {
+      await c.env.DB.prepare(
+        `UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`,
+      )
+        .bind(now(), publishedProjectId, published.draftProjectId)
+        .run();
+      return projectDb.createDraftFromPublished(c, publishedProjectId, updates, attempt + 1);
+    }
     if (existingDraft) {
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
@@ -1419,9 +1430,26 @@ export const projectDb = {
       visibility: published.visibility,
       isPublished: false,
       latestApprovedAt: published.latestApprovedAt || published.reviewedAt,
+      status: 'drafting',
     });
-    await projectDb.update(c, publishedProjectId, { draftProjectId: draftId });
-    return draftId;
+
+    const claimResult = await c.env.DB.prepare(
+      `UPDATE projects
+       SET draft_project_id = ?, updated_at = ?
+       WHERE id = ? AND draft_project_id IS NULL`,
+    )
+      .bind(draftId, now(), publishedProjectId)
+      .run();
+
+    if (Number(claimResult.meta?.changes || 0) === 1) {
+      await projectDb.update(c, draftId, { status: 'pending' });
+      return draftId;
+    }
+
+    // Another request claimed the published project first. Delete only this
+    // unclaimed candidate, then retry so this request reuses the winner.
+    await projectDb.delete(c, draftId);
+    return projectDb.createDraftFromPublished(c, publishedProjectId, updates, attempt + 1);
   },
 
   setVisibility: async (c: AppContext, projectId: string, visibility: boolean): Promise<void> => {
