@@ -761,16 +761,6 @@ export const projectDb = {
       values.push(minDownloads);
     }
 
-    const tagFilters = Array.from(new Set([
-      ...(Array.isArray(options.tags) ? options.tags : []),
-      ...(options.tag ? [options.tag] : []),
-    ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
-    tagFilters.forEach(tag => {
-      conditions.push('(p.facets LIKE ? OR p.custom_tags LIKE ? OR p.tags LIKE ? OR p.extension_type = ?)');
-      const tagPattern = `%"${tag}"%`;
-      values.push(tagPattern, tagPattern, tagPattern, tag);
-    });
-
     const rawSearchTerm = options.search?.trim();
     const normalizedSearchTerm = rawSearchTerm
       ? rawSearchTerm
@@ -780,14 +770,45 @@ export const projectDb = {
           .trim()
       : '';
     const searchTerm = Array.from(normalizedSearchTerm).slice(0, 20).join('');
+    const hasIndexedTextSearch = Array.from(searchTerm).length >= 3;
+    const hasIndexedShortSearch = !hasIndexedTextSearch && /^[\p{L}\p{N}]{1,2}$/u.test(searchTerm);
     if (searchTerm) {
-      conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
-      const searchPattern = `%${searchTerm}%`;
-      values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      if (hasIndexedTextSearch) {
+        conditions.push('project_search MATCH ?');
+        values.push(`"${searchTerm.replace(/"/g, '""')}"`);
+      } else {
+        if (hasIndexedShortSearch) {
+          conditions.push('project_search_short MATCH ?');
+          values.push(`"${Array.from(searchTerm).join(' ')}"`);
+        }
+        // The short index may also find characters across field boundaries.
+        // Check the original fields to preserve substring search behavior.
+        conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
+        const searchPattern = `%${searchTerm}%`;
+        values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      }
     }
+
+    const tagFilters = Array.from(new Set([
+      ...(Array.isArray(options.tags) ? options.tags : []),
+      ...(options.tag ? [options.tag] : []),
+    ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
+    tagFilters.forEach((tag, index) => {
+      conditions.push(index === 0 && !hasIndexedTextSearch && !hasIndexedShortSearch
+        ? 'tag_candidate.tag = ?'
+        : 'p.id IN (SELECT project_id FROM project_search_tags WHERE tag = ?)');
+      values.push(tag);
+    });
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const listWhereClause = whereClause;
+    const listSource = hasIndexedTextSearch
+      ? 'project_search CROSS JOIN projects p ON p.rowid = project_search.rowid'
+      : hasIndexedShortSearch
+        ? 'project_search_short CROSS JOIN projects p ON p.rowid = project_search_short.rowid'
+        : tagFilters.length > 0
+          ? 'project_search_tags tag_candidate CROSS JOIN projects p ON p.id = tag_candidate.project_id'
+          : 'projects p';
 
 
 
@@ -895,14 +916,13 @@ export const projectDb = {
       }
     }
 
-    // Search/tag/author filters intentionally bypass the ranking board. Keeping
-    // wildcard filtering off the rank hot path prevents a ranked page request
-    // from turning into a whole-board scan.
+    // Search/tag/author filters bypass the ranking board so its default page
+    // keeps the bounded rank-range query.
     const results = await db
       .prepare(
         `
           SELECT p.*, u.global_name
-          FROM projects p ${listIndexHint}
+          FROM ${listSource} ${listIndexHint}
           LEFT JOIN users u ON p.author_id = u.id
           ${listWhereClause}
           ORDER BY ${orderBy}
