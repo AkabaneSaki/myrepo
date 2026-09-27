@@ -71,6 +71,7 @@ function syncInstalledProjectsFromBridge(payload, options) {
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
   });
   renderApp();
+  scheduleDlcUpdateStatusCheck();
 }
 
 function normalizeScriptDependencyVersion(version) {

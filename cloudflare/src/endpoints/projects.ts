@@ -2,6 +2,7 @@ export {
   MyProjects,
   MySubscriptions,
   ProjectBatchFetch,
+  ProjectVersionCheck,
   ProjectFetch,
   ProjectList,
 } from './projects/read';

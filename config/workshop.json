@@ -23,6 +23,11 @@
       "https://poemofdestinycreativeworkshop-master-staging.johnjohnson67076.workers.dev"
     ]
   },
+  "projectCommunity": {
+    "discordGuildIds": [
+      "1417861565679669272"
+    ]
+  },
   "scriptDependencies": [
     {
       "key": "uikawinwing/CharInfo-Manager",

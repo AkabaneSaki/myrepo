@@ -4,6 +4,7 @@ import type { AppContext } from '../../types';
 import { normalizeProjectTaxonomyInput, PROJECT_TYPES } from '../../config/project-taxonomy';
 import { generateId, projectDb, userDb } from '../../utils/db';
 import { validateWorldbookEjsLengthEstimatesInput } from '../../utils/project-entry-estimates';
+import { validateProjectDiscordThreadUrl } from '../../utils/project-discord';
 import { resolveProjectCompatibilitySelection, validateOriginalConflictReferenceItems } from '../../utils/character-reference.ts';
 import { getCurrentUserFromRequest } from '../../utils/jwt';
 import { r2Storage } from '../../utils/r2';
@@ -26,6 +27,7 @@ export class ProjectCreate extends OpenAPIRoute {
             schema: z.object({
               name: Str({ description: 'Project name' }),
               description: Str({ required: false }).describe('Project description'),
+              discordThreadUrl: z.string().max(300).nullable().optional(),
               versionLabel: z.string().max(80).nullable().optional(),
               builtForReferenceVersionId: z.string().max(120).nullable().optional(),
               compatibilityConfirmed: z.boolean().optional(),
@@ -95,6 +97,8 @@ export class ProjectCreate extends OpenAPIRoute {
         ? rawBuiltForReferenceVersionId.trim() || null
         : rawBuiltForReferenceVersionId;
       const coverImage = typeof rawBody.coverImage === 'string' ? rawBody.coverImage : undefined;
+      const discordResult = validateProjectDiscordThreadUrl(rawBody.discordThreadUrl);
+      if (discordResult.error) return c.json({ error: discordResult.error }, 400);
       const estimateResult = validateWorldbookEjsLengthEstimatesInput(rawBody.worldbookEjsLengthEstimates);
       if (estimateResult.error) return c.json({ error: estimateResult.error }, 400);
 
@@ -158,6 +162,7 @@ export class ProjectCreate extends OpenAPIRoute {
         name,
         description,
         precautions,
+        discordThreadUrl: discordResult.value,
         version: LEGACY_PROJECT_VERSION_BASE,
         versionLabel,
         characterReferenceId: compatibilitySelection.characterReferenceId,
@@ -267,6 +272,7 @@ export class ProjectUpdate extends OpenAPIRoute {
             schema: z.object({
               name: Str({ required: false }),
               description: Str({ required: false }),
+              discordThreadUrl: z.string().max(300).nullable().optional(),
               versionLabel: z.string().max(80).nullable().optional(),
               builtForReferenceVersionId: z.string().max(120).nullable().optional(),
               compatibilityConfirmed: z.boolean().optional(),
@@ -302,6 +308,8 @@ export class ProjectUpdate extends OpenAPIRoute {
     const { projectId } = data.params;
     const estimateResult = validateWorldbookEjsLengthEstimatesInput(data.body.worldbookEjsLengthEstimates);
     if (estimateResult.error) return c.json({ error: estimateResult.error }, 400);
+    const discordResult = validateProjectDiscordThreadUrl(data.body.discordThreadUrl);
+    if (discordResult.error) return c.json({ error: discordResult.error }, 400);
 
     // 检查项目是否存在且属于当前用户
     const project = await projectDb.get(c, projectId);
@@ -408,6 +416,9 @@ export class ProjectUpdate extends OpenAPIRoute {
       ...bodyUpdates,
       ...(data.body.worldbookEjsLengthEstimates !== undefined
         ? { worldbookEjsLengthEstimates: estimateResult.value }
+        : {}),
+      ...(data.body.discordThreadUrl !== undefined
+        ? { discordThreadUrl: discordResult.value }
         : {}),
       ...compatibilityUpdates,
       ...conflictUpdates,

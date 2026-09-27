@@ -10,6 +10,7 @@ import { homeRepairScript } from './repair-ui';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
 import { homeUploadPreviewScript } from './upload-preview';
+import { homeUpdateCenterScript } from './update-center';
 import { homeUtilsScript } from './utils';
 import { PROJECT_CONTENT_POLICY } from '../../config/project-content-policy';
 import { PROJECT_TAXONOMY } from '../../config/project-taxonomy';
@@ -44,6 +45,7 @@ export const homeScript = String.raw`
   ${homePublishCheckScript}
   ${homeModalsScript}
   ${homeRepairScript}
+  ${homeUpdateCenterScript}
   ${homePresentationScript}
 
 ${homeAppAuthFlowScript}

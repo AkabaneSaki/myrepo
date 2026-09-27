@@ -394,6 +394,7 @@ export class AdminReview extends OpenAPIRoute {
             name: project.name,
             description: project.description || '',
             precautions: project.precautions ?? null,
+            discordThreadUrl: project.discordThreadUrl ?? null,
             version: approvedVersion || project.version,
             versionLabel: project.versionLabel ?? null,
             characterReferenceId: project.characterReferenceId ?? null,

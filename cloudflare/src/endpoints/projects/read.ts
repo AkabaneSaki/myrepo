@@ -164,6 +164,79 @@ export class ProjectBatchFetch extends OpenAPIRoute {
   }
 }
 
+
+/**
+ * 轻量检查本机已安装 DLC 是否有新版本。
+ * 单次请求最多 500 个项目，只读取 id/name/version，不做项目 enrich。
+ */
+export class ProjectVersionCheck extends OpenAPIRoute {
+  schema = {
+    tags: ['Projects'],
+    summary: 'Check Installed Project Versions',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              projects: z.array(z.object({
+                id: z.string().min(1).max(200),
+                installedVersion: z.string().max(120).nullable().optional(),
+              })).min(1).max(500),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      '200': { description: 'Returns current update availability for installed projects' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const data = await this.getValidatedData<typeof this.schema>();
+    const byId = new Map<string, string | null>();
+    for (const item of data.body.projects) {
+      const id = String(item.id || '').trim();
+      if (!id || byId.has(id)) continue;
+      const installedVersion = String(item.installedVersion || '').trim();
+      byId.set(id, installedVersion || null);
+    }
+    const ids = Array.from(byId.keys());
+    if (!ids.length) return { success: true, hasUpdate: false, updates: [] };
+
+    const result = await c.env.DB.prepare(
+      `
+        SELECT p.id, p.name, p.version
+        FROM json_each(?1) requested
+        JOIN projects p INDEXED BY idx_projects_public_id ON p.id = requested.value
+        WHERE p.status = 'approved'
+          AND p.is_published = 1
+          AND p.visibility = 1
+      `,
+    )
+      .bind(JSON.stringify(ids))
+      .all<{ id: string; name: string; version: string }>();
+
+    const updates = (result.results || []).flatMap(row => {
+      const installedVersion = byId.get(String(row.id)) || null;
+      const latestVersion = String(row.version || '').trim();
+      if (installedVersion && latestVersion && installedVersion === latestVersion) return [];
+      return [{
+        id: String(row.id),
+        name: String(row.name || ''),
+        installedVersion,
+        latestVersion: latestVersion || null,
+      }];
+    });
+
+    return {
+      success: true,
+      hasUpdate: updates.length > 0,
+      updates,
+    };
+  }
+}
+
 /**
  * 获取当前用户的所有项目
  */

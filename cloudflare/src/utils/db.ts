@@ -229,6 +229,7 @@ export const projectDb = {
       name: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -275,13 +276,13 @@ export const projectDb = {
       .prepare(
         `
 			INSERT INTO projects (
-				id, name, description, precautions, version, version_label, author_id, author_name, author_avatar,
+				id, name, description, precautions, discord_thread_url, version, version_label, author_id, author_name, author_avatar,
 				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, cover_position_x, cover_position_y, cover_zoom, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
 				conflicts_with_original, original_conflict_reference_item_ids, worldbook_ejs_length_estimates, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -289,6 +290,7 @@ export const projectDb = {
         project.name,
         project.description || null,
         project.precautions || null,
+        project.discordThreadUrl || null,
         project.version,
         project.versionLabel || null,
         project.authorId,
@@ -444,6 +446,7 @@ export const projectDb = {
       name?: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version?: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -496,6 +499,10 @@ export const projectDb = {
     if (updates.precautions !== undefined) {
       setClauses.push('precautions = ?');
       values.push(updates.precautions);
+    }
+    if (updates.discordThreadUrl !== undefined) {
+      setClauses.push('discord_thread_url = ?');
+      values.push(updates.discordThreadUrl);
     }
     if (updates.version !== undefined) {
       setClauses.push('version = ?');
@@ -1234,6 +1241,7 @@ export const projectDb = {
       name?: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version?: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -1268,6 +1276,7 @@ export const projectDb = {
         name: updates.name ?? existingDraft.name,
         description: updates.description ?? existingDraft.description ?? '',
         precautions: updates.precautions !== undefined ? updates.precautions : existingDraft.precautions,
+        discordThreadUrl: updates.discordThreadUrl !== undefined ? updates.discordThreadUrl : existingDraft.discordThreadUrl,
         version: nextVersion,
         versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : existingDraft.versionLabel,
         characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : existingDraft.characterReferenceId,
@@ -1302,6 +1311,7 @@ export const projectDb = {
       name: updates.name ?? published.name,
       description: updates.description ?? published.description ?? undefined,
       precautions: updates.precautions !== undefined ? updates.precautions : published.precautions,
+      discordThreadUrl: updates.discordThreadUrl !== undefined ? updates.discordThreadUrl : published.discordThreadUrl,
       version: updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch'),
       versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : published.versionLabel,
       characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : published.characterReferenceId,
@@ -1569,6 +1579,7 @@ export function parseProjectRow(row: Record<string, unknown>) {
     name: row.name as string,
     description: row.description as string | null,
     precautions: row.precautions as string | null,
+    discordThreadUrl: row.discord_thread_url as string | null,
     version,
     versionLabel,
     publishedVersion: rawPublishedVersion ? normalizeProjectVersionBase(rawPublishedVersion) : null,

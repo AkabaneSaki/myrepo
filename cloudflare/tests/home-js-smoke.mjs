@@ -53,6 +53,7 @@ const fragments = {
     await evaluateStandalone('src/pages/home/modal/devteam-recommend.ts', 'homeDevTeamRecommendModalScript'),
   ].join('\n'),
   homeRepairScript: await evaluateStandalone('src/pages/home/repair-ui.ts', 'homeRepairScript'),
+  homeUpdateCenterScript: await evaluateStandalone('src/pages/home/update-center.ts', 'homeUpdateCenterScript'),
   homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
 };
 

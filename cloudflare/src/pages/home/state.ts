@@ -67,6 +67,11 @@ function createDefaultTavernState() {
     installedProjectRebindMap: new Map(),
     updateDiffMap: new Map(),
     pendingProjectActions: new Map(),
+    dlcUpdateKnown: false,
+    dlcUpdateAvailable: false,
+    dlcUpdateCheckedAt: 0,
+    dlcUpdateSignature: '',
+    dlcUpdateCheckPending: false,
     worldbooks: { primary: null, additional: [], available: [] },
   };
 }

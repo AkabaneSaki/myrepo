@@ -14,6 +14,7 @@ export const homeAppActionsScript = String.raw`
     const adminLogsBtn = document.getElementById('adminLogsBtn');
     const installedToggle = document.getElementById('installedProjectsToggle');
     const dlcRepairBtn = document.getElementById('dlcRepairBtn');
+    const dlcUpdateStatusBtn = document.getElementById('dlcUpdateStatusBtn');
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const fontMenuTrigger = document.getElementById('fontMenuTrigger');
@@ -34,6 +35,7 @@ export const homeAppActionsScript = String.raw`
     const mobileLocalAdminLoginBtn = document.getElementById('mobileLocalAdminLoginBtn');
     const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
     const mobileDlcRepairBtn = document.getElementById('mobileDlcRepairBtn');
+    const mobileDlcUpdateStatusBtn = document.getElementById('mobileDlcUpdateStatusBtn');
     const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
     const mobileUploadBtn = document.getElementById('mobileUploadBtn');
     const mobileDlcKitchenSettingsBtn = document.getElementById('mobileDlcKitchenSettingsBtn');
@@ -60,6 +62,8 @@ export const homeAppActionsScript = String.raw`
     };
     if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
+    if (dlcUpdateStatusBtn) dlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
+    if (mobileDlcUpdateStatusBtn) mobileDlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
     scriptDependencyHealthBtns.forEach(button => {
       button.onclick = event => {
         event.stopPropagation();
