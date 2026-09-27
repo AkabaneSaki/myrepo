@@ -28,6 +28,7 @@ import {
   ProjectDelete,
   ProjectEntryRemove,
   ProjectFetch,
+  ProjectInstallInfo,
   ProjectLikeToggle,
   ProjectList,
   ProjectRatingSet,
@@ -196,6 +197,7 @@ openapi.get('/api/projects', ProjectList);
 openapi.post('/api/projects/batch', ProjectBatchFetch);
 openapi.post('/api/projects/version-check', ProjectVersionCheck);
 openapi.post('/api/projects/repair-resolve', ProjectRepairResolve);
+openapi.get('/api/projects/:projectId/install-info', ProjectInstallInfo);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 openapi.get('/api/site/discover-banner', DiscoverBannerGet);
 openapi.get('/api/devteam-recommendations', DevTeamRecommendationList);

@@ -4,6 +4,7 @@ export {
   ProjectBatchFetch,
   ProjectVersionCheck,
   ProjectFetch,
+  ProjectInstallInfo,
   ProjectList,
 } from './projects/read';
 

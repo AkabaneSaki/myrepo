@@ -7,6 +7,7 @@ import { getCurrentUserFromRequest } from '../../utils/jwt';
 import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
 import { readProjectContentForEdit } from './content';
+import { r2Storage } from '../../utils/r2';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 
@@ -105,6 +106,7 @@ export class ProjectList extends OpenAPIRoute {
     // 添加作者头像 URL
     const projects = result.projects.map(p => ({
       ...p,
+      downloadUrl: null,
       authorAvatar: p.authorAvatar
         ? `https://cdn.discordapp.com/avatars/${p.authorId}/${p.authorAvatar}.webp?size=100`
         : null,
@@ -156,6 +158,7 @@ export class ProjectBatchFetch extends OpenAPIRoute {
       success: true,
       projects: visibleProjects.map(project => ({
         ...project,
+        downloadUrl: null,
         authorAvatar: project.authorAvatar
           ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
           : null,
@@ -410,6 +413,87 @@ async function readProjectPreview(
 /**
  * 获取项目详情
  */
+/**
+ * 获取安装 / 更新 / 修复所需的真实 DLC 下载地址。
+ * 只要求现有 Discord 登录，不记录下载行为。
+ */
+export class ProjectInstallInfo extends OpenAPIRoute {
+  schema = {
+    tags: ['Projects'],
+    summary: 'Get Authenticated Project Install Info',
+    request: {
+      params: z.object({
+        projectId: Str({ description: 'Project ID' }),
+      }),
+      query: z.object({
+        v: Str({ required: false }).describe('Expected project version'),
+      }),
+      headers: z.object({
+        authorization: z.string().describe('Discord session'),
+      }),
+    },
+    responses: {
+      '200': { description: 'Returns current project download info' },
+      '401': { description: 'Discord login required' },
+      '404': { description: 'Project not found' },
+      '409': { description: 'Project version changed' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload) return c.json({ error: '请先 Discord 登录后再下载 / 安装 DLC' }, 401);
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const { projectId } = data.params;
+    const expectedVersion = String(data.query.v || '').trim();
+
+    const project = await c.env.DB.prepare(
+      `SELECT id, version, download_url, author_id, status, is_published, visibility
+       FROM projects
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(projectId)
+      .first<{
+        id: string;
+        version: string;
+        download_url: string | null;
+        author_id: string;
+        status: string;
+        is_published: number;
+        visibility: number;
+      }>();
+
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    const isPublic =
+      project.status === 'approved'
+      && Number(project.is_published || 0) === 1
+      && Number(project.visibility || 0) === 1;
+    if (!isPublic && project.author_id !== payload.userId && !payload.isAdmin) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const currentVersion = String(project.version || '').trim();
+    if (expectedVersion && currentVersion && expectedVersion !== currentVersion) {
+      return c.json({
+        error: '项目版本已更新，请重新打开项目后再试',
+        currentVersion,
+      }, 409);
+    }
+
+    return {
+      success: true,
+      projectId: project.id,
+      version: currentVersion || null,
+      downloadUrl: project.download_url
+        ? `${r2Storage.getProxyUrl(c, project.download_url.replace(/^.*\/api\/files\//, '').split(/[?#]/, 1)[0])}${currentVersion ? `?v=${encodeURIComponent(currentVersion)}` : ''}`
+        : null,
+    };
+  }
+}
+
 export class ProjectFetch extends OpenAPIRoute {
   schema = {
     tags: ['Projects'],
@@ -465,6 +549,7 @@ export class ProjectFetch extends OpenAPIRoute {
       success: true,
       project: {
         ...project,
+        downloadUrl: null,
         ...preview,
         privateRating,
         authorAvatar: project.authorAvatar
