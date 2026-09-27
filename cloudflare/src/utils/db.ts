@@ -833,7 +833,7 @@ export const projectDb = {
     const orderBy = (() => {
       switch (sortMode) {
         case 'updated':
-          return 'p.updated_at DESC, p.created_at DESC';
+          return 'p.latest_approved_at DESC, p.id DESC';
         case 'downloads':
           return 'p.downloads_count DESC, p.created_at DESC';
         case 'likes':
@@ -848,7 +848,7 @@ export const projectDb = {
           return 'p.downloads_count DESC, p.created_at DESC';
         case 'published':
         default:
-          return 'p.latest_approved_at DESC, p.updated_at DESC';
+          return 'p.created_at DESC, p.id DESC';
       }
     })();
     const shouldHintMetricFilterOrder = Boolean(
@@ -861,8 +861,8 @@ export const projectDb = {
     );
     const listIndexHint = shouldHintMetricFilterOrder
       ? ({
-          published: 'INDEXED BY idx_projects_public_latest_approved',
-          updated: 'INDEXED BY idx_projects_public_updated',
+          published: 'INDEXED BY idx_projects_public_created',
+          updated: 'INDEXED BY idx_projects_public_latest_approved',
           downloads: 'INDEXED BY idx_projects_public_downloads',
           likes: 'INDEXED BY idx_projects_public_likes',
           rating: 'INDEXED BY idx_projects_public_likes',
