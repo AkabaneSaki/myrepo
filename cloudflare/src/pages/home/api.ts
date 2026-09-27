@@ -246,9 +246,12 @@ async function deleteDevTeamRecommendation(projectId) {
 }
 
 async function fetchProjects(forceRefresh = false, options = {}) {
-  const append = Boolean(options.append);
-  const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
-  const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
+  const pageSize = state.projectPagination.pageSizeLocked
+    ? state.projectPagination.pageSize
+    : chooseProjectPageSize();
+  state.projectPagination.pageSize = pageSize;
+  state.projectPagination.pageSizeLocked = true;
+  const nextPage = Number(options.page ?? state.projectPagination.page ?? 0);
   const requestToken = createProjectRequestToken();
   const params = new URLSearchParams({
     page: String(nextPage),
@@ -287,7 +290,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       page: data.page,
       pageSize: data.pageSize || pageSize,
       hasMore: data.hasMore,
-      append,
+      publicCounts: data.publicCounts,
     });
 
     if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
@@ -322,7 +325,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     if (!isLatestProjectRequestToken(requestToken)) {
       return null;
     }
-    if (append) {
+    if (nextPage > 0) {
       setProjectPaginationLoadingMore(false);
     } else {
       resetProjectPagination();
@@ -561,13 +564,17 @@ async function fetchInstalledProjectDetails() {
   return remoteProjects;
 }
 
-async function loadMoreProjects() {
-  if (state.projectPagination.loadingMore || !shouldShowProjectLoadMore()) {
+async function goToProjectPage(page) {
+  if (state.projectPagination.loadingMore || !shouldShowProjectPagination()) {
     return;
   }
+  if (!Number.isInteger(page) || page < 0 || page > 19) return;
+  if (page === state.projectPagination.page) return;
+  if (page > state.projectPagination.page && !state.projectPagination.hasMore) return;
   setProjectPaginationLoadingMore(true);
   renderApp();
-  await fetchProjects(false, { append: true, pageSize: state.projectPagination.pageSize });
+  await fetchProjects(false, { page });
+  document.querySelector('.projects-grid')?.scrollIntoView({ block: 'start' });
 }
 
 async function toggleLike(projectId) {
@@ -833,6 +840,10 @@ async function cleanupOutdatedReviewDrafts() {
   return apiFetch('/api/admin/pending/cleanup', {
     method: 'POST',
   });
+}
+
+async function recountPublicProjects() {
+  return apiFetch('/api/admin/projects/recount', { method: 'POST' });
 }
 
 async function fetchAdminReviewDetail(projectId) {

@@ -47,6 +47,7 @@ import {
   AdminList,
   AdminPendingCleanup,
   AdminPendingList,
+  AdminPublicCountsRecount,
   AdminProjectList,
   AdminReview,
   AdminReviewDetail,
@@ -144,10 +145,9 @@ app.use('*', async (c, next) => {
     const hasAuthorization = Boolean(c.req.header('authorization'));
     if (c.req.path === '/api/projects') {
       c.res.headers.append('Vary', 'Authorization');
-      c.res.headers.set(
-        'Cache-Control',
-        hasAuthorization ? 'private, no-store' : 'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
-      );
+      // The worker's revision-keyed Cache API entry is the only shared list cache.
+      // Browser/CDN caching by raw query URL could serve hidden projects after a revision change.
+      c.res.headers.set('Cache-Control', 'private, no-store');
     } else if (/^\/api\/projects\/[^/]+$/.test(c.req.path)) {
       c.res.headers.append('Vary', 'Authorization');
       c.res.headers.set(
@@ -288,6 +288,7 @@ app.get('/api/files/*', async c => {
 openapi.get('/api/admin/logs', AdminActionLogList);
 openapi.get('/api/admin/pending', AdminPendingList);
 openapi.post('/api/admin/pending/cleanup', AdminPendingCleanup);
+openapi.post('/api/admin/projects/recount', AdminPublicCountsRecount);
 openapi.get('/api/admin/review/:projectId', AdminReviewDetail);
 openapi.post('/api/admin/review/:projectId', AdminReview);
 openapi.get('/api/admin/projects', AdminProjectList);

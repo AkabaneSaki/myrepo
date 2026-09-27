@@ -192,6 +192,29 @@ export class AdminPendingCleanup extends OpenAPIRoute {
   }
 }
 
+export class AdminPublicCountsRecount extends OpenAPIRoute {
+  schema = {
+    tags: ['Admin'],
+    summary: 'Recount public projects (Admin Only)',
+    request: { headers: z.object({ authorization: z.string() }) },
+    responses: { '200': { description: 'Updated public project counts' }, '403': { description: 'Admin only' } },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload?.isAdmin) return c.json({ error: '只有管理员可以重新统计项目数量' }, 403);
+    const counts = await projectDb.recountPublicCounts(c);
+    await projectDb.logAdminAction(c, {
+      action: 'public_project_counts_recounted',
+      targetType: 'project',
+      actorId: payload.userId,
+      actorName: payload.globalName || payload.username,
+      detail: { total: counts.total },
+    });
+    return { success: true, publicCounts: { total: counts.total, byType: counts.byType } };
+  }
+}
+
 /**
  * 审核项目 (仅管理员)
  */
