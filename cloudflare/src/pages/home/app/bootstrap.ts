@@ -5,6 +5,7 @@ export const homeAppBootstrapScript = String.raw`
     app.innerHTML = renderLayout(filteredProjects);
     bindStaticActions(filteredProjects);
     bindCoverImageFallbacks();
+    void ensureDailyRandomDrawState();
   }
 
   async function init() {

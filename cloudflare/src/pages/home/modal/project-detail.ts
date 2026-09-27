@@ -1,5 +1,5 @@
 export const homeProjectDetailModalScript = [
-'async function showProjectDetail(project) {',
+'async function showProjectDetail(project, options = {}) {',
   '  const loadingOverlay = openModal(\'<div class="detail-loading"><div class="loading-spinner"></div><div class="detail-loading-text">正在加载项目详情...</div></div>\', \'<i class="fas fa-info-circle"></i> 项目详情\');',
   '  loadingOverlay.classList.add("project-detail-modal");',
   '  try {',
@@ -24,6 +24,7 @@ export const homeProjectDetailModalScript = [
   '    loadingOverlay.remove();',
   '    const overlay = openModal(renderProjectDetail(detail.project || detailProject, detail.entries || [], detail.regexEntries || []), \'<i class="fas fa-info-circle"></i> 项目详情\');',
   '    overlay.classList.add("project-detail-modal");',
+  '    if (options?.dailyRandomDraw) attachDailyRandomDrawControls(overlay);',
   '    overlay.querySelectorAll(".detail-devteam-recommend-btn").forEach(button => {',
   '      button.addEventListener("click", event => {',
   '        event.preventDefault();',

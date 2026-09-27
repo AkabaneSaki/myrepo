@@ -33,6 +33,7 @@ const fragments = {
   homeUtilsScript: await evaluateStandalone('src/pages/home/utils.ts', 'homeUtilsScript'),
   homeTavernBridgeScript: await evaluateStandalone('src/pages/home/tavern-bridge.ts', 'homeTavernBridgeScript'),
   homeApiScript: await evaluateStandalone('src/pages/home/api.ts', 'homeApiScript'),
+  homeDailyRandomDrawScript: await evaluateStandalone('src/pages/home/daily-random.ts', 'homeDailyRandomDrawScript'),
   homeCardsRenderScript: await evaluateStandalone('src/pages/home/render/cards.ts', 'homeCardsRenderScript'),
   homeDetailModalRenderScript: await evaluateStandalone('src/pages/home/render/detail-modal.ts', 'homeDetailModalRenderScript'),
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),

@@ -1,5 +1,6 @@
 export const homeAppActionsScript = String.raw`
   function bindStaticActions(filteredProjects) {
+    bindDailyRandomDrawEntry();
     const loginBtn = document.getElementById('loginBtn');
     const localAdminLoginBtn = document.getElementById('localAdminLoginBtn');
     const logoutBtn = document.getElementById('logoutBtn');

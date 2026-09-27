@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
+
+const [
+  endpointSource,
+  migrationSource,
+  schemaSource,
+  dailyRandomUiSource,
+  layoutSource,
+  detailSource,
+  appSource,
+  rankingSource,
+] = await Promise.all([
+  readFile(new URL('../src/endpoints/projects/random.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../migrations/0027_daily_random_draw.sql', import.meta.url), 'utf8'),
+  readFile(new URL('../schema.sql', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/home/daily-random.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/home/render/layout.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/home/modal/project-detail.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/home/app.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/project-daily-rankings.ts', import.meta.url), 'utf8'),
+]);
+
+assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS daily_random_draw_state/);
+assert.match(migrationSource, /user_id TEXT PRIMARY KEY/);
+assert.match(migrationSource, /daily_count INTEGER NOT NULL DEFAULT 0 CHECK \(daily_count BETWEEN 0 AND 10\)/);
+assert.match(migrationSource, /recent_project_ids TEXT NOT NULL DEFAULT '\[\]'/);
+assert.doesNotMatch(migrationSource, /DELETE FROM project_daily_rankings|DELETE FROM project_ranking_builds/);
+assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS daily_random_draw_state/);
+
+assert.match(endpointSource, /const DAILY_DRAW_LIMIT = 10/);
+assert.match(endpointSource, /const RECENT_DRAW_LIMIT = 20/);
+assert.match(endpointSource, /const DAILY_RESET_HOUR = 5/);
+assert.match(endpointSource, /UTC8_OFFSET_MS = 8 \* 60 \* 60 \* 1000/);
+assert.match(endpointSource, /installedProjectIds/);
+assert.match(endpointSource, /discoverProjectIds/);
+assert.match(endpointSource, /\.\.\.status\.recentProjectIds/);
+assert.match(endpointSource, /RECENT_DRAW_LIMIT \+ 1/);
+assert.match(endpointSource, /\.slice\(-RECENT_DRAW_LIMIT\)/);
+assert.match(endpointSource, /INDEXED BY idx_projects_public_id/g);
+assert.match(endpointSource, /crypto\.randomUUID\(\)/);
+assert.match(endpointSource, /INSERT OR IGNORE INTO daily_random_draw_state/);
+assert.match(endpointSource, /UPDATE daily_random_draw_state/);
+assert.doesNotMatch(endpointSource, /ORDER BY RANDOM\s*\(/i);
+assert.doesNotMatch(endpointSource, /download_history|acquisition_history|user_project_library/i);
+
+assert.match(dailyRandomUiSource, /isEmbedded[\s\S]*state\.currentUser[\s\S]*state\.tavern\.connected[\s\S]*state\.tavern\.installedProjectsLoaded/);
+assert.match(dailyRandomUiSource, /state\.discoverShelves\?\.discover/);
+assert.match(dailyRandomUiSource, /每日抽卡（/);
+assert.match(dailyRandomUiSource, /回到首页/);
+assert.match(dailyRandomUiSource, /再抽一个（今日剩余/);
+assert.match(dailyRandomUiSource, /showProjectDetail\(\{ id: projectId \}, \{ dailyRandomDraw: true \}\)/);
+assert.match(layoutSource, /renderDailyRandomDrawEntry\(\)/);
+assert.match(detailSource, /showProjectDetail\(project, options = \{\}\)/);
+assert.match(detailSource, /options\?\.dailyRandomDraw[\s\S]*attachDailyRandomDrawControls/);
+assert.match(appSource, /homeDailyRandomDrawScript/);
+
+// Daily draw must not inflate the existing 6-hour Discover ranking board.
+assert.match(rankingSource, /const DISCOVERY_PICK_COUNT = 10/);
+assert.match(rankingSource, /\.slice\(0, DISCOVERY_PICK_COUNT\)/);
+
+const db = new DatabaseSync(':memory:');
+db.exec(`
+  CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    is_published INTEGER NOT NULL,
+    visibility INTEGER NOT NULL
+  );
+  CREATE INDEX idx_projects_public_id
+    ON projects(id)
+    WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
+`);
+
+const plan = db.prepare(`
+  EXPLAIN QUERY PLAN
+  SELECT p.id
+  FROM projects p INDEXED BY idx_projects_public_id
+  WHERE p.status = 'approved'
+    AND p.is_published = 1
+    AND p.visibility = 1
+    AND p.id >= ?
+    AND NOT EXISTS (
+      SELECT 1
+      FROM json_each(?) excluded
+      WHERE excluded.value = p.id
+    )
+  ORDER BY p.id ASC
+  LIMIT 1
+`).all('80000000-0000-4000-8000-000000000000', '[]');
+
+const planDetail = plan.map(row => String(row.detail || '')).join(' | ');
+assert.match(planDetail, /SEARCH p USING INDEX idx_projects_public_id \(id>\?\)/);
+assert.doesNotMatch(planDetail, /SCAN p(?:\s|$)/);
+assert.doesNotMatch(planDetail, /USE TEMP B-TREE FOR ORDER BY/);
+db.close();
+
+console.log('daily random draw smoke: ok');

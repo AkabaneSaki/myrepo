@@ -1,4 +1,5 @@
 import { homeApiScript } from './api';
+import { homeDailyRandomDrawScript } from './daily-random';
 import { homeModalsScript } from './modals';
 import { homePresentationScript } from './presentation';
 import { homePublishCheckScript } from './publish-check';
@@ -37,6 +38,7 @@ export const homeScript = String.raw`
   ${homeUtilsScript}
   ${homeTavernBridgeScript}
   ${homeApiScript}
+  ${homeDailyRandomDrawScript}
   ${homeCardsRenderScript}
   ${homeDetailModalRenderScript}
   ${homeUploadPreviewScript}

@@ -85,6 +85,19 @@ function createDefaultProjectPagination() {
   };
 }
 
+function createDefaultDailyRandomDrawState() {
+  return {
+    loaded: false,
+    loading: false,
+    busy: false,
+    count: 0,
+    limit: 10,
+    remaining: 10,
+    drawDay: '',
+    resetAt: '',
+  };
+}
+
 const state = {
   currentUser: null,
   projects: [],
@@ -131,6 +144,7 @@ const state = {
   subsMap: new Map(),
   subscriptionsLoaded: false,
   projectPagination: createDefaultProjectPagination(),
+  dailyRandomDraw: createDefaultDailyRandomDrawState(),
   tavern: createDefaultTavernState(),
   updateModal: {
     open: false,
@@ -157,6 +171,7 @@ function setCurrentUser(user) {
     state.dlcKitchenProfile = null;
     state.subsMap = new Map();
     state.subscriptionsLoaded = false;
+    state.dailyRandomDraw = createDefaultDailyRandomDrawState();
   }
 }
 

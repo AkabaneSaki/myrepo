@@ -9,6 +9,7 @@ export {
 } from './projects/read';
 
 export { ProjectRepairResolve } from './projects/repair';
+export { ProjectDailyRandomDraw, ProjectDailyRandomDrawState } from './projects/random';
 
 export {
   ProjectCreate,

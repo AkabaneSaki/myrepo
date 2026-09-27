@@ -55,6 +55,7 @@
     "check:project-ejs-length-estimates": "node tests/project-ejs-length-estimates-smoke.mjs",
     "check:project-discord-update-center": "node tests/project-discord-update-center-smoke.mjs",
     "check:discord-gated-download": "node tests/discord-gated-download-smoke.mjs",
+    "check:daily-random-draw": "node tests/daily-random-draw-smoke.mjs",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",

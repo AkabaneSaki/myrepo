@@ -26,6 +26,8 @@ import {
   ProjectCoverUpload,
   ProjectCreate,
   ProjectDelete,
+  ProjectDailyRandomDraw,
+  ProjectDailyRandomDrawState,
   ProjectEntryRemove,
   ProjectFetch,
   ProjectInstallInfo,
@@ -205,6 +207,8 @@ openapi.get('/api/character-references', CharacterReferenceList);
 openapi.get('/api/character-references/versions/:versionId/items', CharacterReferenceVersionItems);
 
 // ============ 项目接口 (需要登录) ============
+openapi.get('/api/projects/random-draw/state', ProjectDailyRandomDrawState);
+openapi.post('/api/projects/random-draw', ProjectDailyRandomDraw);
 openapi.get('/api/my/projects', MyProjects);
 openapi.get('/api/my/subscriptions', MySubscriptions);
 openapi.post('/api/projects', ProjectCreate);
