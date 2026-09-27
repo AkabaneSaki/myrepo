@@ -496,7 +496,7 @@ export const homeDetailModalRenderScript = [
   '  const inspectionWarningHtml = inspection.hasIncompleteArtworkMarker ? `<div class="detail-warning"><i class="fas fa-triangle-exclamation"></i><span>角色立绘模板标记不完整，已保留原文显示。</span></div>` : "";',
   '  const view = buildProjectCardViewModel(project);',
   '  const installButtonClass = `${view.installDisabled ? "btn btn-primary detail-install-btn is-disabled" : "btn btn-primary detail-install-btn"}${view.installPending ? " is-loading" : ""}`;',
-  '  const updateButton = view.canUpdate ? `<button class="btn btn-outline detail-update-btn update-btn" data-id="${project.id}"><i class="fas fa-arrows-rotate"></i> 更新</button>` : "";',
+  '  const updateButton = view.canUpdate ? `<button class="btn btn-outline detail-update-btn update-btn" data-id="${project.id}"><i class="fas fa-arrows-rotate"></i> ${state.currentUser ? "更新" : "登录后更新"}</button>` : "";',
   '  const rebindButton = rebindCandidate ? `<button class="btn btn-outline detail-rebind-project-btn" data-id="${project.id}"><i class="fas fa-link"></i> ${rebindCandidate.projects.length === 1 ? "确认对应项目" : "选择对应项目"}</button>` : "";',
   '  const installBadge = view.isInstalled ? `<span class="install-badge ${view.canUpdate ? "install-badge--update" : ""}"><i class="fas fa-check-circle"></i> 已安装</span>` : "";',
   '  const installLocationLabel = getInstalledLocationLabel(view, entries, resolvedRegexEntries);',

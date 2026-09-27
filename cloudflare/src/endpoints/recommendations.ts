@@ -99,7 +99,7 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
     const curators = new Map<string, any>();
 
     for (const row of rows) {
-      const project = parseProjectRow(row);
+      const project = { ...parseProjectRow(row), downloadUrl: null };
       if (!curators.has(row.curator_id)) {
         curators.set(row.curator_id, {
           id: row.curator_id,

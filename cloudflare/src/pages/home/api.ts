@@ -88,6 +88,19 @@ async function apiFetch(endpoint, options = {}) {
   return data || {};
 }
 
+async function fetchProjectInstallInfo(projectId, expectedVersion = null) {
+  if (!state.currentUser || !localStorage.getItem(TOKEN_KEY)) {
+    const error = new Error('请先 Discord 登录后再下载 / 安装 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    throw error;
+  }
+  const versionQuery = expectedVersion ? '?v=' + encodeURIComponent(expectedVersion) : '';
+  return apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/install-info' + versionQuery, {
+    method: 'GET',
+    cache: 'no-store',
+  });
+}
+
 async function fetchCurrentUser() {
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return null;

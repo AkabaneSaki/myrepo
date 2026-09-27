@@ -330,6 +330,7 @@ export const homeProjectDetailModalScript = [
   '        if (button.disabled) return;',
   '        const targetProject = detail.project || project;',
   '        if (!targetProject?.id) return;',
+  '        if (!requireDiscordLoginForDownload("更新 DLC")) return;',
   '        const restore = setButtonLoading(button, "加载差异");',
   '        requestProjectDiff(targetProject.id, targetProject.version)',
   '          .then(diff => openProjectUpdateModal(targetProject, diff))',

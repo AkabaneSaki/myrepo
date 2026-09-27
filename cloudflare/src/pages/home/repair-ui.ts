@@ -461,6 +461,7 @@ async function analyzeSelectedDlcRepairs() {
 }
 
 async function runSelectedDlcRepairs() {
+  if (!requireDiscordLoginForDownload('修复 DLC')) return;
   const existingLock = getRepairResolveLockedUntil();
   if (existingLock) {
     showRepairResolveLockNotice(existingLock);
@@ -516,6 +517,7 @@ async function runSelectedDlcRepairs() {
 }
 
 async function retryPendingDlcRepair(repairId) {
+  if (!requireDiscordLoginForDownload('修复 DLC')) return;
   const existingLock = getRepairResolveLockedUntil();
   if (existingLock) {
     showRepairResolveLockNotice(existingLock);

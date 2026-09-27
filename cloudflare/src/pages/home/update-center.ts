@@ -159,6 +159,7 @@ async function openDlcUpdateCenter() {
       button.addEventListener('click', async () => {
         const projectId = String(button.dataset.dlcUpdateProject || '');
         if (!projectId) return;
+        if (!requireDiscordLoginForDownload('更新 DLC')) return;
         const restore = setButtonLoading(button, '读取中');
         try {
           const detail = await fetchProjectEntries(projectId, { forceRefresh: true });

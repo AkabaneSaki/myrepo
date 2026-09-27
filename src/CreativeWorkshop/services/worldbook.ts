@@ -102,8 +102,16 @@ export type CreativeWorkshopPreparedWorldbookEntry = {
   scanDepth: WorldbookEntry['strategy']['scan_depth'];
 };
 
-export async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKeys?: string[], expectedVersion?: string) {
-  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+export async function prepareCreativeWorkshopProject(
+  projectId: string,
+  selectedEntryKeys?: string[],
+  expectedVersion?: string,
+  downloadUrlOverride?: string,
+) {
+  const fetchedDetail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+  const detail = downloadUrlOverride
+    ? { ...fetchedDetail, project: { ...fetchedDetail.project, downloadUrl: downloadUrlOverride } }
+    : fetchedDetail;
   const sourceEntries = await fetchCreativeWorkshopProjectWorldbookSource(detail);
   const entries = sourceEntries.length > 0 ? sourceEntries : detail.worldbookEntriesPreview || [];
   const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
@@ -283,9 +291,15 @@ export async function installCreativeWorkshopProject(
   requestedWorldbookName?: string,
   expectedVersion?: string,
   manageOriginalConflicts = false,
+  downloadUrlOverride?: string,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
-  const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
+  const { detail, prepared } = await prepareCreativeWorkshopProject(
+    projectId,
+    selectedEntryKeys,
+    expectedVersion,
+    downloadUrlOverride,
+  );
   if (prepared.length === 0) {
     const originalEntryStates = manageOriginalConflicts
       ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
@@ -333,9 +347,15 @@ export async function updateCreativeWorkshopProject(
   expectedVersion?: string,
   legacyProjectName?: string,
   manageOriginalConflicts = false,
+  downloadUrlOverride?: string,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
-  const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
+  const { detail, prepared } = await prepareCreativeWorkshopProject(
+    projectId,
+    undefined,
+    expectedVersion,
+    downloadUrlOverride,
+  );
   const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
   let worldbookName: string | null = installedWorldbookName;
   if (installedWorldbookName) {

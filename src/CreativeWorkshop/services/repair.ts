@@ -96,6 +96,7 @@ export type CreativeWorkshopRepairTarget = {
   candidateId: string;
   projectId: string;
   projectVersion?: string | null;
+  downloadUrl?: string | null;
   worldbookName: string;
   entryUids: Array<string | number>;
   regexIds: string[];
@@ -802,6 +803,7 @@ function normalizeRepairTarget(target: CreativeWorkshopRepairTarget): CreativeWo
     candidateId,
     projectId,
     projectVersion: _.isString(target.projectVersion) && target.projectVersion ? String(target.projectVersion) : null,
+    downloadUrl: _.isString(target.downloadUrl) && target.downloadUrl ? String(target.downloadUrl) : null,
     worldbookName,
     entryUids,
     regexIds,
@@ -885,7 +887,12 @@ export async function repairCreativeWorkshopProject(rawTarget: CreativeWorkshopR
   try {
     // Repair always targets the current Workshop version. Do not pin retries to an older matched version.
     invalidateCreativeWorkshopProjectCache(target.projectId);
-    const { detail, prepared } = await prepareCreativeWorkshopProject(target.projectId);
+    const { detail, prepared } = await prepareCreativeWorkshopProject(
+      target.projectId,
+      undefined,
+      undefined,
+      target.downloadUrl || undefined,
+    );
     const preparedRegexes = prepareCreativeWorkshopRegexEntries(detail);
     await ensureCreativeWorkshopTargetWorldbook(target.worldbookName);
 

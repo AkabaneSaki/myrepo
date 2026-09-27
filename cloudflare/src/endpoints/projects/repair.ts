@@ -100,10 +100,12 @@ export class ProjectRepairResolve extends OpenAPIRoute {
     const projectIds = candidates.map(candidate => candidate.projectId).filter(Boolean);
     const normalizedNames = candidates.map(candidate => candidate.normalizedName).filter(Boolean);
     const resolved = await projectDb.resolvePublicRepairCandidates(c, projectIds, normalizedNames);
+    const safeById = resolved.byId.map(project => ({ ...project, downloadUrl: null }));
+    const safeByName = resolved.byName.map(project => ({ ...project, downloadUrl: null }));
 
-    const projectsById = new Map(resolved.byId.map(project => [project.id, project]));
-    const projectsByName = new Map<string, typeof resolved.byName>();
-    for (const project of resolved.byName) {
+    const projectsById = new Map(safeById.map(project => [project.id, project]));
+    const projectsByName = new Map<string, typeof safeByName>();
+    for (const project of safeByName) {
       const key = normalizeRepairLookupName(project.name);
       const rows = projectsByName.get(key) || [];
       rows.push(project);

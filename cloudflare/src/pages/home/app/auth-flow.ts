@@ -307,6 +307,13 @@ export const homeAppAuthFlowScript = String.raw`
     openLoginPopupForBrowser();
   }
 
+  function requireDiscordLoginForDownload(actionLabel = '继续') {
+    if (state.currentUser && localStorage.getItem(TOKEN_KEY)) return true;
+    showToast('请先 Discord 登录后' + actionLabel, 'info');
+    openLoginPopup();
+    return false;
+  }
+
   window.addEventListener(TAVERN_OAUTH_RESULT_EVENT, event => {
     const payload = event.detail || {};
 

@@ -349,6 +349,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
             event.data.payload?.manageOriginalConflicts === true,
+            _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined,
           );
           await installCreativeWorkshopRegex(
             String(event.data.payload?.projectId),
@@ -421,6 +422,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             expectedVersion,
             actionLegacyProjectName,
             event.data.payload?.manageOriginalConflicts === true,
+            _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined,
           );
           await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
           await post(
@@ -446,6 +448,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             candidateId: _.isString(_.get(event.data, 'payload.candidateId')) ? String(event.data.payload?.candidateId) : '',
             projectId: _.isString(_.get(event.data, 'payload.projectId')) ? String(event.data.payload?.projectId) : '',
             projectVersion: _.isString(_.get(event.data, 'payload.projectVersion')) ? String(event.data.payload?.projectVersion) : null,
+            downloadUrl: _.isString(_.get(event.data, 'payload.downloadUrl')) ? String(event.data.payload?.downloadUrl) : null,
             worldbookName: _.isString(_.get(event.data, 'payload.worldbookName')) ? String(event.data.payload?.worldbookName) : '',
             entryUids: Array.isArray(event.data.payload?.entryUids)
               ? (event.data.payload?.entryUids as Array<string | number>)

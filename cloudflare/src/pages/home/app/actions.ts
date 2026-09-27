@@ -867,6 +867,7 @@ export const homeAppActionsScript = String.raw`
         event.stopPropagation();
         const project = filteredProjects.find(item => item.id === button.dataset.id);
         if (project) {
+          if (!requireDiscordLoginForDownload('更新 DLC')) return;
           const restore = setButtonLoading(button, '加载差异');
           requestProjectDiff(project.id, project.version)
             .then(diff => openProjectUpdateModal(project, diff))
