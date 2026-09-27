@@ -1,5 +1,6 @@
 import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
+  LEGACY_BASE_TAG_BY_PROJECT_TYPE,
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
   normalizeCustomTags,
@@ -793,11 +794,20 @@ export const projectDb = {
       ...(Array.isArray(options.tags) ? options.tags : []),
       ...(options.tag ? [options.tag] : []),
     ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
-    tagFilters.forEach((tag, index) => {
-      conditions.push(index === 0 && !hasIndexedTextSearch && !hasIndexedShortSearch
-        ? 'tag_candidate.tag = ?'
-        : 'p.id IN (SELECT project_id FROM project_search_tags WHERE tag = ?)');
-      values.push(tag);
+    const legacyTagTypes = new Map(Object.entries(LEGACY_BASE_TAG_BY_PROJECT_TYPE)
+      .map(([projectType, legacyTag]) => [legacyTag, projectType]));
+    const firstExactTag = tagFilters.find(tag => !legacyTagTypes.has(tag));
+    tagFilters.forEach(tag => {
+      const legacyType = legacyTagTypes.get(tag);
+      if (legacyType) {
+        conditions.push('p.project_type = ?');
+        values.push(legacyType);
+      } else {
+        conditions.push(tag === firstExactTag && !hasIndexedTextSearch && !hasIndexedShortSearch
+          ? 'tag_candidate.tag = ?'
+          : 'p.id IN (SELECT project_id FROM project_search_tags WHERE tag = ?)');
+        values.push(tag);
+      }
     });
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -806,7 +816,7 @@ export const projectDb = {
       ? 'project_search CROSS JOIN projects p ON p.rowid = project_search.rowid'
       : hasIndexedShortSearch
         ? 'project_search_short CROSS JOIN projects p ON p.rowid = project_search_short.rowid'
-        : tagFilters.length > 0
+        : firstExactTag
           ? 'project_search_tags tag_candidate CROSS JOIN projects p ON p.id = tag_candidate.project_id'
           : 'projects p';
 
