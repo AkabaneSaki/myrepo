@@ -58,9 +58,11 @@ export class ProjectRatingSet extends OpenAPIRoute {
        ON CONFLICT(project_id, user_id) DO UPDATE SET
          rating = excluded.rating,
          comment_text = CASE WHEN ? = 1 THEN excluded.comment_text ELSE project_ratings.comment_text END,
-         updated_at = CURRENT_TIMESTAMP`,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE project_ratings.rating IS NOT excluded.rating
+          OR (? = 1 AND project_ratings.comment_text IS NOT excluded.comment_text)`,
     )
-      .bind(projectId, payload.userId, rating, commentText || null, commentProvided ? 1 : 0)
+      .bind(projectId, payload.userId, rating, commentText || null, commentProvided ? 1 : 0, commentProvided ? 1 : 0)
       .run();
 
     return { success: true, rating, ...(commentProvided ? { comment: commentText } : {}) };
@@ -97,6 +99,7 @@ export class ProjectLikeToggle extends OpenAPIRoute {
     }
 
     const result = await projectDb.toggleLike(c, data.params.projectId, payload.userId);
+    if (!result) return c.json({ error: '今天点赞操作太频繁，请明天再试', code: 'LIKE_DAILY_LIMIT' }, 429);
     return result;
   }
 }

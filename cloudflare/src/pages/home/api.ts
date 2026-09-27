@@ -577,11 +577,15 @@ async function goToProjectPage(page) {
   document.querySelector('.projects-grid')?.scrollIntoView({ block: 'start' });
 }
 
+const pendingLikeProjectIds = new Set();
+
 async function toggleLike(projectId) {
   if (!state.currentUser) {
     showToast('请先登录', 'warning');
     return;
   }
+  if (pendingLikeProjectIds.has(projectId)) return;
+  pendingLikeProjectIds.add(projectId);
   try {
     const data = await apiFetch('/api/projects/' + projectId + '/like', { method: 'POST' });
     updateLikeState(projectId, { liked: data.liked, count: data.count });
@@ -589,6 +593,8 @@ async function toggleLike(projectId) {
     renderApp();
   } catch (error) {
     showToast('操作失败: ' + error.message, 'error');
+  } finally {
+    pendingLikeProjectIds.delete(projectId);
   }
 }
 

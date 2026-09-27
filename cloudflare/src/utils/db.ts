@@ -23,6 +23,8 @@ import {
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
+const MAX_DAILY_COUNTED_DOWNLOADS = 15_000;
+
 /**
  * 生成 UUID
  */
@@ -1240,6 +1242,19 @@ export const projectDb = {
 
   toggleLike: async (c: AppContext, projectId: string, userId: string) => {
     const db = c.env.DB;
+    const allowed = await db.prepare(
+      `INSERT INTO project_like_daily_usage (user_id, day_key, toggle_count)
+       VALUES (?, date('now'), 1)
+       ON CONFLICT(user_id) DO UPDATE SET
+         day_key = excluded.day_key,
+         toggle_count = CASE WHEN project_like_daily_usage.day_key = excluded.day_key
+           THEN project_like_daily_usage.toggle_count + 1 ELSE 1 END
+       WHERE project_like_daily_usage.day_key <> excluded.day_key
+          OR project_like_daily_usage.toggle_count < 100
+       RETURNING toggle_count`,
+    ).bind(userId).first<{ toggle_count: number }>();
+    if (!allowed) return null;
+
     const existing = await db
       .prepare(`SELECT 1 as liked FROM project_likes WHERE project_id = ? AND user_id = ?`)
       .bind(projectId, userId)
@@ -1249,7 +1264,7 @@ export const projectDb = {
       await db.prepare(`DELETE FROM project_likes WHERE project_id = ? AND user_id = ?`).bind(projectId, userId).run();
     } else {
       await db
-        .prepare(`INSERT INTO project_likes (project_id, user_id, created_at) VALUES (?, ?, ?)`)
+        .prepare(`INSERT OR IGNORE INTO project_likes (project_id, user_id, created_at) VALUES (?, ?, ?)`)
         .bind(projectId, userId, now())
         .run();
     }
@@ -1504,19 +1519,21 @@ export const projectDb = {
   },
 
   incrementDownloads: async (c: AppContext, projectId: string): Promise<void> => {
-    try {
-      await c.env.DB.prepare(
-        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
-      )
-        .bind(projectId)
-        .run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('no such column: downloads_count')) {
-        throw error;
-      }
-      console.warn('downloads_count column missing, skip incrementDownloads');
-    }
+    const allowed = await c.env.DB.prepare(
+      `INSERT INTO download_daily_usage (counter_id, day_key, counted_downloads)
+       VALUES (1, date('now'), 1)
+       ON CONFLICT(counter_id) DO UPDATE SET
+         day_key = excluded.day_key,
+         counted_downloads = CASE WHEN download_daily_usage.day_key = excluded.day_key
+           THEN download_daily_usage.counted_downloads + 1 ELSE 1 END
+       WHERE download_daily_usage.day_key <> excluded.day_key
+          OR download_daily_usage.counted_downloads < ?
+       RETURNING counted_downloads`,
+    ).bind(MAX_DAILY_COUNTED_DOWNLOADS).first<{ counted_downloads: number }>();
+    if (!allowed) return;
+    await c.env.DB.prepare(
+      `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
+    ).bind(projectId).run();
   },
 };
 
