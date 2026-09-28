@@ -183,7 +183,7 @@ async function openNextDailyRandomDraw(currentOverlay = null, triggerButton = nu
 }
 
 function attachDailyRandomDrawControls(overlay) {
-  if (!overlay?.isConnected || !canUseDailyRandomDraw()) return;
+  if (!overlay?.isConnected) return;
   const modalContent = overlay.querySelector('.modal-content');
   if (!modalContent || modalContent.querySelector('[data-daily-random-actions]')) return;
   overlay.classList.add('daily-random-detail-modal');
