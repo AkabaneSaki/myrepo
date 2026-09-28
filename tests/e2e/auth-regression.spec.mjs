@@ -4,7 +4,7 @@ import { createFixtureProjects, installProjectCatalogFixture } from './support/c
 const GATE_PROJECT_ID = 'fixture-project-001';
 const GATE_REPAIR_ID = 'fixture-repair';
 
-async function installGateRoutes(page) {
+async function installGateRoutes(page, { allowInstallInfo = false } = {}) {
   const requests = { login: 0, installInfo: 0 };
   await page.route('**/api/auth/login', async route => {
     requests.login += 1;
@@ -12,7 +12,13 @@ async function installGateRoutes(page) {
   });
   await page.route(/\/api\/projects\/[^/?]+\/install-info(?:\?.*)?$/, async route => {
     requests.installInfo += 1;
-    await route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"Download stopped by Playwright"}' });
+    await route.fulfill(allowInstallInfo
+      ? {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ version: '1.0.1', downloadUrl: 'https://invalid.example/fixture-dlc' }),
+      }
+      : { status: 403, contentType: 'application/json', body: '{"error":"Download stopped by Playwright"}' });
   });
   return requests;
 }
@@ -141,7 +147,7 @@ test.describe('#44 authenticated player gate', () => {
     diagnostics,
   }) => {
     await installGateBridgeFixture(page);
-    const requests = await installGateRoutes(page);
+    const requests = await installGateRoutes(page, { allowInstallInfo: true });
     const projects = createFixtureProjects(20);
     await installProjectCatalogFixture(page, { projects });
     await page.route(/\/api\/projects\/fixture-project-001(?:\?.*)?$/, async route => {
@@ -164,7 +170,7 @@ test.describe('#44 authenticated player gate', () => {
     await project.assertAuthenticatedInstallCanContinue(GATE_PROJECT_ID);
     await project.clickInstallEntry(GATE_PROJECT_ID);
     await expect.poll(() => requests.installInfo).toBe(1);
-    expect(await bridgeRequestCount(page, 'bridge:install-project')).toBe(0);
+    await expect.poll(() => bridgeRequestCount(page, 'bridge:install-project')).toBe(1);
 
     await updateCenter.seedInstalledProjects([{
       projectId: GATE_PROJECT_ID,
@@ -178,13 +184,16 @@ test.describe('#44 authenticated player gate', () => {
     const updateModal = session.frame.locator('.modal-overlay').last();
     await expect(session.frame.locator('.modal-overlay')).toHaveCount(2);
     await expect(updateModal).toContainText('更新');
-    await updateCenter.close(updateModal);
+    await updateModal.locator('[data-update-confirm]').click();
+    await expect.poll(() => bridgeRequestCount(page, 'bridge:confirm-project-update')).toBe(1);
+    await expect.poll(() => requests.installInfo).toBe(2);
+    await expect(session.frame.locator('.modal-overlay')).toHaveCount(1);
     await discover.returnFromProject(GATE_PROJECT_ID);
 
     const repairModal = await project.openRepairEntry();
     await project.clickPendingRepair(repairModal, GATE_REPAIR_ID);
-    await expect.poll(() => requests.installInfo).toBe(2);
-    expect(await bridgeRequestCount(page, 'bridge:repair:project')).toBe(0);
+    await expect.poll(() => requests.installInfo).toBe(3);
+    await expect.poll(() => bridgeRequestCount(page, 'bridge:repair:project')).toBe(1);
     expect(requests.login).toBe(0);
 
     diagnostics.assertHealthy();

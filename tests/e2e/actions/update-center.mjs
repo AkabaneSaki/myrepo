@@ -89,8 +89,10 @@ export class UpdateCenterActions {
     if (!modal) return;
     const close = modal.locator('.close-btn').first();
     if (await close.count()) {
+      const overlays = this.root.locator('.modal-overlay');
+      const before = await overlays.count();
       await close.click();
-      await expect(modal).toHaveCount(0);
+      await expect(overlays).toHaveCount(before - 1);
     }
   }
 

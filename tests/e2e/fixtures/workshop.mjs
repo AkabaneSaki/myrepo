@@ -21,6 +21,10 @@ export const test = base.extend({
         viewport: getWorkshopViewport(viewportName),
       });
 
+      // Startup extensions may save the active ST chat. Journeys only inspect Workshop,
+      // so keep their copied browser sessions from writing to Master's real chat.
+      await context.route('**/api/chats/save', route => route.fulfill({ status: 204 }));
+
       await use(context);
     } finally {
       await context?.close().catch(() => {});
