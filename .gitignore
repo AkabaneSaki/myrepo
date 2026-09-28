@@ -9,3 +9,5 @@ cloudflare/wrangler.discover-preview.jsonc
 cloudflare/.preview-assets/
 .ai-bridge/
 .cotel/local/
+playwright-report/
+test-results/
