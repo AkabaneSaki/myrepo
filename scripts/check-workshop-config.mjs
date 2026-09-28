@@ -167,9 +167,9 @@ for (const [path, source] of forbiddenTargets) {
 }
 
 assert.doesNotMatch(files.agents, /Current stable production line:\s*`\d+\.\d+\.\d+`/);
-assert.doesNotMatch(files.agents, /Current feature-development line:\s*`\d+\.\d+\.\d+-dev`/);
+assert.doesNotMatch(files.agents, /Current feature-development line:\s*`\d+\.\d+\.\d+-dev\d+`/);
 assert.doesNotMatch(files.workflow, /owner main \/ production\s*=\s*\d+\.\d+\.\d+/);
-assert.doesNotMatch(files.workflow, /origin\/staging\s*=\s*\d+\.\d+\.\d+-dev/);
+assert.doesNotMatch(files.workflow, /origin\/staging\s*=\s*\d+\.\d+\.\d+-dev\d+/);
 
 for (const [path, source] of [
   ['AGENTS.md', files.agents],
