@@ -45,6 +45,9 @@ jobs:
       - name: Install Cloudflare dependencies
         run: npm ci
 
+      - name: Generate Worker types
+        run: npm run cf-typegen
+
       - name: Typecheck
         run: npm exec --yes --package=typescript@5.9.2 -- tsc -p tsconfig.json
 
