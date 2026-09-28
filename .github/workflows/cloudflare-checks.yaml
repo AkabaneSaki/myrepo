@@ -37,6 +37,11 @@ jobs:
           cache: npm
           cache-dependency-path: cloudflare/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install Cloudflare dependencies
         run: npm ci
 
@@ -45,6 +50,9 @@ jobs:
 
       - name: Home regression checks
         run: npm run check:home
+
+      - name: Staging sync schema checks
+        run: npm run check:staging-sync
 
       - name: CreativeWorkshop syntax
         run: npm run check:creative-workshop-syntax

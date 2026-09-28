@@ -1,0 +1,25 @@
+{
+  "maxBackupAgeHours": 24,
+  "maxStagingSnapshotAgeMinutes": 30,
+  "accountD1RowsRead24hCeiling": 100000,
+  "d1ReadSafetyMarginPerBatch": 5000,
+  "accountD1RowsWritten24hCeiling": 3000,
+  "d1WriteSafetyMarginPerBatch": 900,
+  "maxR2ObjectsPerRun": 300,
+  "maxR2HashChecksPerRun": 500,
+  "maxR2UploadBytesPerRun": 150000000,
+  "maxStatementsPerD1Batch": 10,
+  "writeWeights": {
+    "reference": 4,
+    "user": 3,
+    "projectLineEndings": 40,
+    "projectContent": 80,
+    "projectCounter": 12,
+    "like": 15,
+    "rating": 8,
+    "subscription": 5,
+    "curator": 8,
+    "recommendation": 10,
+    "siteSetting": 5
+  }
+}
