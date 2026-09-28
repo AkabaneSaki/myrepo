@@ -33,10 +33,13 @@ const creatorContent = '<%_ const profile = { value: "%> creator text" }; _%>\n�
 const injected = api.injectCreativeWorkshopWorldbookMetadata(creatorContent, metadata);
 assert.ok(injected.startsWith('<%# poem-workshop-meta:v1-start\n'));
 assert.ok(injected.includes('\npoem-workshop-meta:v1-end %>'));
+assert.ok(injected.includes('\npoem-workshop-meta:v1-end %>\n\n<%_ const profile'));
 assert.equal(api.stripCreativeWorkshopWorldbookMetadata(injected), creatorContent);
 assert.deepEqual(JSON.parse(JSON.stringify(api.readCreativeWorkshopWorldbookMetadata(injected))), metadata);
 
-const blockOnly = injected.slice(0, injected.length - creatorContent.length);
+const envelopeEnd = injected.indexOf(api.CREATIVE_WORKSHOP_WORLD_BOOK_META_END)
+  + api.CREATIVE_WORKSHOP_WORLD_BOOK_META_END.length;
+const blockOnly = injected.slice(0, envelopeEnd);
 assert.equal(
   blockOnly.slice(0, -api.CREATIVE_WORKSHOP_WORLD_BOOK_META_END.length).includes('%>'),
   false,
@@ -170,8 +173,29 @@ assert.throws(
 const plainMarkerWords = '正文提到 poem-workshop-meta:v1-start 和 poem-workshop-meta:v1-end 但不是 EJS envelope';
 assert.equal(
   api.injectCreativeWorkshopWorldbookMetadata(plainMarkerWords, metadata),
-  workshopBlock + plainMarkerWords,
+  api.buildCreativeWorkshopWorldbookMetadataBlock(metadata, '\n\n') + plainMarkerWords,
   'plain marker words outside the exact reserved EJS envelope are ordinary creator text',
+);
+
+const yamlStyleContent = '---\n基本信息：\n  名称：珊瑚・红';
+const injectedYamlStyleContent = api.injectCreativeWorkshopWorldbookMetadata(yamlStyleContent, metadata);
+assert.ok(
+  injectedYamlStyleContent.includes('poem-workshop-meta:v1-end %>\n\n---\n基本信息：'),
+  'Workshop metadata must leave a blank line before creator content instead of sticking to its first line',
+);
+assert.equal(
+  api.stripCreativeWorkshopWorldbookMetadata(injectedYamlStyleContent),
+  yamlStyleContent,
+  'the Workshop-owned separator must be removed together with metadata so creator content round-trips exactly',
+);
+
+const creatorContentWithOwnBlankLine = '\n\n---\n作者自己保留的空行';
+const injectedWithOwnBlankLine = api.injectCreativeWorkshopWorldbookMetadata(creatorContentWithOwnBlankLine, metadata);
+assert.ok(injectedWithOwnBlankLine.endsWith(creatorContentWithOwnBlankLine));
+assert.equal(
+  api.stripCreativeWorkshopWorldbookMetadata(injectedWithOwnBlankLine),
+  creatorContentWithOwnBlankLine,
+  'existing creator-owned blank lines must not be consumed by metadata stripping',
 );
 
 const contentOnlyEntry = { content: injected };
