@@ -8,7 +8,7 @@ const read = path => readFile(resolve(root, path), 'utf8');
 const manifest = JSON.parse(await read('config/workshop.json'));
 
 const stableSemver = /^\d+\.\d+\.\d+$/;
-const stagingSemver = /^\d+\.\d+\.\d+-dev$/;
+const stagingSemver = /^\d+\.\d+\.\d+-dev\d+$/;
 const publicBundlePath = /^dist\/[A-Za-z0-9._/-]+\.js$/;
 
 function parseStable(value) {
