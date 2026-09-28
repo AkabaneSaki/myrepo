@@ -966,7 +966,7 @@ function getCreativeWorkshopManagedRegexStableIdentityKey(projectId, entry, inde
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
-const DIFF_IDENTITY_VERSION = 4;
+const DIFF_IDENTITY_VERSION = 5;
 function getCreativeWorkshopDiffCache() {
     const variables = getVariables({ type: 'script', script_id: getScriptId() });
     const cache = _.get(variables, CREATIVE_WORKSHOP_DIFF_CACHE_KEY);
@@ -1007,6 +1007,30 @@ function normalizeRemoteEntry(entry, projectId, index, project, projectName) {
         keysecondary: JSON.stringify(Array.isArray(entry.keysecondary) ? entry.keysecondary : []),
     };
 }
+function formatDiffEntryForReview(entry) {
+    return Object.keys(entry)
+        .filter(key => key !== 'entryKey' && key !== 'id')
+        .sort()
+        .flatMap(key => {
+        const value = entry[key];
+        if (typeof value === 'string' && value.includes('\n')) {
+            return [`${key}:`, ...value.split('\n').map(line => `  ${line}`)];
+        }
+        if (typeof value === 'string')
+            return [`${key}: ${value}`];
+        if (value === undefined || value === null || typeof value === 'number' || typeof value === 'boolean') {
+            return [`${key}: ${String(value)}`];
+        }
+        return [`${key}: ${JSON.stringify(value)}`];
+    })
+        .join('\n');
+}
+function getChangedDiffFields(previous, current) {
+    return Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]))
+        .filter(key => key !== 'entryKey' && key !== 'id')
+        .filter(key => JSON.stringify(previous[key]) !== JSON.stringify(current[key]))
+        .sort();
+}
 function diffByKey(localItems, remoteItems, keyGetter) {
     const localMap = new Map(localItems.map(item => [keyGetter(item), item]));
     const remoteMap = new Map(remoteItems.map(item => [keyGetter(item), item]));
@@ -1016,7 +1040,36 @@ function diffByKey(localItems, remoteItems, keyGetter) {
         const key = keyGetter(item);
         return localMap.has(key) && JSON.stringify(localMap.get(key)) !== JSON.stringify(item);
     });
-    return { added, removed, modified };
+    const changes = [
+        ...added.map(item => ({
+            status: 'added',
+            entryKey: keyGetter(item),
+            changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+            current: item,
+            currentReviewText: formatDiffEntryForReview(item),
+        })),
+        ...modified.map(item => {
+            const entryKey = keyGetter(item);
+            const previous = localMap.get(entryKey);
+            return {
+                status: 'modified',
+                entryKey,
+                changedFields: getChangedDiffFields(previous, item),
+                current: item,
+                previous,
+                currentReviewText: formatDiffEntryForReview(item),
+                previousReviewText: formatDiffEntryForReview(previous),
+            };
+        }),
+        ...removed.map(item => ({
+            status: 'deleted',
+            entryKey: keyGetter(item),
+            changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+            previous: item,
+            previousReviewText: formatDiffEntryForReview(item),
+        })),
+    ];
+    return { added, removed, modified, changes };
 }
 async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacyProjectName) {
     const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
@@ -1083,6 +1136,12 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
     }
     const entryDiff = diffByKey(localEntries, remoteEntries, item => item.entryKey);
     const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.id);
+    const reviewSummary = {
+        added: entryDiff.added.length + regexDiff.added.length,
+        modified: entryDiff.modified.length + regexDiff.modified.length,
+        deleted: entryDiff.removed.length + regexDiff.removed.length,
+    };
+    const changedCount = reviewSummary.added + reviewSummary.modified + reviewSummary.deleted;
     const result = {
         projectId,
         diff: {
@@ -1097,6 +1156,17 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
             removed: {
                 worldbookEntries: entryDiff.removed,
                 regexEntries: regexDiff.removed,
+            },
+            reviewDiff: {
+                mode: 'update',
+                summary: {
+                    ...reviewSummary,
+                    unchanged: 0,
+                    changed: changedCount,
+                    total: changedCount,
+                },
+                worldbook: entryDiff.changes,
+                regex: regexDiff.changes,
             },
         },
     };
