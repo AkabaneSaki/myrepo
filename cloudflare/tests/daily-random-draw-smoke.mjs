@@ -10,6 +10,7 @@ const [
   layoutSource,
   detailSource,
   appSource,
+  stylesSource,
   rankingSource,
 ] = await Promise.all([
   readFile(new URL('../src/endpoints/projects/random.ts', import.meta.url), 'utf8'),
@@ -19,6 +20,7 @@ const [
   readFile(new URL('../src/pages/home/render/layout.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/home/modal/project-detail.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/pages/home/app.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/project-daily-rankings.ts', import.meta.url), 'utf8'),
 ]);
 
@@ -57,6 +59,11 @@ assert.ok(detailActionsStart >= 0 && detailActionsEnd > detailActionsStart);
 const detailActionsSource = dailyRandomUiSource.slice(detailActionsStart, detailActionsEnd);
 assert.match(detailActionsSource, /if \(!overlay\?\.isConnected\) return/);
 assert.doesNotMatch(detailActionsSource, /canUseDailyRandomDraw\(\)/, 'draw-origin detail footer must not depend on homepage Discover readiness');
+assert.match(detailActionsSource, /mobile-detail-bottom-dock/);
+assert.match(detailActionsSource, /mobileNextButton\.dataset\.dailyRandomNext = 'true'/);
+assert.match(detailActionsSource, /mobileDock\.appendChild\(mobileNextButton\)/);
+assert.match(stylesSource, /daily-random-mobile-dock[\s\S]*grid-template-columns/);
+assert.match(stylesSource, /daily-random-detail-actions \{ display:none; \}/);
 assert.match(layoutSource, /renderDailyRandomDrawEntry\(\)/);
 assert.match(detailSource, /showProjectDetail\(project, options = \{\}\)/);
 assert.match(detailSource, /options\?\.dailyRandomDraw[\s\S]*attachDailyRandomDrawControls/);

@@ -188,6 +188,19 @@ function attachDailyRandomDrawControls(overlay) {
   if (!modalContent || modalContent.querySelector('[data-daily-random-actions]')) return;
   overlay.classList.add('daily-random-detail-modal');
 
+  const mobileDock = overlay.querySelector('.mobile-detail-bottom-dock');
+  if (mobileDock && !mobileDock.querySelector('[data-daily-random-next]')) {
+    mobileDock.classList.add('daily-random-mobile-dock');
+    const mobileNextButton = document.createElement('button');
+    mobileNextButton.type = 'button';
+    mobileNextButton.className = 'daily-random-mobile-next';
+    mobileNextButton.dataset.dailyRandomNext = 'true';
+    mobileNextButton.addEventListener('click', () => {
+      void openNextDailyRandomDraw(overlay, mobileNextButton);
+    });
+    mobileDock.appendChild(mobileNextButton);
+  }
+
   const actions = document.createElement('div');
   actions.className = 'daily-random-detail-actions';
   actions.dataset.dailyRandomActions = 'true';

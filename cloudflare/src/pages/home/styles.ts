@@ -1654,6 +1654,10 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
   .mobile-detail-bottom-spacer { height:82px; }
   .mobile-detail-bottom-dock { position:fixed; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); z-index:10030; padding:8px; border:1px solid rgba(255,255,255,.085); border-radius:14px; background:rgba(24,25,28,.96); box-shadow:0 12px 30px rgba(0,0,0,.45); backdrop-filter:blur(16px); }
   .mobile-detail-bottom-dock button { width:100%; min-height:48px; border:1px solid rgba(190,164,125,.22); border-radius:10px; background:rgba(190,164,125,.1); color:#d7c4a7; font-size:.82rem; font-weight:800; }
+  .project-detail-modal.daily-random-detail-modal .mobile-detail-bottom-dock.daily-random-mobile-dock { display:grid; grid-template-columns:minmax(108px,.72fr) minmax(0,1.28fr); gap:8px; }
+  .project-detail-modal.daily-random-detail-modal .mobile-detail-bottom-dock .daily-random-mobile-next { border-color:rgba(190,164,125,.38); background:#bea47d; color:#151619; }
+  .project-detail-modal.daily-random-detail-modal .mobile-detail-bottom-dock .daily-random-mobile-next:disabled { opacity:.55; }
+  .project-detail-modal.daily-random-detail-modal .daily-random-detail-actions { display:none; }
 
   .mobile-entry-reader:not([hidden]) { position:fixed; inset:0; z-index:10060; display:flex; flex-direction:column; background:#0f1012; color:var(--cw-text-primary); }
   .mobile-entry-reader-head { flex:none; min-height:54px; display:flex; align-items:center; gap:10px; padding:calc(8px + env(safe-area-inset-top)) 13px 8px; border-bottom:1px solid rgba(255,255,255,.075); background:rgba(24,25,28,.97); }
