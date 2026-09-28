@@ -804,9 +804,23 @@ button.detail-stat:disabled { cursor:not-allowed; opacity:.55; }
 .keyword-chip { display:inline-flex; align-items:center; padding:4px 9px; border-radius:999px; border:1px solid rgba(190,164,125,.22); background:rgba(190,164,125,.06); color:#cdbb9f; font-size:.74rem; line-height:1.2; box-shadow:none; }
 .detail-entry-content { padding:14px; }
   .empty-state { padding:18px; border-radius:14px; border:1px dashed rgba(255,255,255,0.14); color:rgba(226,232,240,0.72); text-align:center; }
-  .update-modal { display:flex; flex-direction:column; gap:20px; }
+  .project-update-modal .modal-content { width:min(100%,1080px); max-width:1080px; }
+  .project-update-modal .modal-body { min-height:0; overflow-y:auto; }
+  .update-modal { display:flex; flex-direction:column; gap:18px; }
+  .update-project-head { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 0 16px; border-bottom:1px solid rgba(255,255,255,.075); }
+  .update-project-head-main { min-width:0; display:flex; flex-direction:column; gap:5px; }
+  .update-project-head-main strong { overflow:hidden; text-overflow:ellipsis; color:#e5e4e1; font-size:1.18rem; line-height:1.3; }
+  .update-project-head-main span { color:#77756f; font-size:.76rem; }
+  .update-project-version { flex:none; display:flex; align-items:center; gap:9px; color:#77756f; }
+  .update-project-version code { padding:5px 8px; border:1px solid rgba(255,255,255,.075); border-radius:7px; background:#151619; color:#c9ae87; font-size:.74rem; }
+  .update-project-version i { font-size:.65rem; }
+  .update-modal-lead { color:#8f8d88; font-size:.78rem; line-height:1.55; }
+  .update-diff-legacy-notice,.update-diff-empty-state { display:flex; align-items:flex-start; gap:9px; padding:11px 12px; border:1px solid rgba(190,164,125,.14); border-radius:9px; background:rgba(190,164,125,.045); color:#a9a69f; font-size:.76rem; line-height:1.5; }
+  .update-diff-legacy-notice i,.update-diff-empty-state i { flex:none; margin-top:2px; color:#c9ae87; }
+  .update-modal .project-update-diff-summary { margin-top:2px; }
+  .update-modal .project-update-diff-section { padding-top:16px; border-top:1px solid rgba(255,255,255,.07); }
   .update-diff-group { display:flex; flex-direction:column; gap:16px; }
-  .update-modal-actions { display:flex; justify-content:flex-end; gap:12px; padding-top:8px; }
+  .update-modal-actions { position:sticky; bottom:0; z-index:2; display:flex; justify-content:flex-end; gap:12px; margin-top:2px; padding:14px 0 calc(2px + env(safe-area-inset-bottom)); border-top:1px solid rgba(255,255,255,.075); background:#18191c; }
   .update-modal-actions .btn-outline { border-color:rgba(255,255,255,.09); background:rgba(255,255,255,.035); color:#aaa8a3; }
   .update-modal-actions .btn-outline:hover { border-color:rgba(190,164,125,.22); background:rgba(190,164,125,.06); color:#d4c2a6; }
   .update-modal-actions .btn-primary { border:1px solid #bca47f; background:#aa916d; color:#151619; box-shadow:none; }
@@ -818,6 +832,19 @@ button.detail-stat:disabled { cursor:not-allowed; opacity:.55; }
   .update-modal .detail-keywords-block { border-color:rgba(190,164,125,.16); background:rgba(190,164,125,.045); }
   .update-modal .detail-keywords-title { color:#b9a180; }
   .update-modal .keyword-chip { border-color:rgba(190,164,125,.28); background:rgba(190,164,125,.07); color:#d5c2a5; }
+  @media (max-width:640px) {
+    .project-update-modal { padding:0; }
+    .project-update-modal .modal-content { width:100%; max-width:none; height:100dvh; max-height:100dvh; border:0; border-radius:0; box-shadow:none; }
+    .project-update-modal .modal-body { padding:14px calc(14px + env(safe-area-inset-right)) 0 calc(14px + env(safe-area-inset-left)); }
+    .update-project-head { align-items:flex-start; flex-direction:column; gap:10px; padding-top:2px; }
+    .update-project-version { width:100%; }
+    .update-project-version code { flex:1; min-width:0; text-align:center; }
+    .update-modal .admin-review-diff-entry > summary { grid-template-columns:auto minmax(0,1fr); }
+    .update-modal .admin-review-diff-fields { grid-column:2; text-align:left; white-space:normal; }
+    .update-modal .admin-review-diff-code { font-size:.7rem; }
+    .update-modal-actions { margin:0 calc(-14px - env(safe-area-inset-right)) 0 calc(-14px - env(safe-area-inset-left)); padding:12px calc(14px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); }
+    .update-modal-actions .btn { flex:1; min-width:0; justify-content:center; }
+  }
   .install-worldbook-form { display:flex; flex-direction:column; gap:18px; }
   .install-target-switch { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:hidden; border:1px solid rgba(255,255,255,.085); border-radius:10px; background:#151619; }
   .install-target-option { min-height:48px; justify-content:center; gap:8px; border:0; border-radius:0; background:transparent; color:#999792; box-shadow:none; }

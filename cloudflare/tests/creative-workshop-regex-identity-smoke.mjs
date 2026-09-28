@@ -313,6 +313,23 @@ assert.equal(diffResult.diff.added.regexEntries.length, 0);
 assert.equal(diffResult.diff.removed.regexEntries.length, 0);
 assert.equal(diffResult.diff.modified.regexEntries.length, 0, 'record recovery must keep diff stable even after the script registry is lost');
 
+currentDetail = {
+  ...currentDetail,
+  project: { ...currentDetail.project, version: '1.2.0' },
+  regexEntriesPreview: [
+    { id: 'abc', scriptName: 'R', findRegex: 'foo', replaceString: 'newer' },
+  ],
+};
+const changedDiffResult = await diffApi.getCreativeWorkshopProjectDiff(projectId, '1.2.0');
+assert.equal(changedDiffResult.diff.modified.regexEntries.length, 1);
+assert.equal(changedDiffResult.diff.reviewDiff.summary.changed, 1);
+assert.equal(changedDiffResult.diff.reviewDiff.regex.length, 1);
+assert.equal(changedDiffResult.diff.reviewDiff.regex[0].status, 'modified');
+assert.equal(changedDiffResult.diff.reviewDiff.regex[0].previous.replaceString, 'new');
+assert.equal(changedDiffResult.diff.reviewDiff.regex[0].current.replaceString, 'newer');
+assert.match(changedDiffResult.diff.reviewDiff.regex[0].previousReviewText, /replaceString: new/);
+assert.match(changedDiffResult.diff.reviewDiff.regex[0].currentReviewText, /replaceString: newer/);
+
 await regexApi.uninstallCreativeWorkshopRegex(projectId);
 assert.equal(localRegexes.length, 0, 'record recovery must allow safe uninstall after the script registry is lost');
 

@@ -18,7 +18,33 @@ import {
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
-const DIFF_IDENTITY_VERSION = 4;
+const DIFF_IDENTITY_VERSION = 5;
+
+type CreativeWorkshopDiffStatus = 'added' | 'modified' | 'deleted';
+
+type CreativeWorkshopDiffChange = {
+  status: CreativeWorkshopDiffStatus;
+  entryKey: string;
+  changedFields: string[];
+  current?: Record<string, any>;
+  previous?: Record<string, any>;
+  currentReviewText?: string;
+  previousReviewText?: string;
+};
+
+type CreativeWorkshopReviewDiff = {
+  mode: 'update';
+  summary: {
+    added: number;
+    modified: number;
+    deleted: number;
+    unchanged: 0;
+    changed: number;
+    total: number;
+  };
+  worldbook: CreativeWorkshopDiffChange[];
+  regex: CreativeWorkshopDiffChange[];
+};
 
 type CreativeWorkshopDiffCache = Record<
   string,
@@ -32,6 +58,7 @@ type CreativeWorkshopDiffCache = Record<
         added: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
         modified: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
         removed: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
+        reviewDiff: CreativeWorkshopReviewDiff;
       };
     };
   }
@@ -91,6 +118,31 @@ function normalizeRemoteEntry(
   };
 }
 
+function formatDiffEntryForReview(entry: Record<string, any>): string {
+  return Object.keys(entry)
+    .filter(key => key !== 'entryKey' && key !== 'id')
+    .sort()
+    .flatMap(key => {
+      const value = entry[key];
+      if (typeof value === 'string' && value.includes('\n')) {
+        return [`${key}:`, ...value.split('\n').map(line => `  ${line}`)];
+      }
+      if (typeof value === 'string') return [`${key}: ${value}`];
+      if (value === undefined || value === null || typeof value === 'number' || typeof value === 'boolean') {
+        return [`${key}: ${String(value)}`];
+      }
+      return [`${key}: ${JSON.stringify(value)}`];
+    })
+    .join('\n');
+}
+
+function getChangedDiffFields(previous: Record<string, any>, current: Record<string, any>): string[] {
+  return Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]))
+    .filter(key => key !== 'entryKey' && key !== 'id')
+    .filter(key => JSON.stringify(previous[key]) !== JSON.stringify(current[key]))
+    .sort();
+}
+
 function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: T[], keyGetter: (item: T) => string) {
   const localMap = new Map(localItems.map(item => [keyGetter(item), item]));
   const remoteMap = new Map(remoteItems.map(item => [keyGetter(item), item]));
@@ -102,7 +154,37 @@ function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: 
     return localMap.has(key) && JSON.stringify(localMap.get(key)) !== JSON.stringify(item);
   });
 
-  return { added, removed, modified };
+  const changes: CreativeWorkshopDiffChange[] = [
+    ...added.map(item => ({
+      status: 'added' as const,
+      entryKey: keyGetter(item),
+      changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+      current: item,
+      currentReviewText: formatDiffEntryForReview(item),
+    })),
+    ...modified.map(item => {
+      const entryKey = keyGetter(item);
+      const previous = localMap.get(entryKey)!;
+      return {
+        status: 'modified' as const,
+        entryKey,
+        changedFields: getChangedDiffFields(previous, item),
+        current: item,
+        previous,
+        currentReviewText: formatDiffEntryForReview(item),
+        previousReviewText: formatDiffEntryForReview(previous),
+      };
+    }),
+    ...removed.map(item => ({
+      status: 'deleted' as const,
+      entryKey: keyGetter(item),
+      changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+      previous: item,
+      previousReviewText: formatDiffEntryForReview(item),
+    })),
+  ];
+
+  return { added, removed, modified, changes };
 }
 
 export async function getCreativeWorkshopProjectDiff(
@@ -185,6 +267,12 @@ export async function getCreativeWorkshopProjectDiff(
 
   const entryDiff = diffByKey(localEntries, remoteEntries, item => item.entryKey);
   const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.id);
+  const reviewSummary = {
+    added: entryDiff.added.length + regexDiff.added.length,
+    modified: entryDiff.modified.length + regexDiff.modified.length,
+    deleted: entryDiff.removed.length + regexDiff.removed.length,
+  };
+  const changedCount = reviewSummary.added + reviewSummary.modified + reviewSummary.deleted;
 
   const result = {
     projectId,
@@ -200,6 +288,17 @@ export async function getCreativeWorkshopProjectDiff(
       removed: {
         worldbookEntries: entryDiff.removed,
         regexEntries: regexDiff.removed,
+      },
+      reviewDiff: {
+        mode: 'update' as const,
+        summary: {
+          ...reviewSummary,
+          unchanged: 0 as const,
+          changed: changedCount,
+          total: changedCount,
+        },
+        worldbook: entryDiff.changes,
+        regex: regexDiff.changes,
       },
     },
   };

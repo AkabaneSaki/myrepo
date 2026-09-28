@@ -118,6 +118,33 @@ assert.doesNotMatch(codeFenceSafetyHtml, /<script/i, 'fenced code must not becom
 assert.match(codeFenceSafetyHtml, /&lt;script&gt;/);
 assert.deepEqual(safeMarkdownUi.collectExternalHttpUrlsFromText('坏链接 https:// 后续文字'), [], 'malformed URLs must terminate scanning without hanging');
 
+const projectUpdateDiffUi = Function(
+  'escapeHtml',
+  'renderWorldbookEntryBehaviorMeta',
+  `${fragments.homeReviewDiffRenderScript}; return { renderProjectUpdateDiffSummary, renderProjectUpdateDiffSection };`,
+)(safeLinkUtils.escapeHtml, () => '');
+const projectUpdateDiffHtml = projectUpdateDiffUi.renderProjectUpdateDiffSection(
+  '正则变化',
+  'fa-code',
+  [{
+    status: 'modified',
+    entryKey: 'regex:test',
+    changedFields: ['replaceString'],
+    previous: { scriptName: 'Test Regex', replaceString: 'old value' },
+    current: { scriptName: 'Test Regex', replaceString: 'new value' },
+    previousReviewText: 'scriptName: Test Regex\nreplaceString: old value',
+    currentReviewText: 'scriptName: Test Regex\nreplaceString: new value',
+  }],
+  'regex',
+);
+assert.match(projectUpdateDiffHtml, /admin-review-diff-line--del/);
+assert.match(projectUpdateDiffHtml, /admin-review-diff-line--add/);
+assert.match(projectUpdateDiffHtml, /old value/);
+assert.match(projectUpdateDiffHtml, /new value/);
+const projectUpdateSummaryHtml = projectUpdateDiffUi.renderProjectUpdateDiffSummary({ summary: { changed: 1, added: 0, modified: 1, deleted: 0 } });
+assert.match(projectUpdateSummaryHtml, /1<\/strong> 处内容变化/);
+assert.doesNotMatch(projectUpdateSummaryHtml, /需要审核|未修改/);
+
 const uploadPreviewUi = Function(
   'validateJsonUpload',
   'assertUploadSize',
@@ -232,6 +259,14 @@ assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterRefe
 assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences, project\)/);
 assert.match(fragments.homeModalsScript, /if \(hasNewFile \|\| hasNewRegex\) \{/);
 assert.match(fragments.homeModalsScript, /showToast\(updateResult\.draftProjectId \?/);
+assert.doesNotMatch(
+  fragments.homeModalsScript,
+  /renderProjectDetail\(project, \[\], \[\]\)/,
+  'player update modal must not embed the full project detail UI',
+);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSummary\(reviewDiff\)/);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSection\("世界书变化"/);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSection\("正则变化"/);
 assert.match(fragments.homePublishCheckScript, /发布前检查/);
 assert.match(fragments.homePublishCheckScript, /parseOriginalBaselineItem/);
 assert.match(fragments.homePublishCheckScript, /tags\[0\] !== '本体'/);
