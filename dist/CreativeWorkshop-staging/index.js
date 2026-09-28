@@ -63,6 +63,7 @@ const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev3";
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_END = '\npoem-workshop-meta:v1-end %>';
+const CREATIVE_WORKSHOP_WORLD_BOOK_META_SEPARATOR_FIELD = 'cw_owned_content_separator';
 const CREATIVE_WORKSHOP_REGEX_ID_PREFIX = 'creative_workshop:';
 const CREATIVE_WORKSHOP_REGEX_RECORD_PAYLOAD_PREFIX = 'poem-workshop-regex-meta:v1\n';
 function asRecord(value) {
@@ -77,8 +78,11 @@ function meaningfulMetadataValue(value) {
         return value;
     return value === null ? null : value;
 }
-function safeMetadataJson(metadata) {
-    return JSON.stringify(metadata)
+function safeMetadataJson(metadata, ownedContentSeparator = '') {
+    const payload = ownedContentSeparator
+        ? { ...metadata, [CREATIVE_WORKSHOP_WORLD_BOOK_META_SEPARATOR_FIELD]: ownedContentSeparator }
+        : metadata;
+    return JSON.stringify(payload)
         .replace(/%/g, '\\u0025')
         .replace(/</g, '\\u003c')
         .replace(/>/g, '\\u003e');
@@ -105,18 +109,34 @@ function parseCreativeWorkshopWorldbookMetadata(raw) {
         if (typeof parsed.cw_name_format_version !== 'string' &&
             !(typeof parsed.cw_name_format_version === 'number' && Number.isFinite(parsed.cw_name_format_version)))
             return null;
+        const ownedContentSeparator = parsed[CREATIVE_WORKSHOP_WORLD_BOOK_META_SEPARATOR_FIELD];
+        if (ownedContentSeparator !== undefined &&
+            (typeof ownedContentSeparator !== 'string' || !/^(?:\r?\n){1,2}$/.test(ownedContentSeparator)))
+            return null;
         return {
-            cw_project_id: parsed.cw_project_id,
-            cw_project_name_display: parsed.cw_project_name_display,
-            cw_project_version: parsed.cw_project_version ?? null,
-            ...(parsed.cw_remote_version !== undefined ? { cw_remote_version: parsed.cw_remote_version ?? null } : {}),
-            cw_entry_key: parsed.cw_entry_key,
-            cw_name_format_version: parsed.cw_name_format_version,
+            metadata: {
+                cw_project_id: parsed.cw_project_id,
+                cw_project_name_display: parsed.cw_project_name_display,
+                cw_project_version: parsed.cw_project_version ?? null,
+                ...(parsed.cw_remote_version !== undefined ? { cw_remote_version: parsed.cw_remote_version ?? null } : {}),
+                cw_entry_key: parsed.cw_entry_key,
+                cw_name_format_version: parsed.cw_name_format_version,
+            },
+            ownedContentSeparator: ownedContentSeparator || '',
         };
     }
     catch {
         return null;
     }
+}
+function getWorldbookMetadataContentSeparator(content) {
+    if (!content || content.startsWith('\n\n') || content.startsWith('\r\n\r\n'))
+        return '';
+    if (content.startsWith('\r\n'))
+        return '\r\n';
+    if (content.startsWith('\n'))
+        return '\n';
+    return '\n\n';
 }
 function getWorldbookMetadataIdentity(metadata) {
     return JSON.stringify([metadata.cw_project_id, metadata.cw_entry_key]);
@@ -143,15 +163,24 @@ function scanCreativeWorkshopWorldbookMetadata(content) {
             continue;
         }
         recognizedEndStarts.add(endMarkerStart);
-        const metadata = parseCreativeWorkshopWorldbookMetadata(content.slice(payloadStart, endMarkerStart));
-        const end = endMarkerStart + CREATIVE_WORKSHOP_WORLD_BOOK_META_END.length;
-        if (metadata) {
+        const parsed = parseCreativeWorkshopWorldbookMetadata(content.slice(payloadStart, endMarkerStart));
+        const markerEnd = endMarkerStart + CREATIVE_WORKSHOP_WORLD_BOOK_META_END.length;
+        if (parsed) {
+            const { metadata, ownedContentSeparator } = parsed;
+            if (ownedContentSeparator &&
+                content.slice(markerEnd, markerEnd + ownedContentSeparator.length) !== ownedContentSeparator) {
+                malformed = true;
+                cursor = markerEnd;
+                continue;
+            }
+            const end = markerEnd + ownedContentSeparator.length;
             blocks.push({ start, end, metadata });
+            cursor = end;
         }
         else {
             malformed = true;
+            cursor = markerEnd;
         }
-        cursor = end;
     }
     let endCursor = 0;
     while (endCursor < content.length) {
@@ -164,8 +193,8 @@ function scanCreativeWorkshopWorldbookMetadata(content) {
     }
     return { blocks, malformed };
 }
-function buildCreativeWorkshopWorldbookMetadataBlock(metadata) {
-    return `${CREATIVE_WORKSHOP_WORLD_BOOK_META_START}${safeMetadataJson(metadata)}${CREATIVE_WORKSHOP_WORLD_BOOK_META_END}`;
+function buildCreativeWorkshopWorldbookMetadataBlock(metadata, ownedContentSeparator = '') {
+    return `${CREATIVE_WORKSHOP_WORLD_BOOK_META_START}${safeMetadataJson(metadata, ownedContentSeparator)}${CREATIVE_WORKSHOP_WORLD_BOOK_META_END}${ownedContentSeparator}`;
 }
 function stripCreativeWorkshopWorldbookMetadata(content) {
     if (typeof content !== 'string' || !content)
@@ -188,9 +217,10 @@ function injectCreativeWorkshopWorldbookMetadata(originalContent, metadata) {
     if (scan.malformed) {
         throw new Error('世界书内容中的工坊身份标记损坏或不完整');
     }
-    const block = buildCreativeWorkshopWorldbookMetadataBlock(metadata);
-    if (scan.blocks.length === 0)
-        return block + content;
+    if (scan.blocks.length === 0) {
+        const separator = getWorldbookMetadataContentSeparator(content);
+        return buildCreativeWorkshopWorldbookMetadataBlock(metadata, separator) + content;
+    }
     const identities = new Set(scan.blocks.map(item => getWorldbookMetadataIdentity(item.metadata)));
     if (identities.size > 1) {
         throw new Error('世界书内容中存在互相冲突的工坊身份标记');
@@ -199,8 +229,10 @@ function injectCreativeWorkshopWorldbookMetadata(originalContent, metadata) {
     let cursor = 0;
     scan.blocks.forEach((existing, index) => {
         output += content.slice(cursor, existing.start);
-        if (index === 0)
-            output += block;
+        if (index === 0) {
+            const separator = getWorldbookMetadataContentSeparator(content.slice(existing.end));
+            output += buildCreativeWorkshopWorldbookMetadataBlock(metadata, separator);
+        }
         cursor = existing.end;
     });
     output += content.slice(cursor);
