@@ -139,9 +139,10 @@ export async function installProjectCatalogFixture(page, { projects = createFixt
 
 export async function installDailyRandomFixture(
   page,
-  { projectId = 'fixture-project-001', limit = 10, initialCount = 0 } = {},
+  { projectId = 'fixture-project-001', limit = 10, initialCount = 0, responseDelayMs = 0 } = {},
 ) {
   let count = Math.max(0, Number(initialCount || 0));
+  let requestCount = 0;
   const normalizedLimit = Math.max(1, Number(limit || 10));
   const payload = () => ({
     count,
@@ -161,6 +162,10 @@ export async function installDailyRandomFixture(
 
   await page.route('**/api/projects/random-draw', async route => {
     if (route.request().method() !== 'POST') return route.continue();
+    requestCount += 1;
+    if (responseDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, responseDelayMs));
+    }
     count = Math.min(normalizedLimit, count + 1);
     await route.fulfill({
       status: 200,
@@ -171,4 +176,9 @@ export async function installDailyRandomFixture(
       }),
     });
   });
+
+  return {
+    getCount: () => count,
+    getRequestCount: () => requestCount,
+  };
 }

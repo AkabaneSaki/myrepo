@@ -260,6 +260,22 @@ export class DiscoverActions {
     return overlay;
   }
 
+  async drawRandomProjectRapidDoubleClick() {
+    this.diagnostics?.markStep('daily random draw rapid double click');
+    const button = this.root.locator('#dailyRandomDrawBtn:visible').first();
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+    await button.evaluate(element => {
+      element.click();
+      element.click();
+    });
+
+    const overlay = this.root.locator('.modal-overlay.daily-random-detail-modal').last();
+    await expect(overlay).toBeVisible({ timeout: 15_000 });
+    await expect(overlay.locator('.detail-project-name')).not.toHaveText('');
+    return overlay;
+  }
+
   async continueRandomDraw(overlay) {
     this.diagnostics?.markStep('continue daily random draw');
     const next = overlay.locator('[data-daily-random-next]:visible').first();
@@ -274,7 +290,10 @@ export class DiscoverActions {
 
   async backFromRandomDraw(overlay) {
     this.diagnostics?.markStep('back from daily random draw');
-    const back = overlay.locator('[data-daily-random-back]:visible').first();
+    let back = overlay.locator('[data-daily-random-back]:visible').first();
+    if (!(await back.count())) {
+      back = overlay.locator('[data-mobile-detail-back]:visible').first();
+    }
     await expect(back).toBeVisible();
     await back.click();
     await expect(overlay).toHaveCount(0);

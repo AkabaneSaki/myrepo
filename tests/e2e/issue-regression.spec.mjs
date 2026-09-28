@@ -118,31 +118,40 @@ test('#39 browser search, category and official-tag filters keep deterministic r
   diagnostics.assertHealthy();
 });
 
-test('#47 deterministic daily draw opens a public detail and supports continue/back', async ({
-  page,
-  session,
-  discover,
-  diagnostics,
-}) => {
-  const projects = createFixtureProjects(110);
-  await installProjectCatalogFixture(page, { projects });
-  await installDailyRandomFixture(page, {
-    projectId: 'fixture-project-001',
-    initialCount: 0,
-    limit: 10,
+for (const viewportName of ['desktop', 'mobile']) {
+  test.describe(`#47 daily random draw [${viewportName}]`, () => {
+    test.use({ profileName: 'authenticated-player', viewportName });
+
+    test('opens a public detail, blocks rapid duplicate requests and supports continue/back', async ({
+      page,
+      session,
+      discover,
+      diagnostics,
+    }) => {
+      const projects = createFixtureProjects(110);
+      await installProjectCatalogFixture(page, { projects });
+      const randomFixture = await installDailyRandomFixture(page, {
+        projectId: 'fixture-project-001',
+        initialCount: 0,
+        limit: 10,
+        responseDelayMs: 200,
+      });
+
+      await session.open();
+      await discover.openDiscover();
+
+      let overlay = await discover.drawRandomProjectRapidDoubleClick();
+      await expect(overlay.locator('.detail-project-name')).toHaveText('Fixture Project 001');
+      expect(randomFixture.getRequestCount(), 'rapid double click must create only one draw request').toBe(1);
+
+      overlay = await discover.continueRandomDraw(overlay);
+      await expect(overlay.locator('.detail-project-name')).toHaveText('Fixture Project 001');
+      expect(randomFixture.getRequestCount()).toBe(2);
+
+      await discover.backFromRandomDraw(overlay);
+      await expect(session.frame.locator('.discover-home')).toBeVisible();
+
+      diagnostics.assertHealthy();
+    });
   });
-
-  await session.open();
-  await discover.openDiscover();
-
-  let overlay = await discover.drawRandomProject();
-  await expect(overlay.locator('.detail-project-name')).toHaveText('Fixture Project 001');
-
-  overlay = await discover.continueRandomDraw(overlay);
-  await expect(overlay.locator('.detail-project-name')).toHaveText('Fixture Project 001');
-
-  await discover.backFromRandomDraw(overlay);
-  await expect(session.frame.locator('.discover-home')).toBeVisible();
-
-  diagnostics.assertHealthy();
-});
+}

@@ -3,7 +3,7 @@ import { WorkshopSession } from '../actions/workshop-session.mjs';
 import { DiscoverActions } from '../actions/discover.mjs';
 import { ProjectActions } from '../actions/project.mjs';
 import { UpdateCenterActions } from '../actions/update-center.mjs';
-import { getStProfileDefinition, getStProfilePath, getWorkshopViewport } from '../support/profiles.mjs';
+import { createStProfileRun, getWorkshopViewport } from '../support/profiles.mjs';
 import { JourneyDiagnostics } from '../support/diagnostics.mjs';
 
 export const test = base.extend({
@@ -11,18 +11,21 @@ export const test = base.extend({
   viewportName: ['desktop', { option: true }],
 
   context: async ({ profileName, viewportName }, use) => {
-    const profile = getStProfileDefinition(profileName);
-    const context = await chromium.launchPersistentContext(getStProfilePath(profileName), {
-      channel: 'msedge',
-      headless: process.env.ST_TEST_HEADED !== '1',
-      viewport: getWorkshopViewport(viewportName),
-    });
+    const runProfile = createStProfileRun(profileName);
+    let context = null;
 
-    await use(context);
-    await context.close();
+    try {
+      context = await chromium.launchPersistentContext(runProfile.path, {
+        channel: 'msedge',
+        headless: process.env.ST_TEST_HEADED !== '1',
+        viewport: getWorkshopViewport(viewportName),
+      });
 
-    // Resolve before launching so a typo never silently creates an unintended profile.
-    void profile;
+      await use(context);
+    } finally {
+      await context?.close().catch(() => {});
+      await runProfile.cleanup();
+    }
   },
 
   page: async ({ context }, use) => {

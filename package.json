@@ -16,6 +16,7 @@
     "test:st": "playwright test tests/e2e/st-control.spec.mjs --config playwright.config.mjs --project st-edge --retries=0 --reporter=line",
     "test:issues:core": "playwright test tests/e2e/issue-regression.spec.mjs --config playwright.config.mjs --project st-edge --retries=0 --reporter=line",
     "test:issue39": "playwright test tests/e2e/issue-regression.spec.mjs --config playwright.config.mjs --project st-edge --grep 39 --retries=0 --reporter=line",
+    "test:issue47": "playwright test tests/e2e/issue-regression.spec.mjs --config playwright.config.mjs --project st-edge --grep 47 --retries=0 --reporter=line",
     "test:auth": "playwright test tests/e2e/auth-regression.spec.mjs --config playwright.config.mjs --project st-edge --retries=0 --reporter=line",
     "test:auth-gate": "playwright test tests/e2e/auth-regression.spec.mjs --config playwright.config.mjs --project st-edge --grep 44 --retries=0 --reporter=line",
     "test:update-center": "playwright test tests/e2e/auth-regression.spec.mjs --config playwright.config.mjs --project st-edge --grep 45 --retries=0 --reporter=line",

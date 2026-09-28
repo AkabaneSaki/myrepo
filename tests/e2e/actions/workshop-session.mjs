@@ -3,6 +3,14 @@ import { getStProfileDefinition, getWorkshopViewport } from '../support/profiles
 
 const ST_BASE_URL = process.env.ST_BASE_URL || 'http://127.0.0.1:8000/';
 const SAFE_STARTUP_DISMISSALS = ['我知道了', '暂不安装'];
+const CHAT_INTEGRITY_ERROR = 'SillyTavern chat-integrity warning blocks Workshop startup; stop the test before any chat overwrite.';
+
+function chatIntegrityDialog(page) {
+  return page
+    .locator('dialog[open]')
+    .filter({ hasText: 'Chat integrity check failed while saving the file.' })
+    .last();
+}
 
 async function dismissKnownStartupNotices(page) {
   let dismissed = false;
@@ -13,6 +21,9 @@ async function dismissKnownStartupNotices(page) {
     await page.waitForTimeout(250);
     dismissed = true;
   }
+
+  if (await chatIntegrityDialog(page).isVisible().catch(() => false)) throw new Error(CHAT_INTEGRITY_ERROR);
+
   return dismissed;
 }
 
@@ -42,36 +53,55 @@ export class WorkshopSession {
 
     this.diagnostics?.markStep('wait for Workshop entry');
     const entry = this.page.getByRole('button', { name: '命定创意工坊' });
-    await entry.waitFor({ state: 'visible', timeout: 45_000 });
+    await Promise.race([
+      entry.waitFor({ state: 'visible', timeout: 45_000 }),
+      chatIntegrityDialog(this.page).waitFor({ state: 'visible', timeout: 45_000 }).then(() => {
+        throw new Error(CHAT_INTEGRITY_ERROR);
+      }),
+    ]);
 
     await dismissKnownStartupNotices(this.page);
 
     this.diagnostics?.markStep('open Workshop');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        await entry.click({ timeout: 8_000 });
+        await entry.click({ timeout: 8_000, force: true });
         break;
       } catch (error) {
+        const openedFrame = await this.#findWorkshopFrame();
+        if (openedFrame) {
+          this.frame = openedFrame;
+          break;
+        }
         const dismissed = await dismissKnownStartupNotices(this.page);
         if (!dismissed || attempt === 2) throw error;
       }
     }
 
-    this.frame = await this.#waitForWorkshopFrame();
+    this.frame ||= await this.#waitForWorkshopFrame();
     await this.#assertProfileState();
 
     this.diagnostics?.registerStateProvider(() => this.snapshotState());
     return this;
   }
 
+  async #findWorkshopFrame() {
+    for (const frame of this.page.frames()) {
+      if (frame === this.page.mainFrame()) continue;
+      if (await frame.locator('.discover-home').isVisible().catch(() => false)) {
+        return frame;
+      }
+    }
+    return null;
+  }
+
   async #waitForWorkshopFrame() {
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      for (const frame of this.page.frames()) {
-        if (frame === this.page.mainFrame()) continue;
-        if (await frame.locator('.discover-home').isVisible().catch(() => false)) {
-          return frame;
-        }
+      if (await chatIntegrityDialog(this.page).isVisible().catch(() => false)) {
+        throw new Error(CHAT_INTEGRITY_ERROR);
       }
+      const frame = await this.#findWorkshopFrame();
+      if (frame) return frame;
 
       const legalNotice = this.page.getByRole('heading', { name: /免责声明/ });
       if (await legalNotice.isVisible().catch(() => false)) {

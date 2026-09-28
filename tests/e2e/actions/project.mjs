@@ -56,42 +56,24 @@ export class ProjectActions {
     return button;
   }
 
-  async stubLoginPopup() {
-    await this.root.evaluate(() => {
-      window.__workshopTestLoginPopupOpened = false;
-      openLoginPopup = () => {
-        window.__workshopTestLoginPopupOpened = true;
-      };
-    });
-  }
-
-  async assertAnonymousDownloadGate(actionLabel) {
-    this.diagnostics?.markStep(`anonymous gate: ${actionLabel}`);
-    await this.stubLoginPopup();
-    const allowed = await this.root.evaluate(label => requireDiscordLoginForDownload(label), actionLabel);
-    expect(allowed).toBe(false);
-    expect(
-      await this.root.evaluate(() => Boolean(window.__workshopTestLoginPopupOpened)),
-      'anonymous gate should enter the existing Discord login flow',
-    ).toBe(true);
-  }
-
-  async assertAuthenticatedDownloadGate(actionLabel) {
-    this.diagnostics?.markStep(`authenticated gate: ${actionLabel}`);
-    const allowed = await this.root.evaluate(label => requireDiscordLoginForDownload(label), actionLabel);
-    expect(allowed).toBe(true);
-  }
-
-  async assertAnonymousInstallGate(projectId) {
+  async clickInstallEntry(projectId) {
+    this.diagnostics?.markStep(`click install entry: ${projectId}`);
     const button = await this.installEntry(projectId);
-    await expect(button).toContainText('登录后安装');
-    await this.assertAnonymousDownloadGate('安装 DLC');
+    await button.click();
   }
 
   async assertAuthenticatedInstallCanContinue(projectId) {
     const button = await this.installEntry(projectId);
+    await expect(button).toContainText('安装');
+    await expect(button).not.toContainText('卸载');
     await expect(button).not.toContainText('登录后安装');
     await expect(button).not.toBeDisabled();
+  }
+
+  async clickUpdateEntry(projectId) {
+    this.diagnostics?.markStep(`click update entry: ${projectId}`);
+    const button = await this.updateEntry(projectId);
+    await button.click();
   }
 
   async openRepairEntry() {
@@ -100,5 +82,12 @@ export class ProjectActions {
     const modal = this.root.locator('.modal-overlay').last();
     await expect(modal).toBeVisible();
     return modal;
+  }
+
+  async clickPendingRepair(modal, repairId) {
+    this.diagnostics?.markStep(`click pending repair: ${repairId}`);
+    const button = modal.locator(`[data-repair-retry="${escapeAttr(repairId)}"]`);
+    await expect(button).toBeVisible();
+    await button.click();
   }
 }

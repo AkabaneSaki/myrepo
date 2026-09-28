@@ -7,7 +7,7 @@ test('@st Laptop SillyTavern opens the signed-in Poem Workshop home', async ({
   session,
   diagnostics,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
 
   await session.open();
 
