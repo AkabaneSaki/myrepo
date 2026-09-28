@@ -203,7 +203,7 @@ assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_STABLE_CLIENT_VERSION =
 assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_MINIMUM_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.minimum/);
 assert.match(workshopConfig.client.stable, /^\d+\.\d+\.\d+$/);
 assert.match(workshopConfig.client.minimum, /^\d+\.\d+\.\d+$/);
-assert.match(workshopConfig.client.staging, /^\d+\.\d+\.\d+-dev$/);
+assert.match(workshopConfig.client.staging, /^\d+\.\d+\.\d+-dev\d+$/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT/);
 assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
