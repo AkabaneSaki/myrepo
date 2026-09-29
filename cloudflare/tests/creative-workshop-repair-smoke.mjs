@@ -298,6 +298,32 @@ officialBaseline.entries = [
 }
 
 
+
+{
+  const projectId = '11111111-2222-4333-8444-555555555555';
+  const entry = {
+    uid: 201,
+    name: '[WS][DLC][事件]身份块缺失测试',
+    comment: '[WS][DLC][事件]身份块缺失测试',
+    content: '正文仍然存在，但 Workshop 身份 EJS block 被删除',
+    extra: {
+      cw_project_id: projectId,
+      cw_project_name_display: '身份块缺失测试',
+      cw_project_version: '1.2.3',
+      cw_entry_key: `${projectId}:entry-a`,
+      cw_name_format_version: '4',
+    },
+  };
+  const harness = createHarness({ worldbooks: { DLC: [entry] } });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(report.candidates.length, 1, 'extra metadata must not hide a missing embedded Workshop identity block');
+  const candidate = report.candidates[0];
+  assert.equal(candidate.detectedProjectId, projectId);
+  assert.equal(candidate.missingIdentityBlockCount, 1);
+  assert.equal(candidate.malformedIdentityBlockCount, 0);
+  assert.ok(candidate.problems.some(problem => problem.includes('缺少 Workshop 身份块')));
+}
+
 {
   const orphanSentinel = {
     name: '[工坊精灵]我是好人请不要打开我也不要刪掉我喵',

@@ -261,6 +261,19 @@ export function readCreativeWorkshopWorldbookMetadata(
   return scan.blocks[0].metadata;
 }
 
+export type CreativeWorkshopWorldbookMetadataBlockStatus = 'healthy' | 'missing' | 'malformed';
+
+export function getCreativeWorkshopWorldbookMetadataBlockStatus(
+  content: string,
+): CreativeWorkshopWorldbookMetadataBlockStatus {
+  if (typeof content !== 'string' || !content) return 'missing';
+  const scan = scanCreativeWorkshopWorldbookMetadata(content);
+  if (scan.malformed) return 'malformed';
+  if (scan.blocks.length === 0) return 'missing';
+  const identities = new Set(scan.blocks.map(item => getWorldbookMetadataIdentity(item.metadata)));
+  return identities.size === 1 ? 'healthy' : 'malformed';
+}
+
 export function getCreativeWorkshopWorldbookMetadataValue(
   entry: WorldbookEntry | Record<string, any>,
   field: string,

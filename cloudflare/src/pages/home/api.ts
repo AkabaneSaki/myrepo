@@ -482,20 +482,25 @@ async function searchWorkshopProjectsByName(query) {
   return { projects, exactNameMatches };
 }
 
-async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
-  if (manualQuery) {
-    const { projects, exactNameMatches } = await searchWorkshopProjectsByName(manualQuery);
-    if (exactNameMatches.length === 1) {
-      return { status: 'unique', method: 'manual_exact_name', projects: exactNameMatches };
-    }
-    if (exactNameMatches.length > 1) {
-      return { status: 'ambiguous', method: 'manual_exact_name', projects: exactNameMatches };
-    }
-    if (projects.length > 0) {
-      return { status: 'candidates', method: 'manual_search', projects };
-    }
-    return { status: 'none', method: 'manual_search', projects: [] };
+async function searchWorkshopProjectsForRepair(query, methodPrefix = 'auto_search') {
+  const { projects, exactNameMatches } = await searchWorkshopProjectsByName(query);
+  if (exactNameMatches.length === 1) {
+    return { status: 'unique', method: methodPrefix + '_exact_name', projects: exactNameMatches };
   }
+  if (exactNameMatches.length > 1) {
+    return { status: 'ambiguous', method: methodPrefix + '_exact_name', projects: exactNameMatches };
+  }
+  if (projects.length === 1) {
+    return { status: 'unique', method: methodPrefix + '_single_result', projects };
+  }
+  if (projects.length > 1) {
+    return { status: 'candidates', method: methodPrefix, projects };
+  }
+  return { status: 'none', method: methodPrefix, projects: [] };
+}
+
+async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
+  if (manualQuery) return searchWorkshopProjectsForRepair(manualQuery, 'manual_search');
 
   const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
   const projectId = detectedProjectId && isWorkshopUuid(detectedProjectId) ? detectedProjectId : '';
@@ -507,7 +512,10 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
     projectId,
     name,
   }]);
-  return result || { status: 'none', method: 'exact_name', projects: [] };
+  if (result?.status !== 'none' || !name) {
+    return result || { status: 'none', method: 'exact_name', projects: [] };
+  }
+  return searchWorkshopProjectsForRepair(name, 'auto_search');
 }
 
 async function fetchInstalledProjectDetails() {

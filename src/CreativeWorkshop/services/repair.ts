@@ -18,6 +18,7 @@ import {
 
 } from './regex-name';
 import {
+  getCreativeWorkshopWorldbookMetadataBlockStatus,
   getCreativeWorkshopWorldbookMetadataString,
   type CreativeWorkshopRegexIdentity,
   injectCreativeWorkshopWorldbookMetadata,
@@ -94,6 +95,8 @@ export type CreativeWorkshopRepairCandidate = {
   metadata: CreativeWorkshopRepairMetadataFieldReport[];
   missingEntryKeys: string[];
   registryBacked: boolean;
+  missingIdentityBlockCount: number;
+  malformedIdentityBlockCount: number;
   problems: string[];
 };
 
@@ -547,6 +550,8 @@ function describeCandidateProblems(candidate: Omit<CreativeWorkshopRepairCandida
   if (candidate.unaddressableEntryCount > 0) problems.push(`${candidate.unaddressableEntryCount} 个条目没有本地 UID，自动删除不安全`);
   if (candidate.dlcHeaderCount === 0) problems.push('没有发现 [DLC] 命名头，仅依赖旧 metadata 识别');
   if (candidate.workshopSourceMarkerCount === 0) problems.push('没有发现 [WS] 工坊来源标记');
+  if (candidate.missingIdentityBlockCount > 0) problems.push(`${candidate.missingIdentityBlockCount} 个条目缺少 Workshop 身份块`);
+  if (candidate.malformedIdentityBlockCount > 0) problems.push(`${candidate.malformedIdentityBlockCount} 个条目的 Workshop 身份块已损坏`);
   return problems;
 }
 
@@ -692,6 +697,9 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
         .filter((value): value is string => Boolean(value)),
     );
     const legacyNames = _.uniq(entries.map(entry => readStringMetadata(entry, 'fate_project_name')).filter((value): value is string => Boolean(value)));
+    const identityBlockStatuses = entries.map(entry => getCreativeWorkshopWorldbookMetadataBlockStatus(String((entry as any).content || '')));
+    const missingIdentityBlockCount = identityBlockStatuses.filter(status => status === 'missing').length;
+    const malformedIdentityBlockCount = identityBlockStatuses.filter(status => status === 'malformed').length;
 
     const base = {
       candidateId,
@@ -716,6 +724,8 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       metadata,
       missingEntryKeys: [],
       registryBacked: false,
+      missingIdentityBlockCount,
+      malformedIdentityBlockCount,
     } satisfies Omit<CreativeWorkshopRepairCandidate, 'problems'>;
 
     return {
@@ -779,6 +789,8 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       metadata: makeMetadataReport([]),
       missingEntryKeys,
       registryBacked: true,
+      missingIdentityBlockCount: 0,
+      malformedIdentityBlockCount: 0,
       problems: [problem],
     });
   }

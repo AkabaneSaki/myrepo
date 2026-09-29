@@ -33,14 +33,17 @@ const autoMatchStart = apiSource.indexOf("async function findWorkshopProjectsFor
 const autoMatchEnd = apiSource.indexOf('\nasync function fetchInstalledProjectDetails', autoMatchStart);
 assert.ok(autoMatchStart >= 0 && autoMatchEnd > autoMatchStart, 'repair auto match function must exist');
 const autoMatchBlock = apiSource.slice(autoMatchStart, autoMatchEnd);
-const manualBranchEnd = autoMatchBlock.indexOf("\n  const detectedProjectId");
-const manualBranch = autoMatchBlock.slice(0, manualBranchEnd);
-const automaticBranch = autoMatchBlock.slice(manualBranchEnd);
-assert.match(manualBranch, /searchWorkshopProjectsByName\(manualQuery\)/);
-assert.doesNotMatch(automaticBranch, /searchWorkshopProjectsByName/, 'automatic repair identity matching must not call public fuzzy search');
-assert.match(automaticBranch, /resolveWorkshopRepairCandidates/);
+assert.match(autoMatchBlock, /if \(manualQuery\) return searchWorkshopProjectsForRepair\(manualQuery, 'manual_search'\)/);
+assert.match(autoMatchBlock, /resolveWorkshopRepairCandidates/);
+assert.match(
+  autoMatchBlock,
+  /result\?\.status !== 'none'[\s\S]*searchWorkshopProjectsForRepair\(name, 'auto_search'\)/,
+  'automatic repair matching may perform one public-search fallback only after the indexed resolver misses',
+);
 assert.match(projectsSource, /nameMatches\.length === 1[\s\S]{0,120}status: 'unique'/, 'one exact project-name match must auto-confirm instead of asking for another click');
-assert.match(manualBranch, /exactNameMatches\.length === 1[\s\S]{0,120}status: 'unique'/, 'one exact manual-search result must auto-confirm too');
+assert.match(apiSource, /exactNameMatches\.length === 1[\s\S]{0,160}status: 'unique'/, 'one exact fallback-search result must auto-confirm too');
+assert.match(apiSource, /projects\.length === 1[\s\S]{0,160}status: 'unique'/, 'one sole fallback-search result must auto-confirm without asking the user to click search');
+
 
 assert.doesNotMatch(
   repairUiSource,

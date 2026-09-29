@@ -300,6 +300,7 @@ function renderDlcRepairModal() {
     ? '<div class="repair-warning"><i class="fas fa-rotate"></i><div><strong>修复完成后还没有重开酒馆</strong><span>先重开 SillyTavern，再回来重新检查。</span></div></div>'
     : '';
   const advancedHtml = '<details class="repair-details repair-scan-advanced"><summary>高级 / 诊断</summary>'
+    + baselineInfoHtml
     + '<div class="repair-scan-summary"><div><span class="repair-kicker">已检查世界书</span><strong>' + escapeHtml(scannedLabel) + '</strong></div><button type="button" class="btn btn-outline" id="dlcRepairRescanBtn"><i class="fas fa-rotate"></i> 重新扫描</button></div>'
     + (unreadable.length ? '<div class="repair-warning"><i class="fas fa-triangle-exclamation"></i> 暂时读不到：' + escapeHtml(unreadable.join('、')) + '</div>' : '')
     + '<div class="repair-other-book-body"><select id="dlcRepairWorldbookSelect"><option value="">另外检查一本世界书</option>' + otherWorldbookOptions + '</select><button type="button" class="btn btn-outline" id="dlcRepairCopyBtn"><i class="fas fa-copy"></i> 复制诊断资料</button></div>'
@@ -308,8 +309,7 @@ function renderDlcRepairModal() {
   root.innerHTML = buildPendingRepairHtml(report, repairUnavailable)
     + repairLockHtml
     + repairRestartHtml
-    + baselineInfoHtml
-    + '<div class="repair-toolbar"><div><strong>' + (allItems.length ? '发现 ' + allItems.length + ' 个需要修复的 DLC' : '自动检查完成') + '</strong><small>能自动判断的事情已经帮你做完；只有真的同名冲突时才需要你选择。</small></div></div>'
+    + '<div class="repair-toolbar"><div><strong>' + (allItems.length ? '发现 ' + allItems.length + ' 个需要修复的 DLC' : '自动检查完成') + '</strong></div></div>'
     + '<div class="repair-candidate-list">' + candidateHtml + '</div>'
     + advancedHtml
     + '<div class="repair-footer"><div><strong>' + escapeHtml(footerText) + '</strong></div>'
@@ -416,11 +416,16 @@ async function analyzeSelectedDlcRepairs() {
     });
     const resolved = await resolveWorkshopRepairCandidates(requests);
     const byCandidateId = new Map(resolved.map(result => [String(result?.candidateId || ''), result]));
-    selected.forEach(item => {
-      item.match = byCandidateId.get(String(item.candidate.candidateId))
+    for (const item of selected) {
+      let match = byCandidateId.get(String(item.candidate.candidateId))
         || { status: 'none', method: 'exact_name', projects: [] };
+      const fallbackName = String(item.candidate?.name || item.candidate?.legacyProjectName || '').trim();
+      if (match.status === 'none' && fallbackName) {
+        match = await searchWorkshopProjectsForRepair(fallbackName, 'auto_search');
+      }
+      item.match = match;
       item.status = 'matched';
-    });
+    }
   } catch (error) {
     const locked = error?.code === 'REPAIR_DAILY_LOCKED';
     selected.forEach(item => {
