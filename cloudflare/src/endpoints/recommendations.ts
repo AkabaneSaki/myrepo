@@ -72,7 +72,7 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
          curator_user.username AS curator_username,
          curator_user.global_name AS curator_global_name,
          curator_user.avatar AS curator_avatar
-       FROM devteam_recommendations r
+       FROM devteam_recommendations r INDEXED BY idx_devteam_recommendations_updated
        JOIN devteam_curators curator ON curator.user_id = r.curator_id
        JOIN users curator_user ON curator_user.id = r.curator_id
        JOIN projects p ON p.id = r.project_id
