@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.1.2";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.1.3";
 
 ;// ./src/CreativeWorkshop/services/install-registry.ts
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
@@ -379,7 +379,7 @@ async function fetchCreativeWorkshopReferenceVersionItems(referenceVersionId) {
 ;// ./src/CreativeWorkshop/services/project-type.ts
 const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
 const CREATIVE_WORKSHOP_EXTENSION_TYPES = (/* unused pure expression or super */ null && (['规则', '内容']));
-const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 3;
+const CREATIVE_WORKSHOP_NAME_FORMAT_VERSION = 4;
 function normalizeProjectType(value) {
     if (typeof value !== 'string')
         return null;
@@ -446,15 +446,36 @@ function readLeadingBracketSegment(value, offset) {
     return { value: match[1], end: offset + match[0].length };
 }
 function getExistingDlcCategory(entryName) {
-    const dlc = readLeadingBracketSegment(entryName, 0);
-    if (!dlc || dlc.value !== 'DLC')
+    const first = readLeadingBracketSegment(entryName, 0);
+    if (!first)
         return null;
-    return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
+    // v4: [WS][DLC][category]author content
+    if (first.value === 'WS') {
+        const dlc = readLeadingBracketSegment(entryName, first.end);
+        if (!dlc || dlc.value !== 'DLC')
+            return null;
+        return readLeadingBracketSegment(entryName, dlc.end)?.value || null;
+    }
+    // v3/v2/legacy: [DLC][category]...
+    if (first.value !== 'DLC')
+        return null;
+    return readLeadingBracketSegment(entryName, first.end)?.value || null;
 }
 function stripExistingDlcHeader(entryName) {
-    const dlc = readLeadingBracketSegment(entryName, 0);
-    if (!dlc || dlc.value !== 'DLC')
+    const first = readLeadingBracketSegment(entryName, 0);
+    if (!first)
         return entryName;
+    // v4: [WS][DLC][category]author content
+    if (first.value === 'WS') {
+        const dlc = readLeadingBracketSegment(entryName, first.end);
+        if (!dlc || dlc.value !== 'DLC')
+            return entryName;
+        const category = readLeadingBracketSegment(entryName, dlc.end);
+        return category ? entryName.slice(category.end) : entryName;
+    }
+    if (first.value !== 'DLC')
+        return entryName;
+    const dlc = first;
     const category = readLeadingBracketSegment(entryName, dlc.end);
     if (!category)
         return entryName.slice(dlc.end);
@@ -489,7 +510,7 @@ function formatCreativeWorkshopEntryName(entryName, project, _projectName) {
     if (projectType === '系统核心')
         authorContent = stripLegacyCorePrefix(authorContent);
     const category = getExistingDlcCategory(entryName) || getCreativeWorkshopDlcCategory(project);
-    return `[DLC][${category}][WS]${authorContent}`;
+    return `[WS][DLC][${category}]${authorContent}`;
 }
 
 ;// ./src/CreativeWorkshop/services/regex-name.ts
@@ -1551,6 +1572,14 @@ function parseDlcEntryName(name) {
     if (!_.isString(name))
         return null;
     const value = String(name);
+    const v4 = value.match(/^\[WS\]\[DLC\]\[([^\]]+)\]/);
+    if (v4) {
+        return {
+            category: v4[1],
+            projectName: null,
+            workshopSourceMarker: true,
+        };
+    }
     const v3 = value.match(/^\[DLC\]\[([^\]]+)\]\[WS\]/);
     if (v3) {
         return {
