@@ -16,6 +16,7 @@ export const homeAppActionsScript = String.raw`
     const installedToggle = document.getElementById('installedProjectsToggle');
     const dlcRepairBtn = document.getElementById('dlcRepairBtn');
     const dlcUpdateStatusBtn = document.getElementById('dlcUpdateStatusBtn');
+    const desktopUpdateHubBtn = document.getElementById('desktopUpdateHubBtn');
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const fontMenuTrigger = document.getElementById('fontMenuTrigger');
@@ -64,6 +65,7 @@ export const homeAppActionsScript = String.raw`
     if (localAdminLoginBtn) localAdminLoginBtn.onclick = () => runLocalAdminLogin(localAdminLoginBtn);
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
     if (dlcUpdateStatusBtn) dlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
+    if (desktopUpdateHubBtn) desktopUpdateHubBtn.onclick = () => openWorkshopUpdateHub();
     if (mobileDlcUpdateStatusBtn) mobileDlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
     scriptDependencyHealthBtns.forEach(button => {
       button.onclick = event => {

@@ -120,7 +120,7 @@ export class ProjectRepairResolve extends OpenAPIRoute {
 
       const nameMatches = candidate.normalizedName ? (projectsByName.get(candidate.normalizedName) || []) : [];
       if (nameMatches.length === 1) {
-        return { candidateId: candidate.candidateId, status: 'candidates', method: 'exact_name', projects: nameMatches };
+        return { candidateId: candidate.candidateId, status: 'unique', method: 'exact_name', projects: nameMatches };
       }
       if (nameMatches.length > 1) {
         return { candidateId: candidate.candidateId, status: 'ambiguous', method: 'exact_name', projects: nameMatches.slice(0, 8) };

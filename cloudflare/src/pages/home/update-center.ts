@@ -131,6 +131,34 @@ function renderDlcUpdateCenterRows(updates) {
   }).join('');
 }
 
+function openWorkshopUpdateHub() {
+  const scriptHealth = state.tavern.scriptDependenciesLoaded && state.tavern.scriptDependenciesSupported
+    ? getScriptDependencyHealthSummary()
+    : { outdated: [] };
+  const scriptCount = Array.isArray(scriptHealth.outdated) ? scriptHealth.outdated.length : 0;
+  const dlcAvailable = Boolean(state.tavern.dlcUpdateKnown && state.tavern.dlcUpdateAvailable);
+  const dlcHtml = '<section class="workshop-update-hub-section"><div><i class="fas fa-box-open"></i><span><strong>DLC 更新</strong><small>'
+    + (dlcAvailable ? '有已安装 DLC 可以更新' : '当前没有检测到 DLC 更新')
+    + '</small></span></div>'
+    + (dlcAvailable ? '<button class="btn btn-primary" type="button" data-update-hub-dlc>查看</button>' : '<span class="workshop-update-hub-ok"><i class="fas fa-circle-check"></i> 最新</span>')
+    + '</section>';
+  const scriptHtml = '<section class="workshop-update-hub-section"><div><i class="fas fa-code-branch"></i><span><strong>其他脚本</strong><small>'
+    + (scriptCount ? scriptCount + ' 个脚本可以更新' : '当前没有其他脚本更新')
+    + '</small></span></div>'
+    + (scriptCount ? '<button class="btn btn-outline" type="button" data-update-hub-scripts>查看</button>' : '<span class="workshop-update-hub-ok"><i class="fas fa-circle-check"></i> 最新</span>')
+    + '</section>';
+  const overlay = openModal('<div class="workshop-update-hub">' + dlcHtml + scriptHtml + '</div>', '<i class="fas fa-bell"></i> 更新');
+  overlay.querySelector('[data-update-hub-dlc]')?.addEventListener('click', () => {
+    overlay.remove();
+    void openDlcUpdateCenter();
+  });
+  overlay.querySelector('[data-update-hub-scripts]')?.addEventListener('click', () => {
+    overlay.remove();
+    openScriptDependencyHealthModal();
+  });
+  return overlay;
+}
+
 async function openDlcUpdateCenter() {
   const loadingOverlay = openModal(
     '<div class="detail-loading"><div class="loading-spinner"></div><div class="detail-loading-text">正在读取最新 DLC 版本...</div></div>',

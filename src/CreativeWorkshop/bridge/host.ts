@@ -316,11 +316,8 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             event.data.requestId,
           );
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
-          await post(
-            'bridge:installed-projects',
-            { projects: await getCompleteInitialInstalledProjects() },
-            event.data.requestId,
-          );
+          // Installed-project discovery can require reading several active worldbooks.
+          // Keep handshake responsive; the explicit bridge:list-installed-projects request loads it in the background.
           break;
         case 'bridge:get-context':
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);

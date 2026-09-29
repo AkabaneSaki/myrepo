@@ -294,13 +294,41 @@ officialBaseline.entries = [
   assert.equal(entryKeyMeta.status, 'partial');
   assert.ok(candidate.problems.some(problem => problem.includes('缺少 cw_project_id')));
   const sentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
-  assert.ok(sentinel, 'repair scan must create the integrity sentinel');
-  assert.equal(sentinel.enabled, false, 'repair integrity sentinel must stay disabled');
-  assert.equal(sentinel.extra?.cw_project_id, '__cw_repair_integrity_sentinel__');
-  assert.equal(sentinel.extra?.cw_project_name_display, 'Creative Workshop Repair Integrity Sentinel');
-  assert.equal(sentinel.extra?.cw_project_version, '1');
-  assert.equal(sentinel.extra?.cw_entry_key, '__cw_repair_integrity_sentinel__:sentinel');
-  assert.equal(String(sentinel.extra?.cw_name_format_version), '4');
+  assert.equal(sentinel, undefined, 'repair scan must stay read-only and must not inject the integrity sentinel');
+}
+
+
+{
+  const orphanSentinel = {
+    name: '[工坊精灵]我是好人请不要打开我也不要刪掉我喵',
+    comment: '[工坊精灵]我是好人请不要打开我也不要刪掉我喵',
+    content: 'creative-workshop-repair-integrity-sentinel:v1',
+    enabled: false,
+    extra: {
+      cw_project_id: '__cw_repair_integrity_sentinel__',
+      cw_project_name_display: 'Creative Workshop Repair Integrity Sentinel',
+      cw_project_version: '1',
+      cw_entry_key: '__cw_repair_integrity_sentinel__:sentinel',
+      cw_name_format_version: '4',
+    },
+  };
+  const harness = createHarness({
+    worldbooks: { Main: [orphanSentinel], DLC: brokenEntries },
+    initialVariables: {
+      creative_workshop_repair_integrity_sentinels: { Main: '1' },
+    },
+  });
+  await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(
+    harness.worldbooks.Main.some(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵'),
+    false,
+    'scan must clean a legacy sentinel that was injected into a worldbook with no Workshop DLC',
+  );
+  assert.equal(
+    harness.variables().creative_workshop_repair_integrity_sentinels?.Main,
+    undefined,
+    'cleanup must remove the stale sentinel registry marker too',
+  );
 }
 
 {
@@ -334,6 +362,39 @@ officialBaseline.entries = [
   assert.equal(candidate.registryBacked, true);
   assert.deepEqual(Array.from(candidate.missingEntryKeys), [`${projectId}:entry-b`]);
   assert.ok(candidate.problems.some(problem => problem.includes('缺少 1 个已安装')));
+}
+
+
+{
+  const projectId = '66666666-6666-4666-8666-666666666666';
+  const survivingEntry = {
+    uid: 601,
+    name: '[WS][DLC][角色]Cross Book Smoke',
+    extra: {
+      cw_project_id: projectId,
+      cw_project_name_display: 'Cross Book Smoke',
+      cw_project_version: '1.0.0',
+      cw_entry_key: `${projectId}:entry-a`,
+      cw_name_format_version: '4',
+    },
+  };
+  const harness = createHarness({
+    worldbooks: { Main: [], DLC: [survivingEntry] },
+    initialInstallRecords: {
+      [projectId]: {
+        projectId,
+        worldbookName: 'Main',
+        installedVersion: '1.0.0',
+        worldbookEntryKeys: [`${projectId}:entry-a`, `${projectId}:entry-b`],
+        installedAt: Date.now(),
+      },
+    },
+  });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  const candidate = report.candidates.find(item => item.detectedProjectId === projectId);
+  assert.ok(candidate, 'Repair must scan all active worldbooks instead of trusting a stale recorded worldbook');
+  assert.equal(candidate.worldbookName, 'DLC', 'the actual surviving Workshop entry decides the repair target worldbook');
+  assert.deepEqual(Array.from(candidate.missingEntryKeys), [`${projectId}:entry-b`]);
 }
 
 {
@@ -375,6 +436,9 @@ officialBaseline.entries = [
     [`${projectId}:latest-entry`],
     'successful repair must refresh the expected Worldbook manifest',
   );
+  const targetSentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
+  assert.ok(targetSentinel, 'actual repair must create the integrity sentinel in the target worldbook only');
+  assert.equal(targetSentinel.enabled, false);
 }
 
 {
@@ -441,35 +505,51 @@ officialBaseline.entries = [
 }
 
 {
-  const harness = createHarness({ worldbooks: { DLC: brokenEntries } });
-  const firstReport = await harness.api.scanCreativeWorkshopRepairCandidates();
-  assert.equal(firstReport.repairIntegrityLocked, false);
+  const projectId = '55555555-5555-4555-8555-555555555555';
+  const harness = createHarness({
+    worldbooks: { DLC: [] },
+    initialInstallRecords: {
+      [projectId]: {
+        projectId,
+        worldbookName: 'DLC',
+        installedVersion: '1.0.0',
+        worldbookEntryKeys: [`${projectId}:old-entry`],
+        installedAt: Date.now(),
+      },
+    },
+  });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  const candidate = report.candidates.find(item => item.detectedProjectId === projectId);
+  assert.ok(candidate);
+
+  await harness.api.repairCreativeWorkshopProject({
+    candidateId: candidate.candidateId,
+    projectId,
+    worldbookName: 'DLC',
+    entryUids: [],
+    regexIds: [],
+    expectedEntryCount: 0,
+    expectedRegexCount: 0,
+    sourceProjectIds: [projectId],
+  });
   const sentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
+  assert.ok(sentinel, 'a real repair must create the target-worldbook integrity sentinel');
   sentinel.extra.cw_entry_key = '';
-  const backupRecoveredReport = await harness.api.scanCreativeWorkshopRepairCandidates();
-  assert.equal(
-    backupRecoveredReport.repairIntegrityLocked,
-    false,
-    'embedded identity backup must keep Repair usable when only extra metadata is lost',
-  );
   sentinel.content = identityApi.stripCreativeWorkshopWorldbookMetadata(sentinel.content);
-  const lockedReport = await harness.api.scanCreativeWorkshopRepairCandidates();
-  assert.equal(lockedReport.repairIntegrityLocked, true, 'losing both identity copies must lock DLC Repair');
-  assert.equal(lockedReport.candidates.length, 0, 'integrity lock must suppress all repair candidates');
-  const brokenEntryKey = lockedReport.repairIntegrityFields.find(item => item.field === 'cw_entry_key');
-  assert.equal(brokenEntryKey?.status, 'missing', 'integrity report must identify the exact missing sentinel metadata');
+
   await assert.rejects(
     () => harness.api.repairCreativeWorkshopProject({
-      candidateId: 'DLC::秋日祭',
-      projectId: 'new-project-id',
+      candidateId: candidate.candidateId,
+      projectId,
       worldbookName: 'DLC',
-      entryUids: [101, 102],
+      entryUids: [999],
       regexIds: [],
-      expectedEntryCount: 2,
+      expectedEntryCount: 1,
       expectedRegexCount: 0,
+      sourceProjectIds: [projectId],
     }),
     /DLC 修复已锁定/,
-    'backend repair must fail closed when the integrity sentinel is damaged',
+    'backend repair must fail closed when the target-worldbook integrity sentinel is damaged',
   );
 }
 
@@ -674,30 +754,34 @@ officialBaseline.entries = [
   assert.equal(harness.worldbooks.DLC.filter(entry => entry.extra?.cw_project_id === 'correct-project-id').length, 1);
 }
 
+const handshakeCaseStart = bridgeSource.indexOf("case 'bridge:handshake':");
+const installedCaseStart = bridgeSource.indexOf("case 'bridge:list-installed-projects':");
+assert.ok(handshakeCaseStart >= 0 && installedCaseStart > handshakeCaseStart);
+const handshakeCaseSource = bridgeSource.slice(handshakeCaseStart, installedCaseStart);
+assert.doesNotMatch(handshakeCaseSource, /getCompleteInitialInstalledProjects/, 'bridge handshake must not wait for the expensive installed-project worldbook scan');
 assert.match(protocolSource, /bridge:repair:scan/);
 assert.match(protocolSource, /bridge:repair:project/);
 assert.match(bridgeSource, /scanCreativeWorkshopRepairCandidates/);
 assert.match(bridgeSource, /repairCreativeWorkshopProject/);
 assert.match(repairUiSource, /buildDlcRepairReportText/);
-assert.match(repairUiSource, /resolveWorkshopRepairCandidates\(requests\)/, 'select all must use the bounded batch resolver');
-assert.doesNotMatch(repairUiSource, /Promise\.all\(selected\.map\(item => analyzeDlcRepairItem/, 'select all must not fan out one resolver request per DLC');
+assert.match(repairUiSource, /resolveWorkshopRepairCandidates\(requests\)/, 'automatic Repair matching must use the bounded batch resolver');
+assert.doesNotMatch(repairUiSource, /Promise\.all\(selected\.map\(item => analyzeDlcRepairItem/, 'automatic matching must not fan out one resolver request per DLC');
+assert.match(repairUiSource, /await analyzeSelectedDlcRepairs\(\)/, 'opening Repair must automatically resolve safe candidates');
 assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matching may run in parallel, but local replacement must be sequential');
 assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
-assert.match(repairUiSource, /对应工坊项目/);
+assert.match(repairUiSource, /已自动找到/);
 assert.match(repairUiSource, /candidate\.problems\.length > 0/, 'repair UI must hide healthy DLCs');
-assert.match(repairUiSource, /喵喵！我放在你家养的工坊精灵怎么丢了资料！修理按钮我幫你保管了！去DC找我/, 'repair UI must show the integrity lock instead of allowing reinstall');
 assert.match(repairUiSource, /好啦修理成功喵！現在重开酒馆，然后再來工坊DLC检查多次看看吧!/, 'first successful repair must ask for a Tavern restart');
 assert.match(repairUiSource, /知道了喵/);
 assert.match(repairUiSource, /不行，再看一眼/);
 assert.match(repairUiSource, /別再点了快点重开酒馆/);
-assert.match(repairUiSource, /你过关！/, 'healthy sentinel after restart must show the pass message');
-assert.match(repairUiSource, /buildRepairIntegrityFieldsHtml/, 'broken sentinel UI must show field-level metadata details');
-assert.match(repairUiSource, /dlcRepairSelectAllBtn/, 'repair UI must expose one-click select all');
-assert.match(repairUiSource, /选择此项目/, 'ambiguous Workshop candidates must have an explicit selection affordance');
-assert.match(repairUiSource, /dlcRepairWorldbookSelect/, 'repair UI must allow choosing another worldbook when automatic scan misses it');
-assert.match(repairUiSource, /重新扫描/, 'repair UI must expose one simple rescan action');
-assert.doesNotMatch(repairUiSource, /dlcRepairAnalyzeBtn/, 'Workshop matching should happen automatically after selection');
+assert.doesNotMatch(repairUiSource, /dlcRepairSelectAllBtn/, 'normal Repair flow must not require select-all or checkbox management');
+assert.match(repairUiSource, /高级：手动查找项目/, 'manual search must be an advanced fallback, not the primary flow');
+assert.match(repairUiSource, /选择此项目/, 'only ambiguous Workshop candidates should require explicit selection');
+assert.match(repairUiSource, /dlcRepairWorldbookSelect/, 'advanced diagnostics may scan another worldbook when automatic scan misses it');
+assert.match(repairUiSource, /重新扫描/, 'advanced diagnostics must retain a rescan action');
+assert.doesNotMatch(repairUiSource, /dlcRepairAnalyzeBtn/, 'Workshop matching should happen automatically');
 assert.doesNotMatch(repairUiSource, /dlcRepairScanEnabledBtn/, 'enabled worldbooks should be scanned automatically');
 assert.doesNotMatch(repairUiSource, /dlcRepairScanBookBtn/, 'choosing another worldbook should trigger scanning without a second button');
 assert.match(repairUiSource, /closeDlcRepairModal/, 'repair UI must be able to close itself after the queue is emptied');

@@ -1086,6 +1086,14 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 .workshop-update-status-btn,.mobile-account-update { border-color:rgba(116,182,134,.32) !important; background:rgba(116,182,134,.08) !important; }
 .workshop-update-status-ok { display:inline-flex; align-items:center; gap:6px; color:#82aa8a; font-size:.72rem; font-weight:700; }
 .mobile-account-update-ok { cursor:default; opacity:.78; }
+.workshop-update-hub { display:grid; gap:10px; min-width:min(520px,78vw); }
+.workshop-update-hub-section { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px; border:1px solid rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.025); }
+.workshop-update-hub-section > div { min-width:0; display:flex; align-items:center; gap:11px; }
+.workshop-update-hub-section > div > i { width:24px; flex:none; text-align:center; color:#b9a17d; }
+.workshop-update-hub-section span { min-width:0; display:grid; gap:3px; }
+.workshop-update-hub-section strong { color:#ece9e2; }
+.workshop-update-hub-section small { color:#8f8b84; }
+.workshop-update-hub-ok { display:flex !important; grid-auto-flow:column; align-items:center; gap:6px !important; color:#86b291; font-size:.78rem; }
 .dlc-update-center { display:grid; gap:14px; }
 .dlc-update-center-head { display:grid; gap:4px; padding:12px 13px; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.025); }
 .dlc-update-center-head strong { color:#ebe9e3; font-size:.9rem; }

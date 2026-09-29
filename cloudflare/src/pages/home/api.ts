@@ -486,7 +486,7 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
   if (manualQuery) {
     const { projects, exactNameMatches } = await searchWorkshopProjectsByName(manualQuery);
     if (exactNameMatches.length === 1) {
-      return { status: 'candidates', method: 'manual_exact_name', projects: exactNameMatches };
+      return { status: 'unique', method: 'manual_exact_name', projects: exactNameMatches };
     }
     if (exactNameMatches.length > 1) {
       return { status: 'ambiguous', method: 'manual_exact_name', projects: exactNameMatches };
@@ -837,9 +837,16 @@ async function uploadDiscoverBanner(file) {
 }
 
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
-  const params = new URLSearchParams({ page: '0', pageSize: '50', sort });
+  const params = new URLSearchParams({ page: '0', pageSize: '12', sort });
   if (projectType) params.set('projectType', projectType);
-  return apiFetch('/api/admin/pending?' + params.toString());
+  const startedAt = performance.now();
+  const result = await apiFetch('/api/admin/pending?' + params.toString());
+  console.info('[CreativeWorkshop] admin pending loaded', {
+    ms: Math.round(performance.now() - startedAt),
+    returned: Array.isArray(result?.projects) ? result.projects.length : 0,
+    total: Number(result?.total || 0),
+  });
+  return result;
 }
 
 async function cleanupOutdatedReviewDrafts() {

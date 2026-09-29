@@ -1656,6 +1656,18 @@ export const homeShellStyles = String.raw`
 .repair-candidate-title { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
 .repair-candidate-title strong { font-size:1rem; }
 .repair-candidate-title small,.repair-muted,.repair-evidence { color:#99928a; }
+.repair-simple-issue,.repair-auto-matching,.repair-match-success,.repair-match-missing { display:flex; align-items:flex-start; gap:9px; margin-top:12px; padding:10px 11px; border:1px solid rgba(255,255,255,.07); border-radius:10px; background:rgba(0,0,0,.12); color:#b9b2aa; line-height:1.45; }
+.repair-simple-issue > i,.repair-auto-matching > i,.repair-match-success > i,.repair-match-missing > i { flex:none; margin-top:2px; }
+.repair-auto-matching { color:#b9a780; }
+.repair-match-success { border-color:rgba(96,166,116,.26); background:rgba(96,166,116,.07); color:#a8ceb2; }
+.repair-match-missing { border-color:rgba(226,176,72,.20); background:rgba(226,176,72,.055); }
+.repair-match-missing > div { min-width:0; display:flex; flex-direction:column; gap:2px; }
+.repair-match-missing span { color:#99928a; font-size:.78rem; }
+.repair-match-choice { margin-top:12px; }
+.repair-scan-advanced { margin:0 18px 14px; padding:10px 12px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(0,0,0,.08); }
+.repair-scan-advanced > summary { list-style:none; }
+.repair-scan-advanced > summary::-webkit-details-marker { display:none; }
+.repair-manual-advanced { margin-top:8px; }
 .repair-item-status { flex:none; font-size:.76rem; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,.06); color:#b9b1a8; }
 .repair-facts { display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; }
 .repair-facts span { padding:5px 8px; border-radius:8px; background:rgba(255,255,255,.045); color:#aaa39a; font-size:.78rem; }
@@ -1692,6 +1704,10 @@ export const homeShellStyles = String.raw`
 .repair-manual-search input { min-width:0; flex:1; border:1px solid rgba(255,255,255,.1); border-radius:9px; background:rgba(0,0,0,.18); color:#eee8df; padding:9px 10px; }
 
 @media (max-width:640px) {
+  html,body { scrollbar-width:thin; scrollbar-color:rgba(180,174,164,.34) transparent; }
+  html::-webkit-scrollbar,body::-webkit-scrollbar,.dlc-repair-modal .modal-body::-webkit-scrollbar { width:4px; height:4px; }
+  html::-webkit-scrollbar-track,body::-webkit-scrollbar-track,.dlc-repair-modal .modal-body::-webkit-scrollbar-track { background:transparent; }
+  html::-webkit-scrollbar-thumb,body::-webkit-scrollbar-thumb,.dlc-repair-modal .modal-body::-webkit-scrollbar-thumb { border-radius:999px; background:rgba(180,174,164,.34); }
   .dlc-repair-modal .modal-content { width:calc(100vw - 12px); max-height:94vh; }
   .repair-scan-card { margin:10px 12px 0; }
   .repair-scan-summary,.repair-toolbar { align-items:stretch; flex-direction:column; }

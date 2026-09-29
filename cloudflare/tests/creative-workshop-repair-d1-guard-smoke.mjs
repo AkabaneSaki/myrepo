@@ -39,6 +39,8 @@ const automaticBranch = autoMatchBlock.slice(manualBranchEnd);
 assert.match(manualBranch, /searchWorkshopProjectsByName\(manualQuery\)/);
 assert.doesNotMatch(automaticBranch, /searchWorkshopProjectsByName/, 'automatic repair identity matching must not call public fuzzy search');
 assert.match(automaticBranch, /resolveWorkshopRepairCandidates/);
+assert.match(projectsSource, /nameMatches\.length === 1[\s\S]{0,120}status: 'unique'/, 'one exact project-name match must auto-confirm instead of asking for another click');
+assert.match(manualBranch, /exactNameMatches\.length === 1[\s\S]{0,120}status: 'unique'/, 'one exact manual-search result must auto-confirm too');
 
 assert.doesNotMatch(
   repairUiSource,
