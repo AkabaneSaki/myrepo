@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev5";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev6";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -2264,6 +2264,13 @@ function markRepairSentinelInitialized(worldbookName) {
     registry[worldbookName] = REPAIR_INTEGRITY_SENTINEL_VERSION;
     writeRepairSentinelRegistry(registry);
 }
+function clearRepairSentinelInitialized(worldbookName) {
+    const registry = readRepairSentinelRegistry();
+    if (!(worldbookName in registry))
+        return;
+    delete registry[worldbookName];
+    writeRepairSentinelRegistry(registry);
+}
 function readRepairRestartRegistry() {
     const variables = getVariables({ type: 'script', script_id: getScriptId() });
     const raw = _.get(variables, CREATIVE_WORKSHOP_REPAIR_RESTART_KEY);
@@ -2529,18 +2536,14 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
         ? _.uniq(options.worldbookNames.filter(name => _.isString(name) && Boolean(name)))
             .filter(name => availableWorldbookNameSet.has(name))
         : enabledWorldbookNames;
+    // Scan is read-only. Do not inject the Repair sentinel into every active worldbook.
+    // The sentinel is created/validated only in the actual target worldbook immediately before a repair.
     const rows = await Promise.all(requestedWorldbookNames.map(async (worldbookName) => {
         try {
-            const integrity = await ensureRepairIntegritySentinel(worldbookName);
             return {
                 worldbookName,
-                entries: integrity.entries,
+                entries: await getWorldbook(worldbookName),
                 readable: true,
-                repairIntegrityLocked: integrity.locked,
-                repairIntegrityReason: integrity.reason,
-                repairIntegrityStatus: integrity.status,
-                repairIntegrityFields: integrity.fields,
-                repairIntegritySentinelCount: integrity.sentinelCount,
             };
         }
         catch (error) {
@@ -2549,48 +2552,16 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
                 worldbookName,
                 entries: [],
                 readable: false,
-                repairIntegrityLocked: false,
-                repairIntegrityReason: null,
-                repairIntegrityStatus: 'created',
-                repairIntegrityFields: [],
-                repairIntegritySentinelCount: 0,
             };
         }
     }));
-    const integrityFailure = rows.find(row => row.readable && row.repairIntegrityLocked);
-    if (integrityFailure) {
-        return {
-            candidates: [],
-            unreadableWorldbookNames: rows.filter(row => !row.readable).map(row => row.worldbookName),
-            pending: getCreativeWorkshopPendingRepairs(),
-            availableWorldbookNames,
-            enabledWorldbookNames,
-            scannedWorldbookNames: requestedWorldbookNames,
-            officialBaselineVersion: OFFICIAL_WORLDBOOK_BASELINE_VERSION,
-            officialBaselineSkippedCount: 0,
-            modifiedOfficialBaselineEntries: [],
-            repairIntegrityLocked: true,
-            repairIntegrityReason: integrityFailure.repairIntegrityReason,
-            repairIntegrityWorldbookName: integrityFailure.worldbookName,
-            repairIntegrityStatus: 'locked',
-            repairIntegrityFields: integrityFailure.repairIntegrityFields,
-            repairIntegritySentinelCount: integrityFailure.repairIntegritySentinelCount,
-            repairRestartRequired: false,
-            repairRestartWorldbookNames: [],
-        };
-    }
-    const readableIntegrityRows = rows.filter(row => row.readable);
-    const repairRestartWorldbookNames = readableIntegrityRows
-        .filter(row => row.repairIntegrityStatus === 'healthy' && isRepairRestartRequired(row.worldbookName))
+    const readableRows = rows.filter(row => row.readable);
+    const repairRestartWorldbookNames = readableRows
+        .filter(row => isRepairRestartRequired(row.worldbookName))
         .map(row => row.worldbookName);
-    readableIntegrityRows
-        .filter(row => row.repairIntegrityStatus === 'healthy' && wasRepairRestartSatisfied(row.worldbookName))
+    readableRows
+        .filter(row => wasRepairRestartSatisfied(row.worldbookName))
         .forEach(row => clearRepairRestartRequired(row.worldbookName));
-    const repairIntegrityStatus = readableIntegrityRows.length > 0
-        && readableIntegrityRows.every(row => row.repairIntegrityStatus === 'healthy')
-        ? 'healthy'
-        : 'created';
-    const primaryIntegrityRow = readableIntegrityRows[0] || null;
     let officialBaselineSkippedCount = 0;
     const modifiedOfficialBaselineEntries = [];
     const entryRows = [];
@@ -2700,21 +2671,28 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
     });
     const installRecords = getCreativeWorkshopInstallRecords();
     for (const [projectId, record] of Object.entries(installRecords)) {
-        const worldbookName = String(record?.worldbookName || '').trim();
         const expectedEntryKeys = getCreativeWorkshopWorldbookInstallEntryKeys(projectId);
-        if (!worldbookName || expectedEntryKeys.length === 0)
+        if (expectedEntryKeys.length === 0)
             continue;
-        const worldbookRow = rows.find(row => row.readable && row.worldbookName === worldbookName);
-        if (!worldbookRow)
-            continue;
-        const actualEntries = worldbookRow.entries.filter(entry => readStringMetadata(entry, 'cw_project_id') === projectId);
-        const actualEntryKeys = new Set(actualEntries
-            .map(entry => readStringMetadata(entry, 'cw_entry_key'))
+        const actualRows = rows
+            .filter(row => row.readable)
+            .flatMap(row => row.entries
+            .filter(entry => readStringMetadata(entry, 'cw_project_id') === projectId)
+            .map(entry => ({ worldbookName: row.worldbookName, entry })));
+        const actualEntryKeys = new Set(actualRows
+            .map(row => readStringMetadata(row.entry, 'cw_entry_key'))
             .filter((value) => Boolean(value)));
         const missingEntryKeys = expectedEntryKeys.filter(entryKey => !actualEntryKeys.has(entryKey));
         if (missingEntryKeys.length === 0)
             continue;
-        const existing = candidates.find(candidate => candidate.worldbookName === worldbookName && candidate.detectedProjectIds.includes(projectId));
+        const recordedWorldbookName = String(record?.worldbookName || '').trim();
+        const detectedWorldbookName = actualRows[0]?.worldbookName
+            || (recordedWorldbookName && rows.some(row => row.readable && row.worldbookName === recordedWorldbookName)
+                ? recordedWorldbookName
+                : '');
+        if (!detectedWorldbookName)
+            continue;
+        const existing = candidates.find(candidate => candidate.detectedProjectIds.includes(projectId));
         const problem = `缺少 ${missingEntryKeys.length} 个已安装的 Workshop 世界书条目`;
         if (existing) {
             existing.missingEntryKeys = missingEntryKeys;
@@ -2726,10 +2704,10 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
         const matchingRegexes = regexes.filter(regex => resolveRegexIdentity(regex)?.projectId === projectId);
         const regexIds = matchingRegexes.map(regex => getCreativeWorkshopRegexId(regex)).filter(Boolean);
         candidates.push({
-            candidateId: candidateIdFor(worldbookName, projectId),
+            candidateId: candidateIdFor(detectedWorldbookName, projectId),
             name: projectId,
             category: null,
-            worldbookName,
+            worldbookName: detectedWorldbookName,
             entryUids: [],
             regexIds: _.uniq(regexIds),
             entryCount: 0,
@@ -2747,6 +2725,23 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
             problems: [problem],
         });
     }
+    const workshopWorldbookNames = new Set(candidates.map(candidate => candidate.worldbookName).filter(Boolean));
+    for (const row of rows) {
+        if (!row.readable)
+            continue;
+        const hasWorkshopContent = row.entries.some(entry => !isRepairIntegritySentinelEntry(entry)
+            && Boolean(readStringMetadata(entry, 'cw_project_id')));
+        if (hasWorkshopContent)
+            workshopWorldbookNames.add(row.worldbookName);
+    }
+    await Promise.all(rows
+        .filter(row => row.readable
+        && row.entries.some(isRepairIntegritySentinelEntry)
+        && !workshopWorldbookNames.has(row.worldbookName))
+        .map(async (row) => {
+        await updateWorldbookWith(row.worldbookName, worldbook => worldbook.filter(entry => !isRepairIntegritySentinelEntry(entry)));
+        clearRepairSentinelInitialized(row.worldbookName);
+    }));
     return {
         candidates: candidates.sort((a, b) => a.worldbookName.localeCompare(b.worldbookName) || a.name.localeCompare(b.name)),
         unreadableWorldbookNames: rows.filter(row => !row.readable).map(row => row.worldbookName),
@@ -2760,9 +2755,9 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
         repairIntegrityLocked: false,
         repairIntegrityReason: null,
         repairIntegrityWorldbookName: null,
-        repairIntegrityStatus,
-        repairIntegrityFields: primaryIntegrityRow?.repairIntegrityFields || [],
-        repairIntegritySentinelCount: primaryIntegrityRow?.repairIntegritySentinelCount || 0,
+        repairIntegrityStatus: 'healthy',
+        repairIntegrityFields: [],
+        repairIntegritySentinelCount: 0,
         repairRestartRequired: repairRestartWorldbookNames.length > 0,
         repairRestartWorldbookNames,
     };
@@ -3331,7 +3326,8 @@ function createCreativeWorkshopBridgeHost(option) {
                 case 'bridge:handshake':
                     await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
-                    await post('bridge:installed-projects', { projects: await getCompleteInitialInstalledProjects() }, event.data.requestId);
+                    // Installed-project discovery can require reading several active worldbooks.
+                    // Keep handshake responsive; the explicit bridge:list-installed-projects request loads it in the background.
                     break;
                 case 'bridge:get-context':
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
