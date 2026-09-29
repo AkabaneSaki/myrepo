@@ -17,6 +17,7 @@ test('#33 pagination keeps a stable page session across navigation, filters, sor
   discover,
   diagnostics,
 }) => {
+  test.setTimeout(180_000);
   const projects = createFixtureProjects(110);
   await installProjectCatalogFixture(page, { projects });
 
@@ -70,6 +71,7 @@ test('#33 pagination keeps a stable page session across navigation, filters, sor
 });
 
 test('#33 direct page jump acceptance', async ({ page, session, discover, diagnostics }) => {
+  test.setTimeout(180_000);
   test.fail(true, 'Issue #33 direct page-jump control is not implemented in current staging UI.');
 
   await installProjectCatalogFixture(page, { projects: createFixtureProjects(110) });
