@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev6";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev7";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -248,6 +248,17 @@ function readCreativeWorkshopWorldbookMetadata(content) {
     if (identities.size !== 1)
         return null;
     return scan.blocks[0].metadata;
+}
+function getCreativeWorkshopWorldbookMetadataBlockStatus(content) {
+    if (typeof content !== 'string' || !content)
+        return 'missing';
+    const scan = scanCreativeWorkshopWorldbookMetadata(content);
+    if (scan.malformed)
+        return 'malformed';
+    if (scan.blocks.length === 0)
+        return 'missing';
+    const identities = new Set(scan.blocks.map(item => getWorldbookMetadataIdentity(item.metadata)));
+    return identities.size === 1 ? 'healthy' : 'malformed';
 }
 function getCreativeWorkshopWorldbookMetadataValue(entry, field) {
     const raw = entry;
@@ -2526,6 +2537,10 @@ function describeCandidateProblems(candidate) {
         problems.push('没有发现 [DLC] 命名头，仅依赖旧 metadata 识别');
     if (candidate.workshopSourceMarkerCount === 0)
         problems.push('没有发现 [WS] 工坊来源标记');
+    if (candidate.missingIdentityBlockCount > 0)
+        problems.push(`${candidate.missingIdentityBlockCount} 个条目缺少 Workshop 身份块`);
+    if (candidate.malformedIdentityBlockCount > 0)
+        problems.push(`${candidate.malformedIdentityBlockCount} 个条目的 Workshop 身份块已损坏`);
     return problems;
 }
 async function scanCreativeWorkshopRepairCandidates(options = {}) {
@@ -2640,6 +2655,9 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
             .map(identity => identity.installedVersion)
             .filter((value) => Boolean(value)));
         const legacyNames = _.uniq(entries.map(entry => readStringMetadata(entry, 'fate_project_name')).filter((value) => Boolean(value)));
+        const identityBlockStatuses = entries.map(entry => getCreativeWorkshopWorldbookMetadataBlockStatus(String(entry.content || '')));
+        const missingIdentityBlockCount = identityBlockStatuses.filter(status => status === 'missing').length;
+        const malformedIdentityBlockCount = identityBlockStatuses.filter(status => status === 'malformed').length;
         const base = {
             candidateId,
             name,
@@ -2663,6 +2681,8 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
             metadata,
             missingEntryKeys: [],
             registryBacked: false,
+            missingIdentityBlockCount,
+            malformedIdentityBlockCount,
         };
         return {
             ...base,
@@ -2722,6 +2742,8 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
             metadata: makeMetadataReport([]),
             missingEntryKeys,
             registryBacked: true,
+            missingIdentityBlockCount: 0,
+            malformedIdentityBlockCount: 0,
             problems: [problem],
         });
     }
