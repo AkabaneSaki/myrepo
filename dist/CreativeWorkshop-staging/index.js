@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev4";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev5";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -433,6 +433,14 @@ function normalizeRegexInstallEntries(value) {
             }];
     });
 }
+function normalizeWorldbookEntryKeys(value) {
+    if (!Array.isArray(value))
+        return [];
+    return Array.from(new Set(value.filter(_.isString).map(String).map(item => item.trim()).filter(Boolean)));
+}
+function getCreativeWorkshopWorldbookInstallEntryKeys(projectId) {
+    return normalizeWorldbookEntryKeys(getCreativeWorkshopInstallRecord(projectId)?.worldbookEntryKeys);
+}
 function getCreativeWorkshopRegexInstallEntries(projectId) {
     return normalizeRegexInstallEntries(getCreativeWorkshopInstallRecord(projectId)?.regexEntries);
 }
@@ -573,6 +581,9 @@ function setCreativeWorkshopInstallRecord(projectId, patch) {
         regexEntries: patch.regexEntries !== undefined
             ? normalizeRegexInstallEntries(patch.regexEntries)
             : normalizeRegexInstallEntries(current?.regexEntries),
+        worldbookEntryKeys: patch.worldbookEntryKeys !== undefined
+            ? normalizeWorldbookEntryKeys(patch.worldbookEntryKeys)
+            : normalizeWorldbookEntryKeys(current?.worldbookEntryKeys),
         installedAt: Date.now(),
     };
     writeInstallRegistry(registry);
@@ -2029,6 +2040,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
             worldbookName: null,
             installedVersion: detail.project.version || expectedVersion || null,
             originalEntryStates,
+            worldbookEntryKeys: [],
         });
         return detail;
     }
@@ -2050,6 +2062,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
         worldbookName,
         installedVersion: detail.project.version || expectedVersion || null,
         originalEntryStates,
+        worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
     });
     return detail;
 }
@@ -2102,6 +2115,7 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
         worldbookName: prepared.length > 0 ? worldbookName : null,
         installedVersion: detail.project.version || expectedVersion || null,
         originalEntryStates,
+        worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
     });
     return detail;
 }
@@ -2618,7 +2632,7 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
     });
     const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
     const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
-    const candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
+    let candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
         const entries = candidateRows.map(row => row.entry);
         const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
             entries.map(entry => readStringMetadata(entry, 'fate_project_name')).find(Boolean) ||
@@ -2676,12 +2690,63 @@ async function scanCreativeWorkshopRepairCandidates(options = {}) {
                     ? regexVersions[0]
                     : null,
             metadata,
+            missingEntryKeys: [],
+            registryBacked: false,
         };
         return {
             ...base,
             problems: describeCandidateProblems(base),
         };
     });
+    const installRecords = getCreativeWorkshopInstallRecords();
+    for (const [projectId, record] of Object.entries(installRecords)) {
+        const worldbookName = String(record?.worldbookName || '').trim();
+        const expectedEntryKeys = getCreativeWorkshopWorldbookInstallEntryKeys(projectId);
+        if (!worldbookName || expectedEntryKeys.length === 0)
+            continue;
+        const worldbookRow = rows.find(row => row.readable && row.worldbookName === worldbookName);
+        if (!worldbookRow)
+            continue;
+        const actualEntries = worldbookRow.entries.filter(entry => readStringMetadata(entry, 'cw_project_id') === projectId);
+        const actualEntryKeys = new Set(actualEntries
+            .map(entry => readStringMetadata(entry, 'cw_entry_key'))
+            .filter((value) => Boolean(value)));
+        const missingEntryKeys = expectedEntryKeys.filter(entryKey => !actualEntryKeys.has(entryKey));
+        if (missingEntryKeys.length === 0)
+            continue;
+        const existing = candidates.find(candidate => candidate.worldbookName === worldbookName && candidate.detectedProjectIds.includes(projectId));
+        const problem = `缺少 ${missingEntryKeys.length} 个已安装的 Workshop 世界书条目`;
+        if (existing) {
+            existing.missingEntryKeys = missingEntryKeys;
+            existing.registryBacked = true;
+            if (!existing.problems.includes(problem))
+                existing.problems.push(problem);
+            continue;
+        }
+        const matchingRegexes = regexes.filter(regex => resolveRegexIdentity(regex)?.projectId === projectId);
+        const regexIds = matchingRegexes.map(regex => getCreativeWorkshopRegexId(regex)).filter(Boolean);
+        candidates.push({
+            candidateId: candidateIdFor(worldbookName, projectId),
+            name: projectId,
+            category: null,
+            worldbookName,
+            entryUids: [],
+            regexIds: _.uniq(regexIds),
+            entryCount: 0,
+            regexCount: _.uniq(regexIds).length,
+            unaddressableEntryCount: 0,
+            dlcHeaderCount: 0,
+            workshopSourceMarkerCount: 0,
+            detectedProjectId: projectId,
+            detectedProjectIds: [projectId],
+            legacyProjectName: null,
+            localVersion: _.isString(record.installedVersion) ? record.installedVersion : null,
+            metadata: makeMetadataReport([]),
+            missingEntryKeys,
+            registryBacked: true,
+            problems: [problem],
+        });
+    }
     return {
         candidates: candidates.sort((a, b) => a.worldbookName.localeCompare(b.worldbookName) || a.name.localeCompare(b.name)),
         unreadableWorldbookNames: rows.filter(row => !row.readable).map(row => row.worldbookName),
@@ -2726,7 +2791,14 @@ function normalizeRepairTarget(target) {
         ? Number(target.expectedRegexCount)
         : undefined;
     if (entryUids.length === 0 && regexIds.length === 0) {
-        throw new Error('没有可安全定位的旧 DLC 内容；已禁止自动删除');
+        const installRecord = getCreativeWorkshopInstallRecord(projectId);
+        const expectedWorldbookKeys = getCreativeWorkshopWorldbookInstallEntryKeys(projectId);
+        const registryBackedReinstall = Boolean(installRecord &&
+            installRecord.worldbookName === worldbookName &&
+            expectedWorldbookKeys.length > 0);
+        if (!registryBackedReinstall) {
+            throw new Error('没有可安全定位的旧 DLC 内容；已禁止自动删除');
+        }
     }
     if (expectedEntryCount !== undefined && entryUids.length !== expectedEntryCount) {
         throw new Error(`旧 DLC 条目快照不完整：扫描到 ${expectedEntryCount} 个条目，但只有 ${entryUids.length} 个可定位 UID；已禁止自动删除`);
@@ -2809,6 +2881,7 @@ async function repairCreativeWorkshopProject(rawTarget) {
         setCreativeWorkshopInstallRecord(target.projectId, {
             worldbookName: target.worldbookName,
             installedVersion: detail.project.version || target.projectVersion || null,
+            worldbookEntryKeys: prepared.map(item => `${target.projectId}:${item.entryKey}`),
         });
         for (const sourceProjectId of target.sourceProjectIds || []) {
             if (sourceProjectId !== target.projectId)
