@@ -308,6 +308,7 @@ export async function installCreativeWorkshopProject(
       worldbookName: null,
       installedVersion: detail.project.version || expectedVersion || null,
       originalEntryStates,
+      worldbookEntryKeys: [],
     });
     return detail;
   }
@@ -328,6 +329,7 @@ export async function installCreativeWorkshopProject(
     worldbookName,
     installedVersion: detail.project.version || expectedVersion || null,
     originalEntryStates,
+    worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
   });
   return detail;
 }
@@ -392,6 +394,7 @@ export async function updateCreativeWorkshopProject(
     worldbookName: prepared.length > 0 ? worldbookName : null,
     installedVersion: detail.project.version || expectedVersion || null,
     originalEntryStates,
+    worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
   });
   return detail;
 }

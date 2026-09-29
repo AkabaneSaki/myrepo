@@ -76,7 +76,7 @@ function publicCounts(projects) {
   return { total: projects.length, byType };
 }
 
-export async function installProjectCatalogFixture(page, { projects = createFixtureProjects() } = {}) {
+export async function installProjectCatalogFixture(page, { projects = createFixtureProjects(), responseDelayMs = 0 } = {}) {
   const byId = new Map(projects.map(project => [String(project.id), project]));
 
   await page.route(/\/api\/projects\/[^/?]+(?:\?.*)?$/, async route => {
@@ -120,6 +120,10 @@ export async function installProjectCatalogFixture(page, { projects = createFixt
     const pageSize = Math.max(1, Number(url.searchParams.get('pageSize') || 48));
     const start = pageIndex * pageSize;
     const pageProjects = filtered.slice(start, start + pageSize);
+
+    if (responseDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, responseDelayMs));
+    }
 
     await route.fulfill({
       status: 200,

@@ -28,6 +28,7 @@ export type CreativeWorkshopInstallRecord = {
   installedVersion?: string | null;
   originalEntryStates?: CreativeWorkshopOriginalEntryState[];
   regexEntries?: CreativeWorkshopRegexInstallEntry[];
+  worldbookEntryKeys?: string[];
   installedAt: number;
 };
 
@@ -83,6 +84,15 @@ function normalizeRegexInstallEntries(value: unknown): CreativeWorkshopRegexInst
       installedVersion: raw.installedVersion ?? null,
     }];
   });
+}
+
+function normalizeWorldbookEntryKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.filter(_.isString).map(String).map(item => item.trim()).filter(Boolean)));
+}
+
+export function getCreativeWorkshopWorldbookInstallEntryKeys(projectId: string): string[] {
+  return normalizeWorldbookEntryKeys(getCreativeWorkshopInstallRecord(projectId)?.worldbookEntryKeys);
 }
 
 export function getCreativeWorkshopRegexInstallEntries(projectId: string): CreativeWorkshopRegexInstallEntry[] {
@@ -238,6 +248,7 @@ export function setCreativeWorkshopInstallRecord(
     installedVersion?: string | null;
     originalEntryStates?: CreativeWorkshopOriginalEntryState[];
     regexEntries?: CreativeWorkshopRegexInstallEntry[];
+    worldbookEntryKeys?: string[];
   },
 ) {
   const registry = readInstallRegistry();
@@ -253,6 +264,9 @@ export function setCreativeWorkshopInstallRecord(
     regexEntries: patch.regexEntries !== undefined
       ? normalizeRegexInstallEntries(patch.regexEntries)
       : normalizeRegexInstallEntries(current?.regexEntries),
+    worldbookEntryKeys: patch.worldbookEntryKeys !== undefined
+      ? normalizeWorldbookEntryKeys(patch.worldbookEntryKeys)
+      : normalizeWorldbookEntryKeys(current?.worldbookEntryKeys),
     installedAt: Date.now(),
   };
   writeInstallRegistry(registry);

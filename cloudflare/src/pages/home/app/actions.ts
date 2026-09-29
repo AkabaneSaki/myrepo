@@ -36,6 +36,7 @@ export const homeAppActionsScript = String.raw`
     const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
     const mobileDlcRepairBtn = document.getElementById('mobileDlcRepairBtn');
     const mobileDlcUpdateStatusBtn = document.getElementById('mobileDlcUpdateStatusBtn');
+    const mobileHeaderNoticeBtn = document.getElementById('mobileHeaderNoticeBtn');
     const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
     const mobileUploadBtn = document.getElementById('mobileUploadBtn');
     const mobileDlcKitchenSettingsBtn = document.getElementById('mobileDlcKitchenSettingsBtn');
@@ -106,6 +107,7 @@ export const homeAppActionsScript = String.raw`
     };
     if (mobileToolClose) mobileToolClose.onclick = closeMobileTool;
     if (mobileToolBackdrop) mobileToolBackdrop.onclick = closeMobileTool;
+    if (mobileHeaderNoticeBtn) mobileHeaderNoticeBtn.onclick = event => { event.stopPropagation(); openMobileTool('account'); };
     document.querySelectorAll('[data-mobile-tool]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();

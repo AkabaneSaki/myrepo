@@ -44,7 +44,8 @@ function isRepairCandidateSafe(candidate) {
   if (!candidate) return false;
   if (Number(candidate.unaddressableEntryCount || 0) > 0) return false;
   return (Array.isArray(candidate.entryUids) && candidate.entryUids.length > 0)
-    || (Array.isArray(candidate.regexIds) && candidate.regexIds.length > 0);
+    || (Array.isArray(candidate.regexIds) && candidate.regexIds.length > 0)
+    || (candidate.registryBacked && Array.isArray(candidate.missingEntryKeys) && candidate.missingEntryKeys.length > 0);
 }
 
 function getRepairItem(candidateId) {

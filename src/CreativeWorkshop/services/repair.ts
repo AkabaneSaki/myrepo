@@ -3,6 +3,9 @@ import {
   createCreativeWorkshopRegexIdentityResolver,
   deleteCreativeWorkshopInstallRecord,
   getCreativeWorkshopBoundWorldbookNames,
+  getCreativeWorkshopInstallRecord,
+  getCreativeWorkshopInstallRecords,
+  getCreativeWorkshopWorldbookInstallEntryKeys,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
 import { invalidateCreativeWorkshopProjectCache } from './project-fetch';
@@ -89,6 +92,8 @@ export type CreativeWorkshopRepairCandidate = {
   legacyProjectName: string | null;
   localVersion: string | null;
   metadata: CreativeWorkshopRepairMetadataFieldReport[];
+  missingEntryKeys: string[];
+  registryBacked: boolean;
   problems: string[];
 };
 
@@ -679,7 +684,7 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
   const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
-  const candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
+  let candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
     const entries = candidateRows.map(row => row.entry);
     const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
       entries.map(entry => readStringMetadata(entry, 'fate_project_name')).find(Boolean) ||
@@ -739,6 +744,8 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
           ? regexVersions[0]
           : null,
       metadata,
+      missingEntryKeys: [],
+      registryBacked: false,
     } satisfies Omit<CreativeWorkshopRepairCandidate, 'problems'>;
 
     return {
@@ -746,6 +753,62 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       problems: describeCandidateProblems(base),
     } satisfies CreativeWorkshopRepairCandidate;
   });
+
+  const installRecords = getCreativeWorkshopInstallRecords();
+  for (const [projectId, record] of Object.entries(installRecords)) {
+    const worldbookName = String(record?.worldbookName || '').trim();
+    const expectedEntryKeys = getCreativeWorkshopWorldbookInstallEntryKeys(projectId);
+    if (!worldbookName || expectedEntryKeys.length === 0) continue;
+
+    const worldbookRow = rows.find(row => row.readable && row.worldbookName === worldbookName);
+    if (!worldbookRow) continue;
+
+    const actualEntries = worldbookRow.entries.filter(
+      entry => readStringMetadata(entry, 'cw_project_id') === projectId,
+    );
+    const actualEntryKeys = new Set(
+      actualEntries
+        .map(entry => readStringMetadata(entry, 'cw_entry_key'))
+        .filter((value): value is string => Boolean(value)),
+    );
+    const missingEntryKeys = expectedEntryKeys.filter(entryKey => !actualEntryKeys.has(entryKey));
+    if (missingEntryKeys.length === 0) continue;
+
+    const existing = candidates.find(candidate =>
+      candidate.worldbookName === worldbookName && candidate.detectedProjectIds.includes(projectId),
+    );
+    const problem = `缺少 ${missingEntryKeys.length} 个已安装的 Workshop 世界书条目`;
+    if (existing) {
+      existing.missingEntryKeys = missingEntryKeys;
+      existing.registryBacked = true;
+      if (!existing.problems.includes(problem)) existing.problems.push(problem);
+      continue;
+    }
+
+    const matchingRegexes = regexes.filter(regex => resolveRegexIdentity(regex)?.projectId === projectId);
+    const regexIds = matchingRegexes.map(regex => getCreativeWorkshopRegexId(regex)).filter(Boolean);
+    candidates.push({
+      candidateId: candidateIdFor(worldbookName, projectId),
+      name: projectId,
+      category: null,
+      worldbookName,
+      entryUids: [],
+      regexIds: _.uniq(regexIds),
+      entryCount: 0,
+      regexCount: _.uniq(regexIds).length,
+      unaddressableEntryCount: 0,
+      dlcHeaderCount: 0,
+      workshopSourceMarkerCount: 0,
+      detectedProjectId: projectId,
+      detectedProjectIds: [projectId],
+      legacyProjectName: null,
+      localVersion: _.isString(record.installedVersion) ? record.installedVersion : null,
+      metadata: makeMetadataReport([]),
+      missingEntryKeys,
+      registryBacked: true,
+      problems: [problem],
+    });
+  }
 
   return {
     candidates: candidates.sort((a, b) => a.worldbookName.localeCompare(b.worldbookName) || a.name.localeCompare(b.name)),
@@ -790,7 +853,16 @@ function normalizeRepairTarget(target: CreativeWorkshopRepairTarget): CreativeWo
     ? Number(target.expectedRegexCount)
     : undefined;
   if (entryUids.length === 0 && regexIds.length === 0) {
-    throw new Error('没有可安全定位的旧 DLC 内容；已禁止自动删除');
+    const installRecord = getCreativeWorkshopInstallRecord(projectId);
+    const expectedWorldbookKeys = getCreativeWorkshopWorldbookInstallEntryKeys(projectId);
+    const registryBackedReinstall = Boolean(
+      installRecord &&
+      installRecord.worldbookName === worldbookName &&
+      expectedWorldbookKeys.length > 0,
+    );
+    if (!registryBackedReinstall) {
+      throw new Error('没有可安全定位的旧 DLC 内容；已禁止自动删除');
+    }
   }
   if (expectedEntryCount !== undefined && entryUids.length !== expectedEntryCount) {
     throw new Error(`旧 DLC 条目快照不完整：扫描到 ${expectedEntryCount} 个条目，但只有 ${entryUids.length} 个可定位 UID；已禁止自动删除`);
@@ -903,6 +975,7 @@ export async function repairCreativeWorkshopProject(rawTarget: CreativeWorkshopR
     setCreativeWorkshopInstallRecord(target.projectId, {
       worldbookName: target.worldbookName,
       installedVersion: detail.project.version || target.projectVersion || null,
+      worldbookEntryKeys: prepared.map(item => `${target.projectId}:${item.entryKey}`),
     });
     for (const sourceProjectId of target.sourceProjectIds || []) {
       if (sourceProjectId !== target.projectId) deleteCreativeWorkshopInstallRecord(sourceProjectId);

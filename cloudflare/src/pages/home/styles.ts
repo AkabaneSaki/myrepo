@@ -1147,6 +1147,9 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
   .workshop-close-btn { width:36px; height:36px; min-height:36px; padding:0; justify-content:center; border-radius:9px; }
   .workshop-close-btn { font-size:0; }
   .workshop-close-btn i { font-size:.82rem; }
+  .mobile-header-notice-btn { position:relative; width:36px; height:36px; display:grid; place-items:center; flex:none; padding:0; border:1px solid rgba(162,139,107,.20); border-radius:9px; background:rgba(162,139,107,.08); color:#c5ad8b; }
+  .mobile-header-notice-btn > i { font-size:.82rem; }
+  .mobile-header-notice-btn > span { position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; display:grid; place-items:center; padding:0 4px; border:2px solid #151619; border-radius:999px; background:#b96f66; color:#fff; font:800 .58rem/1 system-ui,sans-serif; }
   .user-menu-trigger { width:38px; height:38px; padding:0; justify-content:center; }
   .user-menu-trigger .user-menu-name,.user-menu-trigger > i { display:none; }
   .avatar { width:34px; height:34px; border:1px solid rgba(255,255,255,.12); }

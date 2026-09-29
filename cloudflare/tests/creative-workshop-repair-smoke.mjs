@@ -66,12 +66,12 @@ function makeLodash() {
   };
 }
 
-function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false, boundWorldbookNames = null, initialVariables = {} } = {}) {
+function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes = [], failFirstApply = false, boundWorldbookNames = null, initialVariables = {}, initialInstallRecords = {} } = {}) {
   const worldbooks = Object.fromEntries(Object.entries(initialWorldbooks || {}).map(([name, entries]) => [name, structuredClone(entries)]));
   let regexes = structuredClone(initialRegexes);
   let variables = structuredClone(initialVariables);
   let applyAttempts = 0;
-  const installRecords = new Map();
+  const installRecords = new Map(Object.entries(structuredClone(initialInstallRecords)));
 
   const module = { exports: {} };
   const context = {
@@ -86,7 +86,18 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
           getCreativeWorkshopBoundWorldbookNames: () => Array.isArray(boundWorldbookNames)
             ? [...boundWorldbookNames]
             : Object.keys(worldbooks),
-          setCreativeWorkshopInstallRecord: (projectId, record) => installRecords.set(projectId, { ...record }),
+          getCreativeWorkshopInstallRecord: projectId => installRecords.get(projectId) || null,
+          getCreativeWorkshopInstallRecords: () => Object.fromEntries(
+            [...installRecords.entries()].map(([projectId, record]) => [projectId, structuredClone(record)]),
+          ),
+          getCreativeWorkshopWorldbookInstallEntryKeys: projectId => {
+            const value = installRecords.get(projectId)?.worldbookEntryKeys;
+            return Array.isArray(value) ? [...new Set(value.filter(item => typeof item === 'string' && item))] : [];
+          },
+          setCreativeWorkshopInstallRecord: (projectId, record) => installRecords.set(projectId, {
+            ...(installRecords.get(projectId) || {}),
+            ...structuredClone(record),
+          }),
         };
       }
       if (specifier === './project-fetch') {
@@ -290,6 +301,80 @@ officialBaseline.entries = [
   assert.equal(sentinel.extra?.cw_project_version, '1');
   assert.equal(sentinel.extra?.cw_entry_key, '__cw_repair_integrity_sentinel__:sentinel');
   assert.equal(String(sentinel.extra?.cw_name_format_version), '4');
+}
+
+{
+  const projectId = '33333333-3333-4333-8333-333333333333';
+  const survivingEntry = {
+    uid: 301,
+    name: '[WS][DLC][事件]Manifest Smoke',
+    extra: {
+      cw_project_id: projectId,
+      cw_project_name_display: 'Manifest Smoke',
+      cw_project_version: '1.2.3',
+      cw_entry_key: `${projectId}:entry-a`,
+      cw_name_format_version: '4',
+    },
+  };
+  const harness = createHarness({
+    worldbooks: { DLC: [survivingEntry] },
+    initialInstallRecords: {
+      [projectId]: {
+        projectId,
+        worldbookName: 'DLC',
+        installedVersion: '1.2.3',
+        worldbookEntryKeys: [`${projectId}:entry-a`, `${projectId}:entry-b`],
+        installedAt: Date.now(),
+      },
+    },
+  });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  const candidate = report.candidates.find(item => item.detectedProjectId === projectId);
+  assert.ok(candidate, 'registry manifest must keep a partially missing DLC visible to Repair');
+  assert.equal(candidate.registryBacked, true);
+  assert.deepEqual(Array.from(candidate.missingEntryKeys), [`${projectId}:entry-b`]);
+  assert.ok(candidate.problems.some(problem => problem.includes('缺少 1 个已安装')));
+}
+
+{
+  const projectId = '44444444-4444-4444-8444-444444444444';
+  const harness = createHarness({
+    worldbooks: { DLC: [] },
+    initialInstallRecords: {
+      [projectId]: {
+        projectId,
+        worldbookName: 'DLC',
+        installedVersion: '1.0.0',
+        worldbookEntryKeys: [`${projectId}:only-entry`],
+        installedAt: Date.now(),
+      },
+    },
+  });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  const candidate = report.candidates.find(item => item.detectedProjectId === projectId);
+  assert.ok(candidate, 'registry manifest must surface a project even when every managed Worldbook entry is missing');
+  assert.equal(candidate.entryCount, 0);
+  assert.equal(candidate.registryBacked, true);
+  assert.deepEqual(Array.from(candidate.entryUids), []);
+  assert.deepEqual(Array.from(candidate.missingEntryKeys), [`${projectId}:only-entry`]);
+
+  const repaired = await harness.api.repairCreativeWorkshopProject({
+    candidateId: candidate.candidateId,
+    projectId,
+    worldbookName: 'DLC',
+    entryUids: [],
+    regexIds: [],
+    expectedEntryCount: 0,
+    expectedRegexCount: 0,
+    sourceProjectIds: [projectId],
+  });
+  assert.equal(repaired.success, true, 'registry-backed fully missing DLC must be reinstallable without deleting unrelated entries');
+  assert.equal(harness.worldbooks.DLC.some(entry => entry.extra?.cw_project_id === projectId), true);
+  assert.deepEqual(
+    harness.installRecords.get(projectId)?.worldbookEntryKeys,
+    [`${projectId}:latest-entry`],
+    'successful repair must refresh the expected Worldbook manifest',
+  );
 }
 
 {

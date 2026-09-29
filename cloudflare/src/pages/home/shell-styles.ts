@@ -1205,6 +1205,7 @@ export const homeShellStyles = String.raw`
   font-size:.68rem;
 }
 .projects-empty { grid-column:1/-1; padding:28px 8px; text-align:center; color:var(--cw-text-muted); }
+.projects-loading { display:flex; align-items:center; justify-content:center; gap:8px; }
 .mobile-breadcrumb { display:none; }
 
 @media (min-width:1024px) {

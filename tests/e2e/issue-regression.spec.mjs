@@ -121,6 +121,46 @@ test('#39 browser search, category and official-tag filters keep deterministic r
 });
 
 for (const viewportName of ['desktop', 'mobile']) {
+  test.describe(`#9 category loading state [${viewportName}]`, () => {
+    test.use({ profileName: 'authenticated-player', viewportName });
+
+    test('shows loading instead of a false empty state while the category request is pending', async ({
+      page,
+      session,
+      discover,
+      diagnostics,
+    }) => {
+      const projects = createFixtureProjects(20);
+      await installProjectCatalogFixture(page, { projects, responseDelayMs: 900 });
+
+      await session.open();
+      await discover.openCatalog('all');
+
+      let categoryButton = session.frame.locator('[data-base-tag="角色"]:visible').first();
+      if (!(await categoryButton.count())) {
+        await session.frame.locator('[data-mobile-tool="page"]:visible').first().click();
+        await expect(session.frame.locator('#mobileToolSheet')).toHaveClass(/show/);
+        categoryButton = session.frame.locator('[data-base-tag="角色"]:visible').first();
+      }
+
+      await expect(categoryButton).toBeVisible();
+      await categoryButton.click();
+
+      const loading = session.frame.locator('.projects-loading');
+      await expect(loading).toBeVisible({ timeout: 500 });
+      await expect(loading).toContainText('正在载入项目');
+      await expect(session.frame.locator('.projects-empty')).not.toContainText('暂无项目');
+
+      await expect(loading).toHaveCount(0, { timeout: 5_000 });
+      const categoryIds = await discover.visibleProjectIds();
+      expect(categoryIds.length).toBeGreaterThan(0);
+      expect(categoryIds.every(id => projects.find(project => project.id === id)?.projectType === '角色')).toBe(true);
+      diagnostics.assertHealthy();
+    });
+  });
+}
+
+for (const viewportName of ['desktop', 'mobile']) {
   test.describe(`#47 daily random draw [${viewportName}]`, () => {
     test.use({ profileName: 'authenticated-player', viewportName });
 
