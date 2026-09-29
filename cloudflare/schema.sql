@@ -87,6 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_public_type_created
 CREATE INDEX IF NOT EXISTS idx_projects_public_id
     ON projects(id)
     WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
+CREATE INDEX IF NOT EXISTS idx_projects_public_type_id
+    ON projects(project_type, id)
+    WHERE status = 'approved' AND is_published = 1 AND visibility = 1;
 CREATE INDEX IF NOT EXISTS idx_projects_public_normalized_name
     ON projects(lower(trim(name)))
     WHERE status = 'approved' AND is_published = 1 AND visibility = 1;

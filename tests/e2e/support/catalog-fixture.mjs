@@ -143,6 +143,7 @@ export async function installDailyRandomFixture(
 ) {
   let count = Math.max(0, Number(initialCount || 0));
   let requestCount = 0;
+  const requestBodies = [];
   const normalizedLimit = Math.max(1, Number(limit || 10));
   const payload = () => ({
     count,
@@ -163,6 +164,7 @@ export async function installDailyRandomFixture(
   await page.route('**/api/projects/random-draw', async route => {
     if (route.request().method() !== 'POST') return route.continue();
     requestCount += 1;
+    requestBodies.push(route.request().postDataJSON());
     if (responseDelayMs > 0) {
       await new Promise(resolve => setTimeout(resolve, responseDelayMs));
     }
@@ -180,5 +182,6 @@ export async function installDailyRandomFixture(
   return {
     getCount: () => count,
     getRequestCount: () => requestCount,
+    getRequestBodies: () => requestBodies,
   };
 }

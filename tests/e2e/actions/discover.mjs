@@ -50,7 +50,7 @@ export class DiscoverActions {
     const responsePromise = this.#waitForProjectsResponse();
     await button.click();
     await responsePromise;
-    await expect(this.root.locator(`[data-base-tag="${escapeAttr(category)}"].active:visible`)).toHaveCount(1);
+    await expect(this.root.locator(`[data-base-tag="${escapeAttr(category)}"].active`).first()).toHaveCount(1);
     await this.expectPage(1);
   }
 
@@ -288,16 +288,18 @@ export class DiscoverActions {
     return nextOverlay;
   }
 
-  async backFromRandomDraw(overlay) {
+  async backFromRandomDraw(overlay, { category = null } = {}) {
     this.diagnostics?.markStep('back from daily random draw');
-    let back = overlay.locator('[data-daily-random-back]:visible').first();
-    if (!(await back.count())) {
-      back = overlay.locator('[data-mobile-detail-back]:visible').first();
-    }
+    const back = overlay.locator('[data-daily-random-back]:visible').first();
     await expect(back).toBeVisible();
     await back.click();
     await expect(overlay).toHaveCount(0);
-    await expect(this.root.locator('.discover-home')).toBeVisible();
+    if (category) {
+      await expect(this.root.locator('.projects-grid')).toBeVisible();
+      await expect(this.root.locator(`[data-base-tag="${escapeAttr(category)}"].active`).first()).toHaveCount(1);
+    } else {
+      await expect(this.root.locator('.discover-home')).toBeVisible();
+    }
   }
 
   async clearOfficialTags() {

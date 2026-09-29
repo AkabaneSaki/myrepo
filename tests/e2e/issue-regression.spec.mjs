@@ -153,5 +153,30 @@ for (const viewportName of ['desktop', 'mobile']) {
 
       diagnostics.assertHealthy();
     });
+
+    test('draws from the selected category and returns to it', async ({
+      page,
+      session,
+      discover,
+      diagnostics,
+    }) => {
+      await installProjectCatalogFixture(page, { projects: createFixtureProjects(20) });
+      const randomFixture = await installDailyRandomFixture(page, {
+        projectId: 'fixture-project-001',
+      });
+
+      await session.open();
+      await discover.openCatalog('角色');
+      await expect(session.frame.locator('.daily-random-draw')).toContainText('从「角色」中抽取');
+
+      const overlay = await discover.drawRandomProject();
+      await expect(overlay.locator('.detail-project-name')).toHaveText('Fixture Project 001');
+      expect(randomFixture.getRequestBodies()).toEqual([
+        expect.objectContaining({ projectType: '角色' }),
+      ]);
+
+      await discover.backFromRandomDraw(overlay, { category: '角色' });
+      diagnostics.assertHealthy();
+    });
   });
 }

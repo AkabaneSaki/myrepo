@@ -1174,7 +1174,8 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 .daily-random-detail-actions .btn { min-height:40px; justify-content:center; }
 .daily-random-detail-actions [data-daily-random-next] { min-width:230px; }
 @media (max-width:640px) {
-  .daily-random-detail-actions { gap:8px; padding:10px calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); background:rgba(15,16,18,.98); }
+  .daily-random-detail-modal .mobile-detail-bottom-dock { display:none; }
+  .daily-random-detail-actions { position:fixed; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); z-index:10030; gap:8px; padding:8px; border:1px solid rgba(255,255,255,.085); border-radius:14px; background:rgba(15,16,18,.98); }
   .daily-random-detail-actions .btn { min-width:0; min-height:44px; padding:0 12px; font-size:.76rem; }
   .daily-random-detail-actions [data-daily-random-back] { flex:0 0 auto; }
   .daily-random-detail-actions [data-daily-random-next] { min-width:0; flex:1 1 auto; }

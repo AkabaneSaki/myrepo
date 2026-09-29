@@ -1,10 +1,13 @@
 import { test as base, chromium } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { WorkshopSession } from '../actions/workshop-session.mjs';
 import { DiscoverActions } from '../actions/discover.mjs';
 import { ProjectActions } from '../actions/project.mjs';
 import { UpdateCenterActions } from '../actions/update-center.mjs';
 import { createStProfileRun, getWorkshopViewport } from '../support/profiles.mjs';
 import { JourneyDiagnostics } from '../support/diagnostics.mjs';
+
+const workshopConfig = JSON.parse(readFileSync(new URL('../../../config/workshop.json', import.meta.url), 'utf8'));
 
 export const test = base.extend({
   profileName: ['authenticated-player', { option: true }],
@@ -24,6 +27,18 @@ export const test = base.extend({
       // Startup extensions may save the active ST chat. Journeys only inspect Workshop,
       // so keep their copied browser sessions from writing to Master's real chat.
       await context.route('**/api/chats/save', route => route.fulfill({ status: 204 }));
+
+      if (process.env.ST_WORKSHOP_PREVIEW_URL) {
+        for (const path of ['/', '/assets/home.js']) {
+          await context.route(`${workshopConfig.endpoints.staging}${path}`, async route => {
+            const response = await route.fetch({
+              url: new URL(path, process.env.ST_WORKSHOP_PREVIEW_URL).href,
+              headers: { accept: '*/*' },
+            });
+            await route.fulfill({ response });
+          });
+        }
+      }
 
       await use(context);
     } finally {
