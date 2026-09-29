@@ -1,6 +1,7 @@
 # Configuration / Hardcode Audit
 
 Date: 2026-09-19
+Last reviewed: 2026-09-29 — no new high-risk duplicated source of truth found during the documentation audit.
 
 ## Rule
 

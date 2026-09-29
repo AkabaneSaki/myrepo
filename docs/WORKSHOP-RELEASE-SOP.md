@@ -54,10 +54,18 @@ Example:
 
 In that example, users on 3.4.1 may continue using the Workshop without a forced-update popup.
 
+## Branch source rule
+
+Release identity and branch base are separate decisions:
+
+- normal staging feature/fix work starts from freshly fetched `origin/staging`;
+- production hotfix/release work starts from the exact current production baseline (`upstream/main` / owner release line);
+- never start a normal staging feature from owner production merely because it may later be promoted upstream.
+
 ## Server-only release
 
 ```text
-change Worker/web code
+change Worker/web code on a task branch based on origin/staging
 → tests
 → origin/staging
 → staging Worker exact SHA
@@ -71,7 +79,8 @@ change Worker/web code
 ## Client release
 
 ```text
-client-side change requires new import @version
+client-side change on the active staging line requires new import @version
+→ start from refreshed origin/staging
 → update config/workshop.json once
 → run pnpm check:workshop-config
 → build both client bundles

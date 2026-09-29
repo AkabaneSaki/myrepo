@@ -12,6 +12,7 @@ These rules apply to all agents and automated sessions working in this repositor
 - Normally, `upstream/main` is the canonical production source branch.
 - `origin/main` should be kept synchronized with `upstream/main`; do not use the fork `main` as a task-development branch.
 - `origin/staging` is the long-lived integration branch used for Master validation of the active feature line before its owner PR. Production patch hotfixes may use the separate hotfix path defined below, then must be forward-ported into `origin/staging`.
+- Normal staging feature/fix task branches start from a freshly fetched `origin/staging`, not from `upstream/main`. `upstream/main` remains the production baseline and the starting point for production-line hotfix/release work.
 
 ### Release version policy
 
@@ -34,6 +35,24 @@ These rules apply to all agents and automated sessions working in this repositor
 See `docs/GIT-WORKFLOW.md` for the complete hotfix and forward-port flow.
 
 Before the first Git remote operation in every session, verify both actual remote URLs. Never infer ownership from a remote name alone.
+
+## Issue tracker boundary
+
+Use the two repositories for different lifecycle stages:
+
+- `uikawinwing/myrepo` Issues = staging features, UX/enhancements, experiments, future backlog, staging-only technical debt, and work not yet shipped to production.
+- `AkabaneSaki/myrepo` Issues = bugs/regressions already affecting the production line, production hotfixes, production security/privacy problems, production performance problems, and release blockers.
+
+Do not create a feature issue in the owner repository merely because the feature may eventually be promoted upstream.
+
+When migrating an old owner feature issue to the fork:
+
+1. inspect current code/tests first,
+2. create the fork issue with only the **remaining real work** rather than copying stale unchecked boxes,
+3. add the destination link to the owner issue,
+4. close the owner issue as `not planned` with an explicit note that tracking moved rather than pretending the work is complete.
+
+An already-near-complete legacy owner issue may be finished in place when migrating it would add more bookkeeping than value.
 
 ## Infrastructure boundary
 
@@ -142,26 +161,26 @@ Before commit, merge, rebase, push, tag, PR preparation, deploy, or branch clean
 4. Refresh owner main explicitly with:
    `git fetch upstream main:refs/remotes/upstream/main`
    Do not rely on `FETCH_HEAD` as proof that `upstream/main` is current.
-5. Compare the task branch against refreshed `upstream/main`.
+5. For staging-line work, also refresh `origin/staging` before creating/synchronizing the task branch and compare the task branch against that base. Keep the `upstream/main` comparison as a production-drift check.
 6. Never use `git add .` in a dirty multi-task workspace. Stage explicit reviewed paths only.
 7. Never force-push `upstream/main` or `origin/main`.
 8. Before `deploy staging`, refresh/verify `origin/staging` and record the exact deploy SHA.
 
 ## Normal task / staging / production flow
 
-1. Refresh `upstream/main`.
-2. Synchronize `origin/main` with `upstream/main` when needed.
-3. Create a short-lived task branch from refreshed `upstream/main`.
+1. Refresh both `upstream/main` and `origin/staging`.
+2. Synchronize `origin/main` with `upstream/main` when needed; this mirror step is independent from staging feature development.
+3. Create a short-lived staging feature/fix task branch from refreshed `origin/staging`.
 4. Implement, test, and review.
 5. Commit only the intended files.
 6. Push the task branch to `origin` when useful for backup/review.
-7. Integrate the accepted task commit(s) into the staging line.
+7. Integrate the accepted task commit(s) back into the refreshed staging line.
 8. Push the resulting exact commit to `origin/staging`.
 9. Verify the exact deploy SHA is present in `origin/staging`.
 10. Deploy that SHA to the verified personal staging Worker.
 11. Verify the staging site and let Master perform real-world acceptance testing.
 12. Repeat fixes through `origin/staging` → staging Worker until Master accepts the result.
-13. Only after staging acceptance, open/prepare a PR from the user fork to `AkabaneSaki:main`.
+13. Only after staging acceptance, prepare the owner PR from the accepted fork/staging history as appropriate.
 14. Merge through the owner repository when approved.
 15. Deploy the exact merged owner-main commit to the verified production environment.
 16. Re-sync the fork `main` and clean up temporary task branches when safe.
@@ -172,7 +191,17 @@ The normal staging-acceptance flow above applies to feature work and fixes targe
 
 ## Branch lifecycle
 
-Keep long-lived branches to a minimum:
+Keep long-lived branches to a minimum.
+
+Worktree rules:
+
+- Never create a worktree inside another worktree/repository; do not use nested `.worktrees/<task>` layouts for this project.
+- Prefer sibling worktrees beside the main checkout, for example `C:\Project\myrepo-wt-<task>`.
+- The same branch must not be checked out in multiple worktrees.
+- Do not use junctions/symlinks as a workaround for worktree-relative paths.
+- Prefer `git switch` / `git restore` over cross-worktree `git checkout` workflows.
+
+Long-lived branches:
 
 - `upstream/main`: canonical owner / production source branch.
 - `origin/main`: synchronized mirror of `upstream/main`, not a development branch.

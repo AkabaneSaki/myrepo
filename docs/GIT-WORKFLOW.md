@@ -15,10 +15,19 @@ Branch meaning:
 
 - `upstream/main` = canonical owner / production source branch.
 - `origin/main` = synchronized mirror of `upstream/main`; not a task-development branch.
-- `origin/staging` = Master-facing integration/test branch.
+- `origin/staging` = Master-facing integration/test branch and the normal base for active staging feature/fix task branches.
 - task branches = temporary `feature/*`, `fix/*`, `hotfix-*`, etc.
 
 Never infer repository ownership from a remote name. Verify URLs before the first remote operation of every session.
+
+### Issue tracker split
+
+The repositories also have different issue-tracking roles:
+
+- `uikawinwing/myrepo`: staging features, UX/enhancements, experiments, future backlog and staging technical debt.
+- `AkabaneSaki/myrepo`: production bugs/regressions, production hotfixes, production security/privacy/performance problems and release blockers.
+
+A feature being intended for a future owner PR is not a reason to open its planning issue in the owner repo. When migrating an old owner feature issue, rewrite it from current code/tests so the fork issue contains only remaining work; link the replacement and close the old owner issue as `not planned`, explicitly stating that tracking moved.
 
 ## 2. Mandatory terminology contract
 
@@ -147,6 +156,7 @@ git status -sb
 git branch --show-current
 git remote -v
 git fetch upstream main:refs/remotes/upstream/main
+git fetch origin staging:refs/remotes/origin/staging
 git branch -vv
 ```
 
@@ -157,11 +167,12 @@ Confirm:
 3. `origin` = `uikawinwing/myrepo`,
 4. `upstream` = `AkabaneSaki/myrepo`,
 5. `upstream/main` was freshly updated,
-6. exact files belonging to the current task.
+6. for staging-line work, `origin/staging` was freshly updated and is the intended task base,
+7. exact files belonging to the current task.
 
-Do not rely on `FETCH_HEAD` alone as proof that `upstream/main` is current.
+Do not rely on `FETCH_HEAD` alone as proof that either remote-tracking ref is current.
 
-Before staging deployment, additionally refresh/verify `origin/staging` and record the exact SHA to deploy.
+Before staging deployment, refresh/verify `origin/staging` again and record the exact SHA to deploy.
 
 If any item is unclear, stop before publishing or deploying.
 
@@ -239,9 +250,9 @@ See `docs/WORKSHOP-RELEASE-SOP.md` for the complete client-release decision tree
 This is the default workflow for feature work and fixes targeting the active staging feature line. Production patch hotfixes are the explicit exception and follow the release-version hotfix flow above.
 
 ```text
-1. refresh upstream/main
-2. sync origin/main if needed
-3. create task branch from refreshed upstream/main
+1. refresh upstream/main and origin/staging
+2. sync origin/main from upstream/main if needed (mirror maintenance only)
+3. create the staging feature/fix task branch from refreshed origin/staging
 4. implement
 5. local tests + review
 6. stage explicit files only
@@ -269,6 +280,18 @@ Master has not accepted staging
 → no owner PR merge
 → no production deploy
 ```
+
+### Worktree layout
+
+Use sibling worktrees for parallel tasks. Do not create new worktrees inside the main checkout or inside another worktree.
+
+```text
+C:\Project\myrepo-git
+C:\Project\myrepo-wt-feature-a
+C:\Project\myrepo-wt-fix-b
+```
+
+One branch may be checked out in only one worktree at a time. Do not use junctions/symlinks to fake the old relative layout.
 
 ## 8. What "integrate into staging" means
 

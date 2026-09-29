@@ -1,7 +1,7 @@
 # 封面图交付方案
 
 Status: **active plan — wsrv fallback implemented; direct public asset delivery pending revalidation**  
-Updated: **2026-09-19**
+Revalidated: **2026-09-29** — current staging still uses the wsrv-first fallback; no public R2 custom domain/bucket migration has been wired yet.
 
 ## 当前止血方案
 

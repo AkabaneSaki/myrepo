@@ -1,7 +1,7 @@
 # Creative Workshop — Architecture / Policy Reference
 
 Status: **maintained reference**  
-Updated: **2026-09-19**
+Updated: **2026-09-29**
 
 > 用途：给未来维护者 / AI session 快速判断「规则在哪里、哪些值得集中、哪些不要动」，减少每次重新全仓扫描。
 >
@@ -115,7 +115,7 @@ src/CreativeWorkshop/
 | Release 版本 | Tavern version + Web advertised version；已有 smoke test | **当前方法可接受** | release tooling 再成熟时自动生成 |
 | URL / CSP / 协议安全 | inspection / CSP 中 | **不要变成玩法 config** | 安全需求变化时 |
 | R2 key / D1 schema / storage key | 各模块内部 | **不要集中到“万能 config”** | 对应存储迁移时 |
-| CSS / UI magic number | UI 层 | **不在架构整理中顺手处理** | 对应 UI 工作时 |
+| CSS / UI magic number | UI 层 | **单独做渐进式 component-style reconstruction** | 对应 UI 工作时；不要与无关架构整理混做 |
 
 ---
 
@@ -234,16 +234,18 @@ cloudflare/src/endpoints/auth.ts
 - 项目名称：`100`
 - 版本名称：`80`
 - 自定义标签 `customTags`：最多 `20`；首页展示 `displayTags`：最多 `5`
-- 项目列表默认 page size：`20`
-- 项目列表最大 page size：`50`
+- Web catalog page size：根据当前 grid 列数从 `50 / 49 / 48` 中选择可整除值，并在同一轮分页锁定；API 最大 `50`
+
 - rejected login reminder 查询：`50`
 
 主要位置：
 
 ```text
-cloudflare/src/endpoints/projects.ts
+cloudflare/src/endpoints/projects/read.ts
+cloudflare/src/endpoints/projects/write.ts
 cloudflare/src/pages/home/api.ts
-cloudflare/src/pages/home/modals.ts
+cloudflare/src/pages/home/state.ts
+cloudflare/src/pages/home/modal/project-editor.ts
 cloudflare/src/types.ts
 cloudflare/src/endpoints/admin.ts
 cloudflare/src/utils/db.ts
@@ -273,7 +275,7 @@ project.authorId === payload.userId || payload.isAdmin
 主要在：
 
 ```text
-cloudflare/src/endpoints/projects.ts
+cloudflare/src/endpoints/projects/write.ts
 cloudflare/src/endpoints/admin.ts
 ```
 
@@ -308,12 +310,17 @@ ADMIN_CAN_EDIT=true
 
 ## 8. Project lifecycle：有技术债，但不要一次性拆
 
-大文件：
+主要实现现在已从旧聚合 endpoint 拆开：
 
 ```text
-cloudflare/src/endpoints/projects.ts
+cloudflare/src/endpoints/projects/read.ts
+cloudflare/src/endpoints/projects/write.ts
+cloudflare/src/endpoints/projects/assets.ts
+cloudflare/src/endpoints/projects/social.ts
 cloudflare/src/utils/db.ts
 ```
+
+`cloudflare/src/endpoints/projects.ts` 仍可作为聚合/注册入口参考，但不应再被当成所有项目行为的首要修改位置。
 
 多处涉及：
 
@@ -347,7 +354,7 @@ project-lifecycle.ts
 
 ```text
 cloudflare/src/types.ts
-cloudflare/src/endpoints/projects.ts
+cloudflare/src/endpoints/projects/read.ts
 cloudflare/src/utils/db.ts
 cloudflare/src/pages/home/render/layout.ts
 ```
@@ -381,7 +388,7 @@ legacy compatibility
 
 ```text
 cloudflare/src/endpoints/auth.ts
-cloudflare/src/pages/home/app.ts
+cloudflare/src/pages/home/app/auth-flow.ts
 src/CreativeWorkshop/bridge/host.ts
 ```
 
@@ -489,11 +496,13 @@ DB / R2 存储结构
 |---|---|
 | 分类 / 纯正则规则 | `cloudflare/src/config/project-content-policy.ts` |
 | 世界书 / 正则格式是否合法 | `cloudflare/src/utils/project-content.ts` |
-| 创建 / 上传 / 编辑 | `cloudflare/src/endpoints/projects.ts` |
-| 审核规则 | `cloudflare/src/endpoints/admin.ts` |
+| 项目读取 / 搜索 / 排序 | `cloudflare/src/endpoints/projects/read.ts` |
+| 创建 / 上传 / 编辑 | `cloudflare/src/endpoints/projects/write.ts`, `cloudflare/src/endpoints/projects/assets.ts` |
+| 审核规则 | `cloudflare/src/endpoints/admin.ts`, `cloudflare/src/pages/home/modal/admin-review.ts` |
 | D1 查询 / 生命周期持久化 | `cloudflare/src/utils/db.ts` |
 | R2 文件 | `cloudflare/src/utils/r2.ts` |
-| Web 创建 / 编辑 UI | `cloudflare/src/pages/home/modals.ts` |
+| Web 创建 / 编辑 UI | `cloudflare/src/pages/home/modal/project-editor.ts` |
+| Web 详情 / 安装 / 更新 | `cloudflare/src/pages/home/modal/project-detail.ts`, `project-install.ts`, `project-update.ts` |
 | Web 分类 metadata | `cloudflare/src/pages/home/utils.ts` |
 | Tavern 安装世界书 | `src/CreativeWorkshop/services/worldbook.ts` |
 | Tavern 安装正则 | `src/CreativeWorkshop/services/regex.ts` |

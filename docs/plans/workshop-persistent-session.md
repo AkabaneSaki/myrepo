@@ -1,7 +1,7 @@
 # Creative Workshop Persistent Session Plan
 
 Status: **design complete, not implemented**  
-Last reviewed: 2026-09-05
+Last reviewed: 2026-09-29
 
 ## Purpose
 
@@ -147,7 +147,8 @@ Normally read/verify first, not automatically edit:
 ```text
 src/CreativeWorkshop/bridge/host.ts
 src/CreativeWorkshop/bridge/protocol.ts
-cloudflare/src/pages/home/app.ts
+cloudflare/src/pages/home/app/bootstrap.ts
+cloudflare/src/pages/home/app/actions.ts
 cloudflare/src/pages/home/tavern-bridge.ts
 cloudflare/src/pages/home/api.ts
 src/CreativeWorkshop/services/project-fetch.ts
@@ -160,7 +161,7 @@ No D1 migration or backend endpoint is expected solely for this lifecycle featur
 
 ## Mobile/UI warning
 
-The old planning document contained concrete button placement based on the previous mobile UI. **That placement is no longer authoritative.** Another session is redesigning the mobile Workshop UI.
+The old planning document contained concrete button placement based on the previous mobile UI. **That placement is no longer authoritative.** The current mobile Workshop now uses the bottom tool dock plus account/tool sheets, so any persistent-session close/reload controls must fit that information architecture instead of reviving the old header/button layout.
 
 Preserve only the behavior contract here:
 
@@ -192,7 +193,7 @@ Test at minimum:
 - 10+ open/close cycles without duplicate iframe/listeners/styles;
 - hidden idle hard destroy;
 - reopen after idle destroy;
-- desktop + mobile final control placement after UI redesign is integrated.
+- desktop + mobile final control placement against the current bottom-dock / tool-sheet UI.
 
 ## Validation
 

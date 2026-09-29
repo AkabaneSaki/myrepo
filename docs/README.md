@@ -13,6 +13,9 @@
 
 ## 当前长期文档
 
+- `GIT-WORKFLOW.md`：Git / staging / production 的长期操作 SOP，并包含 owner/fork issue tracker 分工。
+- `WORKSHOP-RELEASE-SOP.md`：Creative Workshop client SemVer 与 Worker/web release identity 的发布规则。
+- `CONFIG-HARDCODE-AUDIT.md`：哪些值应进入配置、哪些应留在实现代码的长期判断依据。
 - `audits/workshop-architecture.md`：长期维护的 Workshop 架构 / policy 参考，不记录当前 branch、SHA 或临时 WIP。
 - `plans/workshop-persistent-session.md`：设计已确定、尚未实现的 iframe/session 生命周期方案。
 - `plans/cover-image-delivery.md`：当前 wsrv fallback 与长期 public asset delivery 迁移方案，实施前需重新验证基础设施选择。

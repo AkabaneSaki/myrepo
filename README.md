@@ -6,7 +6,7 @@
 - 面向角色对话表现优化的 **自适应正则美化**
 - 面向角色演出与展示的表情、立绘等素材资源
 
-仓库同时提供一套基于 Cloudflare Workers 的创意工坊后端，用于支撑与该角色卡生态相关的项目上传、审核、展示、点赞、订阅与鉴权等能力。
+仓库同时提供一套基于 Cloudflare Workers 的创意工坊后端，用于支撑与该角色卡生态相关的项目上传、审核、展示、点赞、可见性与鉴权等能力。
 
 ## 项目概览
 
@@ -27,7 +27,7 @@
 
 特性包括：
 
-- 支持从 CDN 拉取远程 [`regex.json`](src/AutoDialogueBeautifier/index.ts:8)
+- 支持从 CDN 拉取远程 `regex.json`（实现见 [`src/AutoDialogueBeautifier/index.ts`](src/AutoDialogueBeautifier/index.ts)）
 - 支持多 CDN 回退，提升加载成功率
 - 自动检测消息内容并匹配所需规则
 - 使用缓存与防抖机制降低重复计算和循环触发风险
@@ -42,7 +42,7 @@
 - Discord OAuth 登录与登录状态查询
 - 项目列表、详情、创建、更新、删除
 - 项目文件、封面与正则文件上传
-- 点赞、订阅、可见性切换
+- 点赞、项目可见性与登录鉴权
 - 管理员审核、连续审核队列、项目管理、管理员列表与审计日志查询
 - 结构化项目分类、扩展子类型、角色官方标签、自定义标签与首页展示标签
 - 基于 D1 的项目数据管理，表结构定义见 [`cloudflare/schema.sql`](cloudflare/schema.sql)
@@ -101,17 +101,9 @@ myrepo/
 
 ### 数据库初始化
 
-D1 的基础表结构定义在 [`cloudflare/schema.sql`](cloudflare/schema.sql)，包含：
+D1 的当前新库结构以 [`cloudflare/schema.sql`](cloudflare/schema.sql) 为准；已存在环境的演进历史以 [`cloudflare/migrations/`](cloudflare/migrations/) 为准。
 
-- `users`
-- `projects`
-- `project_likes`
-- `project_subscribes`
-- `admin_action_logs`
-- `super_admins`
-- `admins`
-
-这些表用于支撑用户体系、项目管理、互动行为与后台审核功能。
+不要在 README 手工维护第二份“当前表清单”：项目、审核、搜索索引、计数器、随机抽取等功能会持续增加或迁移表结构，复制清单很容易过期。
 
 开发文档从 [`docs/README.md`](docs/README.md) 进入。主要长期资料：
 

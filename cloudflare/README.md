@@ -106,7 +106,7 @@ EJS            首页卡片隐藏，详情显示
 
 ```text
 src/endpoints/admin.ts
-src/pages/home/modals.ts
+src/pages/home/modal/admin-review.ts
 src/pages/home/render/review-diff.ts
 src/utils/project-review-diff.ts
 ```
