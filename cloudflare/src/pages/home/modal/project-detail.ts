@@ -177,7 +177,7 @@ export const homeProjectDetailModalScript = [
   '        overlay.querySelectorAll(".mobile-detail-entry-group[open]").forEach(other => { if (other !== group) other.open = false; });',
   '      });',
   '    });',
-  '    overlay.querySelector("[data-mobile-detail-back]")?.addEventListener("click", () => overlay.querySelector(".close-btn")?.click());',
+  '    overlay.querySelector("[data-mobile-detail-back]")?.addEventListener("click", () => options?.dailyRandomDraw ? returnFromDailyRandomDrawToHome(overlay) : overlay.querySelector(".close-btn")?.click());',
   '    overlay.querySelector("[data-mobile-reader-back]")?.addEventListener("click", () => { if (mobileReader) mobileReader.hidden = true; overlay.classList.remove("mobile-reader-open"); closeMobileReaderPicker(); });',
   '    mobileReaderPrev?.addEventListener("click", () => { if (mobileReaderIndex > 0) { mobileReaderIndex -= 1; syncMobileReader(); } });',
   '    mobileReaderNext?.addEventListener("click", () => { if (mobileReaderIndex < getMobileReaderButtons(mobileReaderKind).length - 1) { mobileReaderIndex += 1; syncMobileReader(); } });',

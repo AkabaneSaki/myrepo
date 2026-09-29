@@ -2,12 +2,15 @@ export const homeDailyRandomDrawScript = String.raw`
 let dailyRandomDrawResetTimer = null;
 
 function canUseDailyRandomDraw() {
+  const browsingCatalog = state.viewMode === 'catalog'
+    && !state.showOnlyMyProjects
+    && !state.showSubscribedAndInstalledProjects;
   return Boolean(
     isEmbedded
     && state.currentUser
     && state.tavern.connected
     && state.tavern.installedProjectsLoaded
-    && (state.discoverShelves?.discover || []).length > 0
+    && (browsingCatalog || (state.discoverShelves?.discover || []).length > 0)
   );
 }
 
@@ -97,7 +100,10 @@ function renderDailyRandomDrawEntry() {
   const limit = Math.max(1, Number(drawState.limit || 10));
   const disabled = Boolean(drawState.busy) || count >= limit;
   const label = count >= limit ? '今天已经抽完啦' : '每日抽卡（' + count + '/' + limit + '）';
-  return '<section class="daily-random-draw"><div class="daily-random-draw-copy"><small>DAILY DRAW</small><strong>' + escapeHtml(label) + '</strong><span>不会抽到当前随机发现、本机已安装和最近抽过的项目</span></div><button type="button" class="btn btn-primary daily-random-draw-btn" id="dailyRandomDrawBtn" ' + (disabled ? 'disabled' : '') + '><i class="fas fa-dice"></i><span>' + (count >= limit ? '明天再来' : '抽一个') + '</span></button></section>';
+  const category = state.viewMode === 'catalog' && state.activeBaseTag !== 'all'
+    ? '从「' + escapeHtml(state.activeBaseTag) + '」中抽取；'
+    : '';
+  return '<section class="daily-random-draw"><div class="daily-random-draw-copy"><small>DAILY DRAW</small><strong>' + escapeHtml(label) + '</strong><span>' + category + '不会抽到当前随机发现、本机已安装和最近抽过的项目</span></div><button type="button" class="btn btn-primary daily-random-draw-btn" id="dailyRandomDrawBtn" ' + (disabled ? 'disabled' : '') + '><i class="fas fa-dice"></i><span>' + (count >= limit ? '明天再来' : '抽一个') + '</span></button></section>';
 }
 
 async function performDailyRandomDraw() {
@@ -126,6 +132,9 @@ async function performDailyRandomDraw() {
       body: JSON.stringify({
         installedProjectIds: getInstalledProjectIdsForDailyDraw(),
         discoverProjectIds: getCurrentDiscoverProjectIdsForDailyDraw(),
+        ...(state.viewMode === 'catalog' && state.activeBaseTag !== 'all'
+          ? { projectType: state.activeBaseTag }
+          : {}),
       }),
     });
     applyDailyRandomDrawPayload(payload);
@@ -138,6 +147,11 @@ async function performDailyRandomDraw() {
 
 function returnFromDailyRandomDrawToHome(overlay) {
   if (overlay?.isConnected) overlay.remove();
+  if (state.viewMode === 'catalog') {
+    renderApp();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    return;
+  }
   state.viewMode = 'discover';
   state.showOnlyMyProjects = false;
   state.showSubscribedAndInstalledProjects = false;
@@ -191,6 +205,11 @@ function attachDailyRandomDrawControls(overlay) {
   const mobileDock = overlay.querySelector('.mobile-detail-bottom-dock');
   if (mobileDock && !mobileDock.querySelector('[data-daily-random-next]')) {
     mobileDock.classList.add('daily-random-mobile-dock');
+    const mobileBackButton = mobileDock.querySelector('[data-mobile-detail-back]');
+    if (mobileBackButton) {
+      mobileBackButton.dataset.dailyRandomBack = 'true';
+      mobileBackButton.innerHTML = '<i class="fas fa-arrow-left"></i> ' + (state.viewMode === 'catalog' ? '返回当前分类' : '回到首页');
+    }
     const mobileNextButton = document.createElement('button');
     mobileNextButton.type = 'button';
     mobileNextButton.className = 'daily-random-mobile-next';
@@ -204,7 +223,8 @@ function attachDailyRandomDrawControls(overlay) {
   const actions = document.createElement('div');
   actions.className = 'daily-random-detail-actions';
   actions.dataset.dailyRandomActions = 'true';
-  actions.innerHTML = '<button type="button" class="btn btn-outline" data-daily-random-back><i class="fas fa-arrow-left"></i> 回到首页</button><button type="button" class="btn btn-primary" data-daily-random-next></button>';
+  const backLabel = state.viewMode === 'catalog' ? '返回当前分类' : '回到首页';
+  actions.innerHTML = '<button type="button" class="btn btn-outline" data-daily-random-back><i class="fas fa-arrow-left"></i> ' + backLabel + '</button><button type="button" class="btn btn-primary" data-daily-random-next></button>';
   modalContent.appendChild(actions);
 
   actions.querySelector('[data-daily-random-back]')?.addEventListener('click', () => {

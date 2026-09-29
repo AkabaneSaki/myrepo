@@ -2,6 +2,7 @@ import { OpenAPIRoute } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../../types';
 import { getCurrentUserFromRequest } from '../../utils/jwt';
+import { PROJECT_TYPES } from '../../config/project-taxonomy';
 
 const DAILY_DRAW_LIMIT = 10;
 const RECENT_DRAW_LIMIT = 20;
@@ -90,14 +91,19 @@ async function findRandomProjectFromPivot(
   c: AppContext,
   pivot: string,
   excludedProjectIds: string[],
+  projectType?: string,
 ): Promise<string | null> {
   const excludedJson = JSON.stringify(excludedProjectIds);
+  const indexName = projectType ? 'idx_projects_public_type_id' : 'idx_projects_public_id';
+  const typeFilter = projectType ? 'AND p.project_type = ?' : '';
+  const bindValues = projectType ? [projectType, pivot, excludedJson] : [pivot, excludedJson];
   const afterPivot = await c.env.DB.prepare(
     `SELECT p.id
-     FROM projects p INDEXED BY idx_projects_public_id
+     FROM projects p INDEXED BY ${indexName}
      WHERE p.status = 'approved'
        AND p.is_published = 1
        AND p.visibility = 1
+       ${typeFilter}
        AND p.id >= ?
        AND NOT EXISTS (
          SELECT 1
@@ -107,16 +113,17 @@ async function findRandomProjectFromPivot(
      ORDER BY p.id ASC
      LIMIT 1`,
   )
-    .bind(pivot, excludedJson)
+    .bind(...bindValues)
     .first<{ id: string }>();
   if (afterPivot?.id) return String(afterPivot.id);
 
   const wrapped = await c.env.DB.prepare(
     `SELECT p.id
-     FROM projects p INDEXED BY idx_projects_public_id
+     FROM projects p INDEXED BY ${indexName}
      WHERE p.status = 'approved'
        AND p.is_published = 1
        AND p.visibility = 1
+       ${typeFilter}
        AND p.id < ?
        AND NOT EXISTS (
          SELECT 1
@@ -126,7 +133,7 @@ async function findRandomProjectFromPivot(
      ORDER BY p.id ASC
      LIMIT 1`,
   )
-    .bind(pivot, excludedJson)
+    .bind(...bindValues)
     .first<{ id: string }>();
   return wrapped?.id ? String(wrapped.id) : null;
 }
@@ -169,6 +176,7 @@ export class ProjectDailyRandomDraw extends OpenAPIRoute {
             schema: z.object({
               installedProjectIds: z.array(z.string().min(1).max(200)).max(MAX_LOCAL_EXCLUSIONS).default([]),
               discoverProjectIds: z.array(z.string().min(1).max(200)).max(MAX_DISCOVER_EXCLUSIONS).default([]),
+              projectType: z.enum(PROJECT_TYPES).optional(),
             }),
           },
         },
@@ -189,6 +197,7 @@ export class ProjectDailyRandomDraw extends OpenAPIRoute {
     const data = await this.getValidatedData<typeof this.schema>();
     const installedProjectIds = normalizeProjectIds(data.body.installedProjectIds, MAX_LOCAL_EXCLUSIONS);
     const discoverProjectIds = normalizeProjectIds(data.body.discoverProjectIds, MAX_DISCOVER_EXCLUSIONS);
+    const projectType = data.body.projectType;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const nowMs = Date.now();
@@ -212,7 +221,7 @@ export class ProjectDailyRandomDraw extends OpenAPIRoute {
         [...installedProjectIds, ...discoverProjectIds, ...status.recentProjectIds],
         MAX_LOCAL_EXCLUSIONS + MAX_DISCOVER_EXCLUSIONS + RECENT_DRAW_LIMIT,
       );
-      const projectId = await findRandomProjectFromPivot(c, makeRandomProjectPivot(), excludedProjectIds);
+      const projectId = await findRandomProjectFromPivot(c, makeRandomProjectPivot(), excludedProjectIds, projectType);
       if (!projectId) {
         return c.json({
           error: '暂时没有新的项目可以抽了',

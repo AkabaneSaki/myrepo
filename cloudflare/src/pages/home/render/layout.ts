@@ -253,7 +253,8 @@ export const homeLayoutRenderScript = [
   '  return `<div class="discover-home">${renderDiscoverBanner()}${renderDailyRandomDrawEntry()}${renderDevTeamRecommendations()}${renderDiscoverShelf("随机发现", "RANDOM 10", shelves.discover || [])}${renderDiscoverShelf("最新发布", "LATEST", shelves.published || [], { moreSort: "published", moreLabel: "更多最新" })}${renderDiscoverShelf("最近更新", "RECENTLY UPDATED", shelves.updated || [], { moreSort: "updated", moreLabel: "更多更新" })}</div>`;',
   '}',
   'function renderLayout(projects) {',
-  '  const contentHtml = isDiscoverHomeView() ? renderDiscoverHome(projects) : `${renderMyProjectsPageHead()}${renderSearchSummary()}${renderProjectsGrid(projects)}${renderProjectPagination()}`;',
+  '  const catalogDraw = state.viewMode === "catalog" && !state.showOnlyMyProjects && !state.showSubscribedAndInstalledProjects ? renderDailyRandomDrawEntry() : "";',
+  '  const contentHtml = isDiscoverHomeView() ? renderDiscoverHome(projects) : `${renderMyProjectsPageHead()}${catalogDraw}${renderSearchSummary()}${renderProjectsGrid(projects)}${renderProjectPagination()}`;',
   '  return `<div class="workshop-shell">${renderDesktopSidebar()}<main class="workshop-main">${renderHeader()}${renderMobileBreadcrumb()}${contentHtml}${renderMobileDiscoveryTools()}</main></div>`;',
   '}',
 ].join('\n');
