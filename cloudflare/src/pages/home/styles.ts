@@ -1818,6 +1818,8 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
   border:0;
   border-bottom:2px solid transparent;
   border-radius:0;
+  background:transparent;
+  appearance:none;
   color:#b9b7b1;
   font-size:.875rem;
   font-weight:720;
