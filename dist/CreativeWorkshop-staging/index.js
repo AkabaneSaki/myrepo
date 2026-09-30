@@ -58,7 +58,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev9";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.2.0-dev10";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -1186,6 +1186,22 @@ async function getCreativeWorkshopProjectDiff(projectId, expectedVersion, legacy
 
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const INSTALL_STATE_STEP_TIMEOUT_MS = 2500;
+async function withInstallStateTimeout(promise, label) {
+    let timeoutId = null;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(`${label} 超时`)), INSTALL_STATE_STEP_TIMEOUT_MS);
+            }),
+        ]);
+    }
+    finally {
+        if (timeoutId !== null)
+            clearTimeout(timeoutId);
+    }
+}
 async function readWorldbookEntries(worldbookName, boundNames) {
     if (!getWorldbookNames().includes(worldbookName)) {
         if (!boundNames.has(worldbookName)) {
@@ -1194,7 +1210,7 @@ async function readWorldbookEntries(worldbookName, boundNames) {
         return { worldbookName, entries: [], readable: false };
     }
     try {
-        return { worldbookName, entries: await getWorldbook(worldbookName), readable: true };
+        return { worldbookName, entries: await withInstallStateTimeout(getWorldbook(worldbookName), `读取世界书「${worldbookName}」`), readable: true };
     }
     catch (error) {
         console.warn('[CreativeWorkshop] 无法读取安装目标世界书', { worldbookName, error });
@@ -1204,7 +1220,7 @@ async function readWorldbookEntries(worldbookName, boundNames) {
 async function refreshWorldbookReadiness() {
     const tavernContext = SillyTavern.getContext?.() || SillyTavern;
     try {
-        await tavernContext.updateWorldInfoList?.();
+        await withInstallStateTimeout(Promise.resolve(tavernContext.updateWorldInfoList?.()), '刷新世界书列表');
     }
     catch (error) {
         console.warn('[CreativeWorkshop] 无法刷新世界书列表', error);
@@ -3072,6 +3088,7 @@ const OAUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
 const OAUTH_POPUP_NAME = 'creative-workshop-oauth';
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_POPUP_CLOSE_GUARD_MS = 8000;
+const INITIAL_INSTALL_SCAN_TIMEOUT_MS = 8000;
 function isOAuthCallbackMessage(value) {
     return (_.isObject(value) &&
         (_.get(value, 'type') === 'oauth-success' ||
@@ -3089,7 +3106,7 @@ function redactOAuthLogPayload(value) {
     };
 }
 function createCreativeWorkshopBridgeHost(option) {
-    const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
+    const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose, onReady } = option;
     const oauthOrigin = getCreativeWorkshopOrigin();
     let oauthPopup = null;
     let pendingOauthRequestId;
@@ -3102,7 +3119,13 @@ function createCreativeWorkshopBridgeHost(option) {
     async function getInitialInstalledProjectScan() {
         if (initialInstalledProjectScanInFlight)
             return initialInstalledProjectScanInFlight;
-        const scan = scanInstalledCreativeWorkshopProjects();
+        const sourceScan = scanInstalledCreativeWorkshopProjects();
+        const scan = Promise.race([
+            sourceScan,
+            new Promise((_, reject) => {
+                hostWindow.setTimeout(() => reject(new Error('读取安装状态超时')), INITIAL_INSTALL_SCAN_TIMEOUT_MS);
+            }),
+        ]);
         initialInstalledProjectScanInFlight = scan;
         try {
             return await scan;
@@ -3111,13 +3134,6 @@ function createCreativeWorkshopBridgeHost(option) {
             if (initialInstalledProjectScanInFlight === scan)
                 initialInstalledProjectScanInFlight = null;
         }
-    }
-    async function getCompleteInitialInstalledProjects() {
-        const scan = await getInitialInstalledProjectScan();
-        if (!scan.complete) {
-            throw new Error(`世界书尚未准备完成，未能读取：${scan.unreadableWorldbookNames.join('、')}`);
-        }
-        return scan.projects;
     }
     console.info('[CreativeWorkshopBridgeHost] created', {
         targetOrigin,
@@ -3304,6 +3320,7 @@ function createCreativeWorkshopBridgeHost(option) {
         try {
             switch (event.data.type) {
                 case 'bridge:handshake':
+                    onReady?.();
                     await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     // Installed-project discovery can require reading several active worldbooks.
@@ -3312,9 +3329,18 @@ function createCreativeWorkshopBridgeHost(option) {
                 case 'bridge:get-context':
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     break;
-                case 'bridge:list-installed-projects':
-                    await post('bridge:installed-projects', { projects: await getCompleteInitialInstalledProjects() }, event.data.requestId);
+                case 'bridge:list-installed-projects': {
+                    let scan;
+                    try {
+                        scan = await getInitialInstalledProjectScan();
+                    }
+                    catch (error) {
+                        console.warn('[CreativeWorkshopBridgeHost] initial installed-project scan failed', error);
+                        scan = { projects: [], complete: false, unreadableWorldbookNames: [] };
+                    }
+                    await post('bridge:installed-projects', scan, event.data.requestId);
                     break;
+                }
                 case 'bridge:list-script-dependencies':
                     await post('bridge:script-dependencies', listCreativeWorkshopScriptDependencies(), event.data.requestId);
                     break;
@@ -3714,13 +3740,29 @@ function openCreativeWorkshop() {
         height: '100%',
         flex: '0 0 auto',
     });
-    const $frame = createScriptIdIframe().css({
+    const $frame = createScriptIdIframe()
+        .removeAttr('srcdoc')
+        .css({
         width: '100%',
         height: '100%',
         borderRadius: '20px',
         background: '#0f1012',
         boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
     });
+    const $loading = host$('<div role="status" aria-live="polite">正在打开创意工坊…</div>').css({
+        position: 'absolute',
+        inset: '0',
+        zIndex: 2,
+        display: 'grid',
+        placeItems: 'center',
+        borderRadius: '20px',
+        background: '#0f1012',
+        color: '#a9a49b',
+        fontSize: '14px',
+        letterSpacing: '0.02em',
+        pointerEvents: 'none',
+    });
+    let workshopReady = false;
     const $closeButton = host$('<button type="button">退出</button>').css({
         position: 'absolute',
         top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
@@ -3755,15 +3797,17 @@ function openCreativeWorkshop() {
             width: useFullscreenLayout ? '100%' : '90vw',
             height: useFullscreenLayout ? '100%' : '90vh',
         });
+        const frameRadius = useFullscreenLayout ? '12px' : '20px';
         $frame.css({
             // Mobile keeps a small visual safe zone; desktop keeps simple 90% sizing.
             width: useFullscreenLayout ? '100%' : '90vw',
             height: useFullscreenLayout ? '100%' : '90vh',
-            borderRadius: useFullscreenLayout ? '12px' : '20px',
+            borderRadius: frameRadius,
             boxShadow: useFullscreenLayout ? '0 8px 30px rgba(0,0,0,0.28)' : '0 24px 80px rgba(0,0,0,0.45)',
         });
+        $loading.css({ borderRadius: frameRadius });
         $closeButton.css({
-            display: useFullscreenLayout ? 'none' : 'block',
+            display: useFullscreenLayout && workshopReady ? 'none' : 'block',
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
             left: 'auto',
@@ -3776,8 +3820,11 @@ function openCreativeWorkshop() {
     host$(hostWindow).on('scroll.creative-workshop-overlay', updateOverlayLayout);
     hostWindow.visualViewport?.addEventListener('resize', updateOverlayLayout);
     hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
-    $frameShell.append($frame, $closeButton);
+    $frameShell.append($frame, $loading, $closeButton);
     $overlay.append($frameShell).appendTo(hostDocument.body);
+    const slowOpenTimer = hostWindow.setTimeout(() => {
+        $loading.text('打开时间较长，可以退出后重试');
+    }, 8000);
     console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
         iframeCount: $overlay.find('iframe').length,
         bodyChildCount: hostDocument.body.children.length,
@@ -3785,10 +3832,10 @@ function openCreativeWorkshop() {
     const close = () => {
         console.warn('[CreativeWorkshop] openCreativeWorkshop:close', {
             hasBridge: Boolean(bridge),
-            hasNavigated,
             overlayExists: hostDocument.body.contains($overlay[0]),
             activeElementTag: hostDocument.activeElement?.tagName,
         });
+        hostWindow.clearTimeout(slowOpenTimer);
         bridge?.destroy();
         host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
         host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
@@ -3810,41 +3857,26 @@ function openCreativeWorkshop() {
             close();
         }
     });
-    let bridge = null;
-    let hasNavigated = false;
-    $frame.on('load', () => {
-        const iframe = $frame[0];
-        console.info('[CreativeWorkshop] openCreativeWorkshop:iframe-load', {
-            hasBridge: Boolean(bridge),
-            hasNavigated,
-            iframeSrc: iframe.getAttribute('src'),
-            iframeHref: (() => {
-                try {
-                    return iframe.contentWindow?.location.href ?? null;
-                }
-                catch {
-                    return '[cross-origin]';
-                }
-            })(),
-        });
-        if (!bridge) {
-            bridge = createCreativeWorkshopBridgeHost({
-                iframe,
-                targetOrigin: getCreativeWorkshopOrigin(),
-                onClose: close,
-            });
-            console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
-                targetOrigin: getCreativeWorkshopOrigin(),
-            });
-        }
-        if (!hasNavigated) {
-            hasNavigated = true;
-            console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
-                creativeWorkshopUrl,
-            });
-            iframe.contentWindow?.location.replace(creativeWorkshopUrl);
-        }
+    const iframe = $frame[0];
+    const bridge = createCreativeWorkshopBridgeHost({
+        iframe,
+        targetOrigin: getCreativeWorkshopOrigin(),
+        onClose: close,
+        onReady: () => {
+            workshopReady = true;
+            hostWindow.clearTimeout(slowOpenTimer);
+            $loading.remove();
+            updateOverlayLayout();
+            console.info('[CreativeWorkshop] openCreativeWorkshop:ready');
+        },
     });
+    console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
+        targetOrigin: getCreativeWorkshopOrigin(),
+    });
+    console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
+        creativeWorkshopUrl,
+    });
+    $frame.attr('src', creativeWorkshopUrl);
 }
 $(() => {
     console.info('[CreativeWorkshop] script-mounted');
