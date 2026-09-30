@@ -798,27 +798,6 @@ async function fetchCreativeWorkshopProjectDetail(projectId, expectedVersion) {
         throw error;
     }
 }
-async function fetchCreativeWorkshopReferenceVersionItems(referenceVersionId) {
-    if (!referenceVersionId)
-        return [];
-    const response = await fetch(`${getCreativeWorkshopUrl()}/api/character-references/versions/${encodeURIComponent(referenceVersionId)}/items`, { cache: 'no-store' });
-    if (!response.ok) {
-        throw new Error(`读取原版内容失败: ${response.status}`);
-    }
-    const data = await response.json();
-    return Array.isArray(data?.items)
-        ? data.items
-            .filter((item) => _.isObject(item))
-            .map((item) => ({
-            id: String(item.id || ''),
-            referenceVersionId: String(item.referenceVersionId || referenceVersionId),
-            kind: item.kind === 'regex' ? 'regex' : 'worldbook',
-            sourceKey: _.isString(item.sourceKey) ? String(item.sourceKey) : null,
-            displayName: String(item.displayName || ''),
-        }))
-            .filter((item) => Boolean(item.id && item.displayName))
-        : [];
-}
 
 ;// ./src/CreativeWorkshop/services/project-type.ts
 const CREATIVE_WORKSHOP_PROJECT_TYPES = ['系统核心', '扩展', '角色', '事件'];
@@ -1487,7 +1466,6 @@ async function updateCreativeWorkshopRegex(projectId, expectedVersion, legacyPro
 
 ;// ./src/CreativeWorkshop/services/original-conflicts.ts
 
-
 function getOriginalEntryName(entry) {
     return String(entry.comment || entry.name || '').trim();
 }
@@ -1506,7 +1484,7 @@ function getEntryEnabled(entry) {
 }
 function stateClaimKey(state) {
     const localIdentity = state.entryUid ? `uid:${state.entryUid}` : `name:${state.displayName}`;
-    return `${state.worldbookName} ${localIdentity}`;
+    return `${state.worldbookName}\u0000${localIdentity}`;
 }
 function entryMatchesState(entry, state) {
     if (state.entryUid)
@@ -1536,27 +1514,17 @@ async function loadCharacterWorldbooks() {
     }
     return loaded;
 }
-function resolveUniqueMatch(item, matches, reason) {
-    if (matches.length <= 1)
-        return matches[0] || null;
-    const label = reason === 'uid' ? '同一个 UID' : '同名';
-    throw new Error(`原版内容「${item.displayName}」出现多个${label}条目，为避免误关内容已中止`);
-}
-function findReferenceItemInWorldbooks(item, worldbooks) {
-    const nameMatches = worldbooks.flatMap(worldbook => worldbook.entries
-        .filter(entry => getOriginalEntryName(entry) === item.displayName)
+function findUniqueOriginalEntryByName(entryName, worldbooks) {
+    const matches = worldbooks.flatMap(worldbook => worldbook.entries
+        .filter(entry => getOriginalEntryName(entry) === entryName)
         .map(entry => ({ worldbookName: worldbook.name, entry })));
-    const byName = resolveUniqueMatch(item, nameMatches, 'name');
-    if (byName)
-        return byName;
-    if (item.sourceKey?.startsWith('uid:')) {
-        const expectedUid = item.sourceKey.slice(4);
-        const uidMatches = worldbooks.flatMap(worldbook => worldbook.entries
-            .filter(entry => getEntryUid(entry) === expectedUid)
-            .map(entry => ({ worldbookName: worldbook.name, entry })));
-        return resolveUniqueMatch(item, uidMatches, 'uid');
+    if (matches.length === 0) {
+        throw new Error(`找不到原版内容「${entryName}」，请自己关闭冲突条目后继续安装`);
     }
-    return null;
+    if (matches.length > 1) {
+        throw new Error(`找到多个同名原版内容「${entryName}」，请自己关闭冲突条目后继续安装`);
+    }
+    return matches[0];
 }
 function assertStateIsUnambiguous(worldbook, state) {
     const count = worldbook.filter(entry => entryMatchesState(entry, state)).length;
@@ -1598,34 +1566,24 @@ async function applyOriginalEntryStates(projectId, desiredStates, previousStates
 async function syncCreativeWorkshopOriginalConflicts(projectId, detail) {
     const project = detail.project || {};
     const previousStates = getCreativeWorkshopInstallRecord(projectId)?.originalEntryStates || [];
-    const requestedIds = project.conflictsWithOriginal && Array.isArray(project.originalConflictReferenceItemIds)
-        ? project.originalConflictReferenceItemIds.map(String).filter(Boolean)
+    const requestedNames = project.conflictsWithOriginal && Array.isArray(project.originalConflictEntryNames)
+        ? Array.from(new Set(project.originalConflictEntryNames.map(String).map(name => name.trim()).filter(Boolean)))
         : [];
-    if (requestedIds.length === 0) {
+    if (!project.conflictsWithOriginal) {
         await applyOriginalEntryStates(projectId, [], previousStates);
         return [];
     }
-    const referenceVersionId = String(project.builtForReferenceVersionId || '');
-    if (!referenceVersionId)
-        throw new Error('这个 DLC 没有记录对应的角色卡版本，无法自动切换原版内容');
-    const items = await fetchCreativeWorkshopReferenceVersionItems(referenceVersionId);
-    const requested = new Set(requestedIds);
-    const selectedItems = items.filter(item => item.kind === 'worldbook' && requested.has(item.id));
-    if (selectedItems.length !== requested.size) {
-        throw new Error('这个 DLC 记录的原版内容已经有变化，请让作者重新确认');
+    if (requestedNames.length === 0) {
+        throw new Error('这个 DLC 没有可自动匹配的原版条目名称，请自己关闭冲突条目后继续安装');
     }
     const worldbooks = await loadCharacterWorldbooks();
     const otherClaims = getOtherOriginalEntryClaims(projectId);
     const desiredStates = [];
-    for (const item of selectedItems) {
-        const located = findReferenceItemInWorldbooks(item, worldbooks);
-        if (!located) {
-            throw new Error(`找不到原版内容「${item.displayName}」，请确认角色卡版本是否正确`);
-        }
+    for (const entryName of requestedNames) {
+        const located = findUniqueOriginalEntryByName(entryName, worldbooks);
         const localStateIdentity = {
-            referenceItemId: item.id,
             worldbookName: located.worldbookName,
-            displayName: getOriginalEntryName(located.entry),
+            displayName: entryName,
             entryUid: getEntryUid(located.entry),
             wasEnabled: getEntryEnabled(located.entry),
         };
