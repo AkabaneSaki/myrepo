@@ -23,12 +23,14 @@ type HostOption = {
   targetOrigin: string;
   hostWindow?: Window;
   onClose?: () => void;
+  onReady?: () => void;
 };
 
 const OAUTH_CALLBACK_SOURCE = 'creative-workshop-auth-callback';
 const OAUTH_POPUP_NAME = 'creative-workshop-oauth';
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_POPUP_CLOSE_GUARD_MS = 8000;
+const INITIAL_INSTALL_SCAN_TIMEOUT_MS = 8000;
 
 type OAuthCallbackSuccessMessage = {
   type: 'oauth-success';
@@ -74,7 +76,7 @@ function redactOAuthLogPayload(value: unknown) {
 }
 
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
-  const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose } = option;
+  const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose, onReady } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
   let oauthPopup: Window | null = null;
   let pendingOauthRequestId: string | undefined;
@@ -87,21 +89,19 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
 
   async function getInitialInstalledProjectScan() {
     if (initialInstalledProjectScanInFlight) return initialInstalledProjectScanInFlight;
-    const scan = scanInstalledCreativeWorkshopProjects();
+    const sourceScan = scanInstalledCreativeWorkshopProjects();
+    const scan = Promise.race([
+      sourceScan,
+      new Promise<Awaited<ReturnType<typeof scanInstalledCreativeWorkshopProjects>>>((_, reject) => {
+        hostWindow.setTimeout(() => reject(new Error('读取安装状态超时')), INITIAL_INSTALL_SCAN_TIMEOUT_MS);
+      }),
+    ]);
     initialInstalledProjectScanInFlight = scan;
     try {
       return await scan;
     } finally {
       if (initialInstalledProjectScanInFlight === scan) initialInstalledProjectScanInFlight = null;
     }
-  }
-
-  async function getCompleteInitialInstalledProjects() {
-    const scan = await getInitialInstalledProjectScan();
-    if (!scan.complete) {
-      throw new Error(`世界书尚未准备完成，未能读取：${scan.unreadableWorldbookNames.join('、')}`);
-    }
-    return scan.projects;
   }
 
   console.info('[CreativeWorkshopBridgeHost] created', {
@@ -310,6 +310,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     try {
       switch (event.data.type) {
         case 'bridge:handshake':
+          onReady?.();
           await post(
             'bridge:handshake:ok',
             { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION },
@@ -322,13 +323,21 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         case 'bridge:get-context':
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
           break;
-        case 'bridge:list-installed-projects':
+        case 'bridge:list-installed-projects': {
+          let scan;
+          try {
+            scan = await getInitialInstalledProjectScan();
+          } catch (error) {
+            console.warn('[CreativeWorkshopBridgeHost] initial installed-project scan failed', error);
+            scan = { projects: [], complete: false, unreadableWorldbookNames: [] };
+          }
           await post(
             'bridge:installed-projects',
-            { projects: await getCompleteInitialInstalledProjects() },
+            scan,
             event.data.requestId,
           );
           break;
+        }
         case 'bridge:list-script-dependencies':
           await post(
             'bridge:script-dependencies',

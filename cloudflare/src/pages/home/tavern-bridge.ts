@@ -68,7 +68,15 @@ function syncInstalledProjectsFromBridge(payload, options) {
   setInstalledProjects(installedProjects, {
     mode: syncMode,
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
+    complete: payload?.complete !== false,
+    unreadableWorldbookNames: Array.isArray(payload?.unreadableWorldbookNames) ? payload.unreadableWorldbookNames : [],
   });
+  if (payload?.complete === false) {
+    showToast(
+      '有些世界书暂时读不到，未确认项目的安装按钮已暂停。请稍后重开工坊再试。',
+      'error',
+    );
+  }
   renderApp();
   scheduleDlcUpdateStatusCheck();
 }

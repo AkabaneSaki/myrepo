@@ -36,6 +36,25 @@ type WorldbookScanRow = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const INSTALL_STATE_STEP_TIMEOUT_MS = 2500;
+
+async function withInstallStateTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`${label} 超时`)),
+          INSTALL_STATE_STEP_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
+}
+
 async function readWorldbookEntries(worldbookName: string, boundNames: Set<string>): Promise<WorldbookScanRow> {
   if (!getWorldbookNames().includes(worldbookName)) {
     if (!boundNames.has(worldbookName)) {
@@ -45,7 +64,7 @@ async function readWorldbookEntries(worldbookName: string, boundNames: Set<strin
   }
 
   try {
-    return { worldbookName, entries: await getWorldbook(worldbookName), readable: true };
+    return { worldbookName, entries: await withInstallStateTimeout(getWorldbook(worldbookName), `读取世界书「${worldbookName}」`), readable: true };
   } catch (error) {
     console.warn('[CreativeWorkshop] 无法读取安装目标世界书', { worldbookName, error });
     return { worldbookName, entries: [], readable: false };
@@ -55,7 +74,7 @@ async function readWorldbookEntries(worldbookName: string, boundNames: Set<strin
 async function refreshWorldbookReadiness() {
   const tavernContext = (SillyTavern as any).getContext?.() || SillyTavern;
   try {
-    await tavernContext.updateWorldInfoList?.();
+    await withInstallStateTimeout(Promise.resolve(tavernContext.updateWorldInfoList?.()), '刷新世界书列表');
   } catch (error) {
     console.warn('[CreativeWorkshop] 无法刷新世界书列表', error);
   }

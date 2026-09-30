@@ -18,6 +18,7 @@ function loadCommonJs(compiled, context, filename) {
 
 const source = await readFile(new URL('../../src/CreativeWorkshop/services/install-state.ts', import.meta.url), 'utf8');
 const hostSource = await readFile(new URL('../../src/CreativeWorkshop/bridge/host.ts', import.meta.url), 'utf8');
+const indexSource = await readFile(new URL('../../src/CreativeWorkshop/index.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
 }).outputText;
@@ -80,7 +81,7 @@ function loadInstallStateHarness({
       }
       throw new Error(`Unexpected require: ${specifier}`);
     },
-    console, Promise, Map, Set, structuredClone,
+    console, Promise, Map, Set, structuredClone, setTimeout, clearTimeout,
     _: makeLodash(),
     getWorldbookNames: () => [...names],
     getWorldbook: async name => {
@@ -226,7 +227,16 @@ const managedEntry = {
 }
 
 assert.match(hostSource, /initialInstalledProjectScanInFlight/);
-assert.match(hostSource, /getCompleteInitialInstalledProjects/);
+assert.match(hostSource, /onReady\?\.\(\)/);
+assert.match(hostSource, /INITIAL_INSTALL_SCAN_TIMEOUT_MS/);
+assert.match(hostSource, /scan = await getInitialInstalledProjectScan\(\)/);
+assert.match(hostSource, /complete: false, unreadableWorldbookNames: \[\]/);
+assert.doesNotMatch(hostSource, /getCompleteInitialInstalledProjects/);
+assert.match(source, /INSTALL_STATE_STEP_TIMEOUT_MS/);
+assert.match(indexSource, /removeAttr\('srcdoc'\)/);
+assert.match(indexSource, /正在打开创意工坊/);
+assert.match(indexSource, /打开时间较长，可以退出后重试/);
+assert.doesNotMatch(indexSource, /location\.replace\(creativeWorkshopUrl\)/);
 assert.doesNotMatch(source, /loadWorldInfo/);
 
 console.log('CreativeWorkshop install-state readiness smoke: ok');

@@ -828,7 +828,7 @@ const migratedCardUi = Function(
   () => [],
   () => null,
   () => null,
-  { tavern: { connected: true, installedProjectsLoaded: true } },
+  { tavern: { connected: true, installedProjectsLoaded: true, installedProjectsComplete: true } },
   value => String(value),
 );
 assert.equal(
@@ -851,7 +851,7 @@ const legacyConflictView = Function(
   () => [{}],
   () => null,
   () => null,
-  { tavern: { connected: true, installedProjectsLoaded: true } },
+  { tavern: { connected: true, installedProjectsLoaded: true, installedProjectsComplete: true } },
   value => String(value),
 );
 const legacyConflictCard = legacyConflictView.buildProjectCardViewModel({ id: 'remote', name: '同名旧项目', version: '2.0.0' });

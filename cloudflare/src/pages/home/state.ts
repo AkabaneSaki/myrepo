@@ -61,6 +61,8 @@ function createDefaultTavernState() {
     clientVersionResolved: false,
     installedProjects: [],
     installedProjectsLoaded: false,
+    installedProjectsComplete: false,
+    unreadableWorldbookNames: [],
     localProjectMap: new Map(),
     installedRemoteProjectMap: new Map(),
     installedProjectRebindCandidates: new Map(),
@@ -358,7 +360,11 @@ function updateSubscribeState(projectId, payload) {
 function setTavernConnectionStatus(status) {
   state.tavern.status = status || 'disconnected';
   state.tavern.connected = status === 'connected';
-  if (!state.tavern.connected) state.tavern.installedProjectsLoaded = false;
+  if (!state.tavern.connected) {
+    state.tavern.installedProjectsLoaded = false;
+    state.tavern.installedProjectsComplete = false;
+    state.tavern.unreadableWorldbookNames = [];
+  }
 }
 
 function setTavernClientVersion(version) {
@@ -504,6 +510,10 @@ function mergeInstalledRemoteProjects(projects) {
 function setInstalledProjects(projects, options) {
   const list = Array.isArray(projects) ? projects : [];
   state.tavern.installedProjectsLoaded = true;
+  state.tavern.installedProjectsComplete = options?.complete !== false;
+  state.tavern.unreadableWorldbookNames = Array.isArray(options?.unreadableWorldbookNames)
+    ? options.unreadableWorldbookNames.map(String).filter(Boolean)
+    : [];
   const mode = options && options.mode === 'merge' ? 'merge' : 'replace';
   const removeProjectId = options && options.removeProjectId ? options.removeProjectId : null;
   const installedProjectMap = mode === 'merge'
