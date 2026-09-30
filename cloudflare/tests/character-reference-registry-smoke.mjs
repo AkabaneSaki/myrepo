@@ -5,6 +5,7 @@ import { computeCompatibilityStatus } from '../src/utils/character-reference.ts'
 
 const migration = await readFile(new URL('../migrations/0014_character_reference_registry.sql', import.meta.url), 'utf8');
 const conflictMigration = await readFile(new URL('../migrations/0015_project_original_conflicts.sql', import.meta.url), 'utf8');
+const conflictNamesMigration = await readFile(new URL('../migrations/0031_original_conflict_entry_names.sql', import.meta.url), 'utf8');
 
 {
   const db = new DatabaseSync(':memory:');
@@ -80,18 +81,40 @@ const conflictMigration = await readFile(new URL('../migrations/0015_project_ori
     `INSERT INTO character_reference_items (
        id, reference_version_id, kind, display_name, exact_hash,
        normalized_content_hash, name_hash, structure_hash
-     ) VALUES ('item-1', 'v433', 'worldbook', 'Original Status', 'exact', 'content', 'name', 'structure')`,
+     ) VALUES ('item-1', 'v433', 'worldbook', '[本体]Original Status', 'exact', 'content', 'name', 'structure')`,
   ).run();
   db.prepare(
     `INSERT INTO character_reference_items (
        id, reference_version_id, kind, display_name, exact_hash,
        normalized_content_hash, name_hash, structure_hash
-     ) VALUES ('item-2', 'v440', 'worldbook', 'Original Status', 'exact-v2', 'content-v2', 'name', 'structure')`,
+     ) VALUES ('item-2', 'v440', 'worldbook', '[本体]Original Status', 'exact-v2', 'content-v2', 'name', 'structure')`,
   ).run();
   assert.equal(
     db.prepare('SELECT COUNT(*) AS count FROM character_reference_items').get().count,
     2,
     'reference items from old versions must coexist with new versions',
+  );
+
+  db.prepare(
+    `INSERT INTO projects (id, conflicts_with_original, original_conflict_reference_item_ids)
+     VALUES ('legacy-good', 1, '["item-1"]'), ('legacy-incomplete', 1, '["missing-item"]')`,
+  ).run();
+  db.exec(conflictNamesMigration);
+
+  const migratedColumns = new Set(
+    db.prepare('PRAGMA table_info(projects)').all().map(row => String(row.name)),
+  );
+  assert.ok(migratedColumns.has('original_conflict_entry_names'));
+
+  assert.deepEqual(
+    JSON.parse(String(db.prepare(`SELECT original_conflict_entry_names AS names FROM projects WHERE id = 'legacy-good'`).get().names)),
+    ['[本体]Original Status'],
+    'legacy selected reference IDs should be snapshotted to entry names once',
+  );
+  assert.deepEqual(
+    JSON.parse(String(db.prepare(`SELECT original_conflict_entry_names AS names FROM projects WHERE id = 'legacy-incomplete'`).get().names)),
+    [],
+    'incomplete legacy mappings must remain empty so runtime fails closed',
   );
 
   db.close();

@@ -246,6 +246,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
       worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       authorId: string;
       authorName: string;
@@ -285,8 +286,8 @@ export const projectDb = {
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
-				conflicts_with_original, original_conflict_reference_item_ids, worldbook_ejs_length_estimates, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				conflicts_with_original, original_conflict_reference_item_ids, original_conflict_entry_names, worldbook_ejs_length_estimates, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -333,6 +334,7 @@ export const projectDb = {
         project.compatibilityUpdatedAt || null,
         project.conflictsWithOriginal ? 1 : 0,
         JSON.stringify(project.originalConflictReferenceItemIds || []),
+        JSON.stringify(project.originalConflictEntryNames || []),
         JSON.stringify(normalizeWorldbookEjsLengthEstimates(project.worldbookEjsLengthEstimates)),
         now(),
         now(),
@@ -463,6 +465,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
       worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
@@ -555,6 +558,10 @@ export const projectDb = {
     if (updates.originalConflictReferenceItemIds !== undefined) {
       setClauses.push('original_conflict_reference_item_ids = ?');
       values.push(JSON.stringify(updates.originalConflictReferenceItemIds));
+    }
+    if (updates.originalConflictEntryNames !== undefined) {
+      setClauses.push('original_conflict_entry_names = ?');
+      values.push(JSON.stringify(updates.originalConflictEntryNames));
     }
     if (updates.worldbookEjsLengthEstimates !== undefined) {
       setClauses.push('worldbook_ejs_length_estimates = ?');
@@ -1339,6 +1346,7 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
       worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
@@ -1385,6 +1393,7 @@ export const projectDb = {
         compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
         conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : existingDraft.conflictsWithOriginal,
         originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : existingDraft.originalConflictReferenceItemIds,
+        originalConflictEntryNames: updates.originalConflictEntryNames !== undefined ? updates.originalConflictEntryNames : existingDraft.originalConflictEntryNames,
         worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : existingDraft.worldbookEjsLengthEstimates,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
@@ -1420,6 +1429,7 @@ export const projectDb = {
       compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
       conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : published.conflictsWithOriginal,
       originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
+      originalConflictEntryNames: updates.originalConflictEntryNames !== undefined ? updates.originalConflictEntryNames : published.originalConflictEntryNames,
       worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : published.worldbookEjsLengthEstimates,
       authorId: published.authorId,
       authorName: published.authorName,
@@ -1748,6 +1758,14 @@ export function parseProjectRow(row: Record<string, unknown>) {
       try {
         const value = JSON.parse(String(row.original_conflict_reference_item_ids || '[]'));
         return Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 500) : [];
+      } catch {
+        return [];
+      }
+    })(),
+    originalConflictEntryNames: (() => {
+      try {
+        const value = JSON.parse(String(row.original_conflict_entry_names || '[]'));
+        return Array.isArray(value) ? value.map(String).map(name => name.trim()).filter(Boolean).slice(0, 500) : [];
       } catch {
         return [];
       }

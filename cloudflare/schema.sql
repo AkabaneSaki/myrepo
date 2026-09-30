@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS projects (
     compatibility_updated_at TEXT,
     conflicts_with_original INTEGER NOT NULL DEFAULT 0,
     original_conflict_reference_item_ids TEXT NOT NULL DEFAULT '[]',
+    original_conflict_entry_names TEXT NOT NULL DEFAULT '[]',
     worldbook_ejs_length_estimates TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (author_id) REFERENCES users(id)
 );

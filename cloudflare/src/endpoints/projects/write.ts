@@ -129,14 +129,17 @@ export class ProjectCreate extends OpenAPIRoute {
 
       let compatibilitySelection;
       let originalConflictReferenceItemIds: string[] = [];
+      let originalConflictEntryNames: string[] = [];
       try {
         compatibilitySelection = await resolveProjectCompatibilitySelection(c, {
           builtForReferenceVersionId,
           testedThroughReferenceVersionId: compatibilityConfirmed ? builtForReferenceVersionId : null,
         });
-        originalConflictReferenceItemIds = conflictsWithOriginal
+        const validatedConflicts = conflictsWithOriginal
           ? await validateOriginalConflictReferenceItems(c, compatibilitySelection.builtForReferenceVersionId, requestedConflictItemIds)
-          : [];
+          : { ids: [], entryNames: [] };
+        originalConflictReferenceItemIds = validatedConflicts.ids;
+        originalConflictEntryNames = validatedConflicts.entryNames;
         if (conflictsWithOriginal && originalConflictReferenceItemIds.length === 0) {
           return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
         }
@@ -174,6 +177,7 @@ export class ProjectCreate extends OpenAPIRoute {
         compatibilityUpdatedAt: compatibilitySelection.builtForReferenceVersionId ? new Date().toISOString() : null,
         conflictsWithOriginal,
         originalConflictReferenceItemIds,
+        originalConflictEntryNames,
         worldbookEjsLengthEstimates: estimateResult.value,
         authorId: payload.userId,
         authorName: payload.username,
@@ -396,15 +400,16 @@ export class ProjectUpdate extends OpenAPIRoute {
       if (data.body.conflictsWithOriginal !== undefined || data.body.originalConflictReferenceItemIds !== undefined) {
         const conflictsWithOriginal = data.body.conflictsWithOriginal ?? project.conflictsWithOriginal;
         const requestedIds = data.body.originalConflictReferenceItemIds ?? project.originalConflictReferenceItemIds;
-        const validatedIds = conflictsWithOriginal
+        const validatedConflicts = conflictsWithOriginal
           ? await validateOriginalConflictReferenceItems(c, targetBuiltForReferenceVersionId, requestedIds)
-          : [];
-        if (conflictsWithOriginal && validatedIds.length === 0) {
+          : { ids: [], entryNames: [] };
+        if (conflictsWithOriginal && validatedConflicts.ids.length === 0) {
           return c.json({ error: '请选择需要暂时关闭的原版内容' }, 400);
         }
         conflictUpdates = {
           conflictsWithOriginal,
-          originalConflictReferenceItemIds: validatedIds,
+          originalConflictReferenceItemIds: validatedConflicts.ids,
+          originalConflictEntryNames: validatedConflicts.entryNames,
         };
       }
     } catch (error) {

@@ -171,6 +171,7 @@ export const Project = z.object({
   compatibilityUpdatedAt: z.string().nullable().optional().describe('兼容性 metadata 最近更新时间'),
   conflictsWithOriginal: z.boolean().default(false).describe('是否需要暂时关闭原版世界书条目'),
   originalConflictReferenceItemIds: z.array(z.string()).max(500).default([]).describe('需要暂时关闭的原版条目基准 ID'),
+  originalConflictEntryNames: z.array(z.string()).max(500).default([]).describe('Creator 选择的原版世界书条目名称'),
 });
 
 // ============ API 请求/响应类型 ============

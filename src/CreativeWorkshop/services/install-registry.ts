@@ -9,7 +9,7 @@ import {
 const CREATIVE_WORKSHOP_INSTALL_REGISTRY_KEY = 'creative_workshop_install_registry';
 
 export type CreativeWorkshopOriginalEntryState = {
-  referenceItemId: string;
+  referenceItemId?: string;
   worldbookName: string;
   displayName: string;
   entryUid?: string | null;

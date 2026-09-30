@@ -430,6 +430,7 @@ export class AdminReview extends OpenAPIRoute {
             compatibilityUpdatedAt: project.compatibilityUpdatedAt ?? null,
             conflictsWithOriginal: project.conflictsWithOriginal,
             originalConflictReferenceItemIds: project.originalConflictReferenceItemIds,
+            originalConflictEntryNames: project.originalConflictEntryNames,
             worldbookEjsLengthEstimates: project.worldbookEjsLengthEstimates,
             projectType: project.projectType,
             extensionType: project.extensionType,

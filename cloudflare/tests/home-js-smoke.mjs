@@ -580,7 +580,8 @@ assert.match(fragments.homeModalsScript, /compatibility-modal/);
 assert.match(fragments.homeModalsScript, /compatibility-section-head/);
 assert.doesNotMatch(fragments.homeModalsScript, /project-form-section-head"><div><h3>角色卡版本/);
 assert.match(fragments.homeModalsScript, /loadProjectOriginalConflictItems/);
-assert.match(fragments.homeModalsScript, /resolvedOriginalConflictItems/);
+assert.doesNotMatch(fragments.homeModalsScript, /resolvedOriginalConflictItems/);
+assert.match(fragments.homeModalsScript, /originalConflictEntryNames/);
 assert.match(fragments.homeDetailModalRenderScript, /声明冲突的原版条目/);
 assert.match(fragments.homeDetailModalRenderScript, /安装或更新时 Workshop 会再次询问你是否帮忙关闭，不会直接修改/);
 assert.match(homeStylesSource, /\.compatibility-modal \.close-btn \{ position:relative; z-index:4; pointer-events:auto; \}/);
@@ -615,33 +616,23 @@ assert.match(fragments.homeStateScript, /confirmInstalledProjectRebind/);
 assert.doesNotMatch(fragments.homeStateScript, /canResolveLegacyProjectIdentities/);
 
 const resolveOriginalConflicts = Function(
-  'fetchCharacterReferenceVersionItems',
   `${fragments.homeModalsScript}; return loadProjectOriginalConflictItems;`,
-)(async () => ({
-  items: [
-    { id: 'wb-1', kind: 'worldbook', displayName: '原版条目 A' },
-    { id: 'rx-1', kind: 'regex', displayName: '不应计入' },
-  ],
-}));
+)();
 const resolvedOriginalConflicts = await resolveOriginalConflicts({
   conflictsWithOriginal: true,
-  builtForReferenceVersionId: 'version-1',
-  originalConflictReferenceItemIds: ['wb-1'],
+  originalConflictEntryNames: ['原版条目 A'],
 });
 assert.equal(resolvedOriginalConflicts.complete, true);
 assert.equal(resolvedOriginalConflicts.items.length, 1);
 assert.equal(resolvedOriginalConflicts.items[0].displayName, '原版条目 A');
 
-const resolvePartialOriginalConflicts = Function(
-  'fetchCharacterReferenceVersionItems',
-  `${fragments.homeModalsScript}; return loadProjectOriginalConflictItems;`,
-)(async () => ({ items: [{ id: 'wb-1', kind: 'worldbook', displayName: '原版条目 A' }] }));
-const partialOriginalConflicts = await resolvePartialOriginalConflicts({
+const legacyOriginalConflicts = await resolveOriginalConflicts({
   conflictsWithOriginal: true,
-  builtForReferenceVersionId: 'version-1',
-  originalConflictReferenceItemIds: ['wb-1', 'wb-2'],
+  originalConflictReferenceItemIds: ['wb-1'],
+  originalConflictEntryNames: [],
 });
-assert.equal(partialOriginalConflicts.complete, false);
+assert.equal(legacyOriginalConflicts.complete, false);
+assert.equal(legacyOriginalConflicts.items.length, 0);
 
 const cardViewModelUi = Function(
   'getLikeState',
