@@ -81,6 +81,10 @@ assert.doesNotMatch(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]
 assert.match(homeStylesSource, /\.project-form-modal \{[^}]*overflow:clip;/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):focus,/);
+assert.match(fragments.homeModalsScript, /data-admin-review-view="full"/, "update review must expose a full-content view");
+assert.match(fragments.homeModalsScript, /data-admin-review-full-body/, "full review entries must start as lazy shells");
+assert.match(fragments.homeModalsScript, /body\.dataset\.loaded/, "full review entry content must hydrate only after expansion");
+assert.match(homeStylesSource, /\.admin-review-full-content \.entry-content\.open \{[^}]*max-height:min\(56vh,560px\);[^}]*overflow:auto;/, "expanded full review entries must stay height-limited and scrollable");
 
 assert.doesNotMatch(
   fragments.homeTavernBridgeScript,

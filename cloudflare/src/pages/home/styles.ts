@@ -621,6 +621,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-original-conflicts p { margin:10px 0 0; color:#8f8d88; font-size:.74rem; line-height:1.55; }
 .admin-review-detail-main .detail-section,.admin-review-detail-main .external-links-section,.admin-review-detail-main .admin-review-diff-section { padding-top:22px; border-top:1px solid rgba(255,255,255,.07); }
 .admin-review-detail-main .entry-content.open { max-height:none; overflow:visible; }
+.admin-review-content-mode { display:flex; flex-direction:column; gap:16px; }
+.admin-review-view-tabs { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:4px 0 10px; border-bottom:1px solid rgba(255,255,255,.07); }
+.admin-review-view-tabs > span { margin-left:auto; color:#6f6d68; font-size:.69rem; }
+.admin-review-view-tab { min-height:34px; display:inline-flex; align-items:center; gap:7px; padding:7px 11px; border:1px solid rgba(255,255,255,.09); border-radius:8px; background:#151619; color:#8f8d88; font:inherit; font-size:.74rem; font-weight:720; cursor:pointer; }
+.admin-review-view-tab:hover { border-color:rgba(190,164,125,.22); color:#d6d2cb; }
+.admin-review-view-tab.is-active { border-color:rgba(190,164,125,.36); background:rgba(190,164,125,.11); color:#dec9aa; }
+.admin-review-view-pane[hidden] { display:none; }
+.admin-review-full-content { display:flex; flex-direction:column; gap:18px; }
+.admin-review-full-content .entry-content.open { max-height:min(56vh,560px); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.admin-review-full-content .detail-entry-content { contain:paint; }
 .admin-review-sticky-actions { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:0; border:0; border-radius:0; background:transparent; backdrop-filter:none; box-shadow:none; }
 .admin-review-sticky-actions .btn { min-width:0; width:100%; justify-content:center; }
 .admin-review-sticky-actions .admin-review-back-btn { grid-column:1 / -1; }
