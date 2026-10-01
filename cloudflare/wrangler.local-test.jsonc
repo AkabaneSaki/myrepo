@@ -5,13 +5,6 @@
   "name": "poemofdestinycreativeworkshop-local-test",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-12",
-  "rules": [
-    {
-      "type": "Text",
-      "globs": ["**/*.html"],
-      "fallthrough": true
-    }
-  ],
   "dev": {
     "port": 8790
   },
