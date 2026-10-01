@@ -156,6 +156,9 @@ app.use('*', async (c, next) => {
         'Cache-Control',
         hasAuthorization ? 'private, no-store' : 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
       );
+    } else if (c.req.path === '/api/devteam-recommendations') {
+      c.res.headers.append('Vary', 'Authorization');
+      c.res.headers.set('Cache-Control', 'private, no-store');
     } else if (c.req.path === '/assets/home.js') {
       c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     }

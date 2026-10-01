@@ -1,7 +1,7 @@
 import { OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../types';
-import { parseProjectRow } from '../utils/db';
+import { parseProjectRow, projectDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 
 type RecommendationRow = Record<string, unknown> & {
@@ -48,6 +48,54 @@ function normalizeReactionPresets(items: string[]): string[] {
   return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, 12);
 }
 
+const DLC_KITCHEN_CACHE_TTL_SECONDS = 5 * 60;
+
+async function getDlcKitchenCacheRevision(c: AppContext): Promise<string> {
+  const row = await c.env.DB.prepare(`
+    SELECT
+      COALESCE((SELECT revision FROM public_project_counts WHERE scope = '*'), 0) AS public_revision,
+      COALESCE((SELECT CAST(value AS INTEGER) FROM site_settings WHERE key = 'dlc_kitchen_revision'), 0) AS kitchen_revision
+  `).first<{ public_revision: number; kitchen_revision: number }>();
+  return `${Number(row?.public_revision || 0)}:${Number(row?.kitchen_revision || 0)}`;
+}
+
+async function bumpDlcKitchenRevision(c: AppContext, actorId: string): Promise<void> {
+  await c.env.DB.prepare(`
+    INSERT INTO site_settings (key, value, updated_at, updated_by)
+    VALUES ('dlc_kitchen_revision', '1', CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = CAST(COALESCE(site_settings.value, '0') AS INTEGER) + 1,
+      updated_at = CURRENT_TIMESTAMP,
+      updated_by = excluded.updated_by
+  `).bind(actorId).run();
+}
+
+async function applyDlcKitchenViewerLikes(c: AppContext, response: any, userId?: string) {
+  if (!userId || !Array.isArray(response?.curators)) return response;
+  const projectIds = Array.from(new Set(
+    response.curators.flatMap((curator: any) =>
+      (Array.isArray(curator?.recommendations) ? curator.recommendations : [])
+        .map((item: any) => String(item?.project?.id || '').trim())
+        .filter(Boolean),
+    ),
+  ));
+  const likedProjectIds = new Set<string>();
+  for (let offset = 0; offset < projectIds.length; offset += 50) {
+    const batch = await projectDb.getLikedProjectIds(c, projectIds.slice(offset, offset + 50), userId);
+    batch.forEach(projectId => likedProjectIds.add(projectId));
+  }
+  return {
+    ...response,
+    curators: response.curators.map((curator: any) => ({
+      ...curator,
+      recommendations: (Array.isArray(curator?.recommendations) ? curator.recommendations : []).map((item: any) => ({
+        ...item,
+        project: item?.project ? { ...item.project, userLiked: likedProjectIds.has(item.project.id) } : item?.project,
+      })),
+    })),
+  };
+}
+
 export class DevTeamRecommendationList extends OpenAPIRoute {
   schema = {
     tags: ['Recommendations'],
@@ -57,11 +105,20 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
 
   async handle(c: AppContext) {
     const currentUser = await getCurrentUserFromRequest(c);
+    const cacheRevision = await getDlcKitchenCacheRevision(c);
+    const cacheUrl = new URL(c.req.url);
+    cacheUrl.pathname = '/__cache/dlc-kitchen';
+    cacheUrl.search = new URLSearchParams({ revision: cacheRevision }).toString();
+    const cacheRequest = new Request(cacheUrl.toString());
+    const cached = await caches.default.match(cacheRequest);
+    let publicResponse: any = cached ? await cached.json() : null;
+
+    if (!publicResponse) {
     const result = await c.env.DB.prepare(
       `SELECT
          p.*,
          author_user.global_name AS global_name,
-         CASE WHEN viewer_like.user_id IS NULL THEN 0 ELSE 1 END AS user_liked,
+         0 AS user_liked,
          r.curator_id,
          r.project_id,
          r.comment_text,
@@ -77,8 +134,8 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
        JOIN users curator_user ON curator_user.id = r.curator_id
        JOIN projects p ON p.id = r.project_id
        LEFT JOIN users author_user ON author_user.id = p.author_id
-       LEFT JOIN project_likes viewer_like
-         ON viewer_like.project_id = p.id AND viewer_like.user_id = ?
+       -- Viewer likes are overlaid after the shared public payload is loaded.
+
        WHERE curator.enabled = 1
          AND (
            curator_user.is_admin = 1
@@ -93,7 +150,7 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
          AND p.visibility = 1
        ORDER BY r.updated_at DESC
        LIMIT 100`,
-    ).bind(currentUser?.userId || '', c.env.SUPER_ADMIN_USER_ID?.trim() || '').all<RecommendationRow>();
+    ).bind(c.env.SUPER_ADMIN_USER_ID?.trim() || '').all<RecommendationRow>();
 
     const rows = result.results || [];
     const curators = new Map<string, any>();
@@ -118,7 +175,16 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
       });
     }
 
-    return { success: true, curators: Array.from(curators.values()) };
+      publicResponse = { success: true, curators: Array.from(curators.values()) };
+      await caches.default.put(cacheRequest, new Response(JSON.stringify(publicResponse), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': `public, max-age=${DLC_KITCHEN_CACHE_TTL_SECONDS}`,
+        },
+      }));
+    }
+
+    return applyDlcKitchenViewerLikes(c, publicResponse, currentUser?.userId);
   }
 }
 
@@ -199,6 +265,7 @@ export class AdminDevTeamCuratorProfileSet extends OpenAPIRoute {
       data.body.bio,
       JSON.stringify(reactionPresets),
     ).run();
+    await bumpDlcKitchenRevision(c, payload.userId);
 
     return {
       success: true,
@@ -269,6 +336,7 @@ export class AdminDevTeamRecommendationSet extends OpenAPIRoute {
         data.body.reactionLabel ?? null,
       ),
     ]);
+    await bumpDlcKitchenRevision(c, payload.userId);
 
     return { success: true };
   }
@@ -295,6 +363,7 @@ export class AdminDevTeamRecommendationDelete extends OpenAPIRoute {
     await c.env.DB.prepare(
       'DELETE FROM devteam_recommendations WHERE curator_id = ? AND project_id = ?',
     ).bind(payload.userId, data.params.projectId).run();
+    await bumpDlcKitchenRevision(c, payload.userId);
     return { success: true };
   }
 }
