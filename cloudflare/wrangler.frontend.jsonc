@@ -3,6 +3,13 @@
 	"name": "poemofdestinycreativeworkshop-frontend",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-03-12",
+	"rules": [
+		{
+			"type": "Text",
+			"globs": ["**/*.html"],
+			"fallthrough": true
+		}
+	],
 	"workers_dev": true,
 	"dev": {
 		"port": 8791

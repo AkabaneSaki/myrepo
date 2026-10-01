@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Poem Workshop · EJS Preflight</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f5f7;--panel:#fff;--panel2:#f8f9fb;--text:#1d2028;--muted:#687080;--line:#d9dde5;--accent:#5965d8;--accent2:#eef0ff;--danger:#b92f41;--dangerbg:#fff0f2;--warn:#9a6700;--warnbg:#fff7df;--ok:#18794e;--okbg:#ebf9f1;--info:#315a9c;--infobg:#eef5ff;--shadow:0 12px 40px rgba(28,35,52,.08);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#111318;--panel:#191c23;--panel2:#20242c;--text:#edf0f7;--muted:#9ba3b4;--line:#323846;--accent:#929aff;--accent2:#292e50;--danger:#ff8794;--dangerbg:#3a2025;--warn:#f3c45f;--warnbg:#3a321e;--ok:#66d79d;--okbg:#18382a;--info:#8eb8ff;--infobg:#1c2d49;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input{font:inherit}.shell{width:min(1180px,calc(100% - 28px));margin:auto;padding:32px 0 64px}.hero{margin-bottom:20px}h1{margin:0 0 8px;font-size:clamp(26px,5vw,40px);letter-spacing:-.03em}.sub{margin:0;color:var(--muted);line-height:1.65;max-width:850px}.privacy{display:inline-flex;gap:8px;align-items:center;margin-top:12px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ok);background:var(--okbg);font-size:13px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.drop{padding:26px;text-align:center;border:2px dashed var(--line);border-radius:16px;margin:18px;transition:.15s ease;cursor:pointer;background:var(--panel2)}.drop.drag{border-color:var(--accent);background:var(--accent2)}.drop strong{display:block;font-size:18px;margin-bottom:7px}.drop small{display:block;color:var(--muted);line-height:1.6}.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}.btn{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:9px 14px;cursor:pointer;font-weight:650}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}#fileInput{display:none}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.metric{padding:16px}.metric b{display:block;font-size:26px;margin-bottom:3px}.metric span{color:var(--muted);font-size:13px}.section{margin-top:18px;padding:18px}.section h2{margin:0 0 14px;font-size:19px}.finding{border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:10px 0;background:var(--panel2)}.finding-head{display:flex;align-items:flex-start;gap:10px}.badge{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 8px}.badge.high{color:var(--danger);background:var(--dangerbg)}.badge.warn{color:var(--warn);background:var(--warnbg)}.badge.info{color:var(--info);background:var(--infobg)}.finding-title{font-weight:750;line-height:1.4}.finding p{margin:7px 0 0;color:var(--muted);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}.books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}.book h3{margin:0 0 8px;font-size:15px;overflow-wrap:anywhere}.book-meta{color:var(--muted);font-size:13px;line-height:1.55}details{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}summary{cursor:pointer;color:var(--muted);font-size:13px}.entry-list{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:12px}.entry-list li{margin:5px 0}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.65}.foot a{color:var(--accent)}.hidden{display:none!important}
+@media(max-width:760px){.shell{width:min(100% - 18px,1180px);padding-top:18px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.books{grid-template-columns:1fr}.drop{margin:10px;padding:22px 14px}.section{padding:14px}}
+</style>
+</head>
+<body>
+<main class="shell">
+<header class="hero">
+<h1>EJS Preflight</h1>
+<p class="sub">把一个或多个 SillyTavern 世界书 JSON 拖进来，检查 EJS 语法、跨条目/跨世界书冲突、共享变量、危险 API、外联和状态写入冲突。工具只做静态分析，不会执行 EJS。</p>
+<div class="privacy">● 文件只在当前浏览器本地读取，不上传</div>
+</header>
+<section class="panel">
+<label class="drop" id="dropZone" for="fileInput">
+<strong>拖入世界书 JSON，或点这里选择</strong>
+<small>支持一次选择多个文件，用于检查 Book A + Book B 一起启用时的兼容性</small>
+<div class="actions">
+<span class="btn primary">选择 JSON</span>
+<button class="btn" type="button" id="clearBtn">清空</button>
+<button class="btn" type="button" id="exportBtn" disabled>导出报告</button>
+</div>
+</label>
+<input id="fileInput" type="file" accept=".json,application/json" multiple>
+</section>
+<section id="resultRoot" class="hidden">
+<div class="summary">
+<div class="panel metric"><b id="mBooks">0</b><span>世界书</span></div>
+<div class="panel metric"><b id="mEntries">0</b><span>EJS 条目</span></div>
+<div class="panel metric"><b id="mHigh">0</b><span>高风险 / 确定错误</span></div>
+<div class="panel metric"><b id="mWarn">0</b><span>需要确认</span></div>
+</div>
+<section class="panel section"><h2>检查结果</h2><div id="findings"></div></section>
+<section class="panel section"><h2>已读取世界书</h2><div id="books" class="books"></div></section>
+</section>
+<p class="foot">参考实现：ST-Prompt-Template 的 EJS runtime / helper reference。特别识别 <code>@@private</code>、<code>get/setMessageVar</code>、<code>get/setGlobalVar</code>、<code>define</code> 等接口。<br>此工具是预检器，不等同于 SillyTavern 实际运行环境；“需要确认”表示存在兼容性或权限面风险，不代表代码恶意。<br>Reference: <a href="https://github.com/zonde306/ST-Prompt-Template" target="_blank" rel="noreferrer">zonde306/ST-Prompt-Template</a></p>
+</main>
+<script>
+(() => {
+'use strict';
+const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+const MAX_FILE_BYTES=12*1024*1024;
+const WORKSHOP_META_RE=/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi;
+const KNOWN_HELPERS=new Set(['getvar','setvar','incvar','decvar','delvar','insvar','getLocalVar','setLocalVar','incLocalVar','decLocalVar','delLocalVar','insertLocalVar','getGlobalVar','setGlobalVar','incGlobalVar','decGlobalVar','delGlobalVar','insertGlobalVar','getMessageVar','setMessageVar','incMessageVar','decMessageVar','delMessageVar','insertMessageVar','patchVariables','setVariableSchema','getwi','getWorldInfo','getchr','getchar','getChara','getprp','getpreset','getPresetPrompt','getqr','getQuickReply','evalTemplate','activewi','activateWorldInfo','activateWorldInfoByKeywords','activateRegex','injectPrompt','getPromptsInjected','hasPromptsInjected','define','execute','getChatMessage','getChatMessages','matchChatMessages','parseJSON','jsonPatch']);
+const WRITE_HELPERS=new Set(['setvar','incvar','decvar','delvar','insvar','setLocalVar','incLocalVar','decLocalVar','delLocalVar','insertLocalVar','setGlobalVar','incGlobalVar','decGlobalVar','delGlobalVar','insertGlobalVar','setMessageVar','incMessageVar','decMessageVar','delMessageVar','insertMessageVar','patchVariables']);
+const READ_HELPERS=new Set(['getvar','getLocalVar','getGlobalVar','getMessageVar']);
+const q=id=>document.getElementById(id);
+const state={books:[],findings:[],report:null};
+
+function stripWorkshopMeta(content){return content.replace(WORKSHOP_META_RE,'')}
+function parseDecorators(content){
+  const lines=content.replace(/\r\n/g,'\n').split('\n'),decorators=[];let i=0;
+  while(i<lines.length&&lines[i].startsWith('@@')){if(lines[i].startsWith('@@@'))break;decorators.push(lines[i].trim());i++}
+  return{decorators,body:lines.slice(i).join('\n'),isPrivate:decorators.some(x=>x.split(/\s+/,1)[0]==='@@private')}
+}
+function extractEntries(json,fileName){
+  const raw=[json&&json.entries,json&&json.data&&json.data.entries,json&&json.world_info&&json.world_info.entries].filter(Boolean)[0];
+  if(!raw||(typeof raw!=='object'&&!Array.isArray(raw)))throw new Error('找不到世界书 entries');
+  const list=Array.isArray(raw)?raw.map((v,i)=>[String(i),v]):Object.entries(raw),out=[];
+  for(const [key,value] of list){
+    if(!value||typeof value!=='object'||typeof value.content!=='string')continue;
+    const cleaned=stripWorkshopMeta(value.content);if(!cleaned.includes('<%'))continue;
+    const parsed=parseDecorators(cleaned);
+    out.push({id:fileName+':'+key,fileName,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key),body:parsed.body,decorators:parsed.decorators,isPrivate:parsed.isPrivate,code:'',syntaxError:null,helpers:[],reads:[],writes:[],defines:[],vars:[],urls:[]});
+  }
+  return out;
+}
+function templateToJs(content,privateScope=false){
+  let out=privateScope?'await (async()=>{\n':'',cursor=0;
+  while(cursor<content.length){
+    const open=content.indexOf('<%',cursor);if(open<0)break;
+    let pos=open+2,mode='',mark=content[pos]||'';if('=_-#%'.includes(mark)){mode=mark;pos++}
+    const close=content.indexOf('%>',pos);if(close<0)throw new SyntaxError('EJS 标签未闭合：缺少 %>');
+    let code=content.slice(pos,close);if(code.endsWith('-')||code.endsWith('_'))code=code.slice(0,-1);
+    const skipped=content.slice(cursor,open);out+='\n'.repeat((skipped.match(/\n/g)||[]).length);
+    if(mode==='#')out+='\n'.repeat((code.match(/\n/g)||[]).length);
+    else if(mode==='%'){}
+    else if(mode==='='||mode==='-')out+='\nvoid ('+code+');\n';
+    else out+='\n'+code+'\n';
+    cursor=close+2;
+  }
+  if(privateScope)out+='\n})();\n';return out;
+}
+function compileOnly(code){
+  try{new AsyncFunction('__ctx','with (__ctx) {\n'+code+'\n}');return null}
+  catch(err){return String(err&&err.message?err.message:err)}
+}
+function maskStringsAndComments(code){
+  const a=code.split('');let i=0;const blank=(s,e)=>{for(let j=s;j<e;j++)if(a[j]!=='\n')a[j]=' '};
+  while(i<a.length){
+    const c=a[i],n=a[i+1];
+    if(c==='/'&&n==='/'){const s=i;i+=2;while(i<a.length&&a[i]!=='\n')i++;blank(s,i);continue}
+    if(c==='/'&&n==='*'){const s=i;i+=2;while(i<a.length-1&&!(a[i]==='*'&&a[i+1]==='/'))i++;i=Math.min(a.length,i+2);blank(s,i);continue}
+    if(c==="'"||c==='"'||c.charCodeAt(0)===96){const s=i,qc=c;i++;while(i<a.length){if(a[i]==='\\'){i+=2;continue}if(a[i]===qc){i++;break}i++}blank(s,i);continue}
+    i++;
+  }
+  return a.join('');
+}
+function escapeRegex(s){return s.replace(/[.*+?^$(){}|[\]\\]/g,'\\$&')}
+function literalFirstArgCalls(code,fnNames){
+  const result=[],names=Array.from(fnNames).sort((a,b)=>b.length-a.length).map(escapeRegex).join('|');
+  const re=new RegExp("\\b("+names+")\\s*\\(\\s*(['\"])((?:\\\\.|(?!\\2).)*)\\2","g");let m;
+  while((m=re.exec(code)))result.push({fn:m[1],value:m[3],index:m.index});return result;
+}
+function allHelperCalls(code){
+  const clean=maskStringsAndComments(code),names=Array.from(KNOWN_HELPERS).sort((a,b)=>b.length-a.length).map(escapeRegex).join('|');
+  const re=new RegExp('\\b('+names+')\\s*\\(','g'),out=[];let m;while((m=re.exec(clean)))out.push(m[1]);return out;
+}
+function collectVarNames(code){
+  const clean=maskStringsAndComments(code),out=[],re=/\bvar\s+([A-Za-z_$][\w$]*)/g;let m;while((m=re.exec(clean)))out.push(m[1]);return[...new Set(out)];
+}
+function collectUrls(code){
+  const out=[],re=/https?:\/\/[^\s"'<>\\)\]]+/g;let m;while((m=re.exec(code)))out.push(m[0]);return[...new Set(out)];
+}
+function finding(severity,title,entry,detail,extra={}){
+  return{severity,title,detail,book:entry?entry.fileName:(extra.book||''),entry:entry?entry.name:(extra.entry||''),uid:entry?entry.uid:(extra.uid??''),...extra};
+}
+function inspectEntry(entry,findings){
+  try{entry.code=templateToJs(entry.body,entry.isPrivate)}catch(err){entry.syntaxError=String(err.message||err)}
+  if(!entry.syntaxError)entry.syntaxError=compileOnly(entry.code);
+  if(entry.syntaxError){findings.push(finding('high','EJS 无法编译',entry,entry.syntaxError));return}
+  entry.helpers=allHelperCalls(entry.code);
+  const staticCalls=literalFirstArgCalls(entry.code,new Set([...READ_HELPERS,...WRITE_HELPERS,'define']));
+  entry.reads=staticCalls.filter(x=>READ_HELPERS.has(x.fn)).map(x=>({helper:x.fn,key:x.value}));
+  entry.writes=staticCalls.filter(x=>WRITE_HELPERS.has(x.fn)).map(x=>({helper:x.fn,key:x.value}));
+  entry.defines=staticCalls.filter(x=>x.fn==='define').map(x=>x.value);
+  entry.vars=collectVarNames(entry.code);entry.urls=collectUrls(entry.code);
+  const clean=maskStringsAndComments(entry.code);
+  if(entry.vars.length&&!entry.isPrivate)findings.push(finding('warn','使用 var，可能跨条目共享/覆盖',entry,'检测到：'+entry.vars.join(', ')+'。当前条目没有 @@private；var 是函数作用域，可能与同次模板处理中的其他代码共享/覆盖。'));
+  const dangerous=[
+    [/\beval\s*\(/,'eval() 动态执行代码'],[/\bFunction\s*\(/,'Function() 动态创建代码'],
+    [/\b(?:globalThis|window)\s*\[/,'动态访问 globalThis/window'],[/\b(?:globalThis|window)\.[A-Za-z_$][\w$]*\s*=/,'写入 globalThis/window'],
+    [/\bdocument\.cookie\b/,'读取或写入 document.cookie'],[/\b(?:localStorage|sessionStorage|indexedDB)\b/,'访问浏览器持久存储'],
+    [/\bSillyTavern\.getContext\s*\(/,'直接访问 SillyTavern.getContext()'],[/\bexecute\s*\(/,'执行 ST Slash Command']
+  ];
+  for(const [re,label]of dangerous)if(re.test(clean))findings.push(finding('warn','需要人工确认：'+label,entry,'这类能力可能是正常高级用法，但权限面较大，预检器不会自动判定为恶意。'));
+  const net=[];if(/\bfetch\s*\(/.test(clean))net.push('fetch');if(/\bXMLHttpRequest\b/.test(clean))net.push('XMLHttpRequest');if(/\bWebSocket\s*\(/.test(clean))net.push('WebSocket');if(/\bEventSource\s*\(/.test(clean))net.push('EventSource');if(/\bsendBeacon\s*\(/.test(clean))net.push('sendBeacon');
+  if(net.length)findings.push(finding('warn','检测到网络访问能力',entry,'API：'+net.join(', ')+(entry.urls.length?'\nURL：'+entry.urls.join('\n'):'\n目标地址可能是动态生成的。')));
+  else if(entry.urls.length)findings.push(finding('info','EJS 中出现外部 URL',entry,entry.urls.join('\n')));
+  if(/\b(?:LAST_SEND_TOKENS|LAST_SEND_CHARS|LAST_RECEIVE_TOKENS|LAST_RECEIVE_CHARS)\s*=/.test(clean))findings.push(finding('high','修改了 Prompt Template 特殊只读变量',entry,'ST-Prompt-Template 文档明确说明这些特殊变量不应自行修改。'));
+}
+function compileCombined(entries){return compileOnly(entries.map(e=>'\n/* '+e.fileName.replace(/\*\//g,'')+' :: '+String(e.uid)+' */\n'+e.code).join('\n'))}
+function detectCompileCollisions(entries,findings){
+  const good=entries.filter(e=>!e.syntaxError),baseline=[],conflictPool=[],seen=new Set();
+  function checkPair(a,b){
+    const key=[a.id,b.id].sort().join('|');if(seen.has(key))return false;seen.add(key);
+    const err=compileCombined([a,b]);if(!err)return false;
+    const cross=a.fileName!==b.fileName;
+    findings.push({severity:'high',title:cross?'跨世界书 EJS 确定冲突':'同一世界书 EJS 确定冲突',detail:err+'\n如果这两个条目同时进入同一次 EJS 处理，会直接编译失败。',book:a.fileName+' ↔ '+b.fileName,entry:a.name+' ↔ '+b.name,uid:String(a.uid)+' ↔ '+String(b.uid)});
+    return true;
+  }
+  for(const entry of good){
+    for(const other of conflictPool)checkPair(other,entry);
+    const err=compileCombined(baseline.concat(entry));
+    if(!err){baseline.push(entry);continue}
+    let found=false;for(const other of baseline)if(checkPair(other,entry))found=true;
+    if(!found)findings.push(finding('warn','组合编译失败，但未定位到单一冲突条目',entry,err));
+    conflictPool.push(entry);
+  }
+}
+function detectSharedState(entries,findings){
+  const writeMap=new Map(),defineMap=new Map(),varMap=new Map();
+  for(const e of entries.filter(x=>!x.syntaxError)){
+    for(const w of e.writes){const k=w.helper+'::'+w.key;if(!writeMap.has(k))writeMap.set(k,[]);writeMap.get(k).push(e)}
+    for(const name of e.defines){if(!defineMap.has(name))defineMap.set(name,[]);defineMap.get(name).push(e)}
+    if(!e.isPrivate)for(const name of e.vars){if(!varMap.has(name))varMap.set(name,[]);varMap.get(name).push(e)}
+  }
+  for(const [key,list]of writeMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;const idx=key.indexOf('::'),helper=key.slice(0,idx),path=key.slice(idx+2);findings.push({severity:'warn',title:'多个世界书写入同一状态键',detail:helper+'("'+path+'")\n这不一定是错误，但两个项目可能互相覆盖状态，需要确认是否设计为共享。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
+  for(const [name,list]of defineMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;findings.push({severity:'warn',title:'跨世界书 define() 名称重复',detail:'define("'+name+'", ...) 会写入 ST-Prompt-Template 的 SharedDefines。不同项目使用同名定义时可能互相覆盖。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
+  for(const [name,list]of varMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;findings.push({severity:'warn',title:'跨世界书共享 var 名称',detail:'var '+name+' 在多个项目中出现。var 是函数作用域，普通 { } / @@private 不能像 const/let 一样可靠隔离它。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
+}
+async function parseFile(file){
+  if(file.size>MAX_FILE_BYTES)throw new Error('文件超过 12 MB 上限');
+  const json=JSON.parse(await file.text());return{fileName:file.name,size:file.size,entries:extractEntries(json,file.name)};
+}
+async function analyzeFiles(files){
+  const books=[],findings=[];
+  for(const file of files){try{books.push(await parseFile(file))}catch(err){findings.push({severity:'high',title:'无法读取世界书',detail:String(err.message||err),book:file.name,entry:'',uid:''})}}
+  const entries=books.flatMap(b=>b.entries);for(const e of entries)inspectEntry(e,findings);detectCompileCollisions(entries,findings);detectSharedState(entries,findings);
+  if(!entries.length&&books.length)findings.push({severity:'info',title:'没有找到用户 EJS',detail:'未发现包含 <% ... %> 的世界书条目。Poem Workshop metadata 注释块会被自动忽略。',book:'',entry:'',uid:''});
+  findings.sort((a,b)=>rank(a.severity)-rank(b.severity)||a.title.localeCompare(b.title,'zh-CN'));
+  state.books=books;state.findings=findings;state.report={generatedAt:new Date().toISOString(),tool:'Poem Workshop EJS Preflight',books:books.map(b=>({fileName:b.fileName,size:b.size,ejsEntries:b.entries.length})),findings};render();
+}
+function rank(s){return s==='high'?0:s==='warn'?1:2}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(){
+  const entries=state.books.flatMap(b=>b.entries),high=state.findings.filter(f=>f.severity==='high').length,warn=state.findings.filter(f=>f.severity==='warn').length;
+  q('mBooks').textContent=state.books.length;q('mEntries').textContent=entries.length;q('mHigh').textContent=high;q('mWarn').textContent=warn;q('resultRoot').classList.remove('hidden');q('exportBtn').disabled=!state.report;
+  if(!state.findings.length)q('findings').innerHTML='<div class="finding"><div class="finding-head"><span class="badge info">OK</span><div class="finding-title">没有发现静态风险</div></div><p>这不代表运行时绝对安全，但当前检查项均未命中。</p></div>';
+  else q('findings').innerHTML=state.findings.map(f=>{const badge=f.severity==='high'?'高风险':f.severity==='warn'?'确认':'信息';return'<article class="finding"><div class="finding-head"><span class="badge '+f.severity+'">'+badge+'</span><div class="finding-title">'+esc(f.title)+'</div></div><p>'+(f.book?'文件：'+esc(f.book)+'\n':'')+(f.entry?'条目：'+esc(f.entry)+(f.uid!==''?' (UID '+esc(f.uid)+')':'')+'\n':'')+esc(f.detail)+'</p></article>'}).join('');
+  q('books').innerHTML=state.books.map(b=>{const counts=new Map();for(const e of b.entries)for(const h of e.helpers)counts.set(h,(counts.get(h)||0)+1);const helpers=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>k+'×'+v).join(' · ')||'无已识别 helper';return'<article class="book"><h3>'+esc(b.fileName)+'</h3><div class="book-meta">EJS 条目：'+b.entries.length+'<br>常用 API：'+esc(helpers)+'</div><details><summary>查看 EJS 条目</summary><ul class="entry-list">'+b.entries.map(e=>'<li>'+esc(e.name)+' · UID '+esc(e.uid)+(e.isPrivate?' · @@private':'')+(e.syntaxError?' · 编译失败':'')+'</li>').join('')+'</ul></details></article>'}).join('');
+}
+function clearAll(){state.books=[];state.findings=[];state.report=null;q('fileInput').value='';q('resultRoot').classList.add('hidden');q('exportBtn').disabled=true}
+function exportReport(){if(!state.report)return;const blob=new Blob([JSON.stringify(state.report,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ejs-preflight-report-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+async function onFiles(fileList){const files=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.json'));if(files.length)await analyzeFiles(files)}
+const drop=q('dropZone');q('fileInput').addEventListener('change',e=>onFiles(e.target.files));q('clearBtn').addEventListener('click',e=>{e.preventDefault();clearAll()});q('exportBtn').addEventListener('click',e=>{e.preventDefault();exportReport()});['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>onFiles(e.dataTransfer.files));
+async function selfTest(){
+  const mk=(name,entries)=>new File([JSON.stringify({entries})],name,{type:'application/json'});
+  await analyzeFiles([mk('book-a.json',{1:{uid:1,comment:'安全私有作用域',content:'@@private\n<% var state = 1; %><%= state %>'},2:{uid:2,comment:'共享 const A',content:'<% const collision = 1; %>'},3:{uid:3,comment:'状态写入 A',content:'<% setGlobalVar("shared.hp", 100); %>'}}),mk('book-b.json',{1:{uid:1,comment:'共享 const B',content:'<% const collision = 2; %>'},2:{uid:2,comment:'状态写入 B',content:'<% setGlobalVar("shared.hp", 50); %>'},3:{uid:3,comment:'网络访问',content:'<% await fetch("https://example.com/x"); %>'}})]);
+  const titles=state.findings.map(x=>x.title),ok=titles.includes('跨世界书 EJS 确定冲突')&&titles.includes('多个世界书写入同一状态键')&&titles.includes('检测到网络访问能力')&&!state.findings.some(x=>x.entry.includes('安全私有作用域'));
+  document.title=(ok?'SELFTEST PASS':'SELFTEST FAIL')+' · EJS Preflight';const box=document.createElement('div');box.id='selftest';box.style.cssText='position:fixed;right:12px;bottom:12px;z-index:9999;padding:10px 14px;border-radius:10px;background:'+(ok?'#18794e':'#b92f41')+';color:white;font-weight:800';box.textContent=ok?'SELFTEST PASS':'SELFTEST FAIL';document.body.appendChild(box);
+}
+if(new URLSearchParams(location.search).get('selftest')==='1')selfTest();
+window.EjsPreflight={analyzeFiles,templateToJs,compileOnly};
+})();
+</script>
+</body>
+</html>

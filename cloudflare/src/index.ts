@@ -12,6 +12,7 @@ import { jwt } from './utils/jwt';
 
 // 页面
 import { homePage, homeScriptPage } from './pages/home';
+import ejsPreflightHtml from '../../util/ejs-preflight.html';
 
 // 认证端点
 import { AuthCallback, AuthLocalPreview, AuthLogin, AuthLogout, AuthMe, AuthPoll } from './endpoints/auth';
@@ -175,6 +176,16 @@ app.get('/assets/home.js', c => {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
       'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  });
+});
+
+app.get('/tools/ejs-preflight.html', c => {
+  return new Response(ejsPreflightHtml, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="poem-workshop-ejs-preflight.html"',
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400',
     },
   });
 });

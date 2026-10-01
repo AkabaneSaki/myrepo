@@ -3,6 +3,13 @@
   "name": "poemofdestinycreativeworkshop",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-12",
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.html"],
+      "fallthrough": true
+    }
+  ],
   "keep_vars": true,
   "triggers": {
     "crons": ["0 2,8,14,20 * * *"]
