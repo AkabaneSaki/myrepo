@@ -59,6 +59,7 @@
     "check:d1-interaction-guards": "node tests/d1-interaction-guards-smoke.mjs",
     "check:staging-sync": "python -m unittest scripts/test_sync_staging_from_backup.py -v",
     "check:public-counts": "node tests/public-project-counts.mjs",
+    "check:public-list-cache": "node tests/public-project-list-cache-smoke.mjs",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",

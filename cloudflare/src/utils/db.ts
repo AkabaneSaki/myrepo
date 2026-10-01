@@ -1284,6 +1284,23 @@ export const projectDb = {
     return { liked: !existing, count: Number(counter?.count || 0) };
   },
 
+  getLikedProjectIds: async (c: AppContext, projectIds: string[], userId: string) => {
+    const uniqueProjectIds = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 50);
+    if (!userId || uniqueProjectIds.length === 0) return new Set<string>();
+
+    const likes = await c.env.DB.prepare(
+      `
+        SELECT project_id
+        FROM project_likes
+        WHERE user_id = ?2 AND project_id IN (SELECT value FROM json_each(?1))
+      `,
+    )
+      .bind(JSON.stringify(uniqueProjectIds), userId)
+      .all<{ project_id: string }>();
+
+    return new Set((likes.results || []).map(row => row.project_id));
+  },
+
   getSubscribedProjectIds: async (c: AppContext, userId: string) => {
     const result = await c.env.DB.prepare(`SELECT project_id FROM project_subscribes WHERE user_id = ?`)
       .bind(userId)

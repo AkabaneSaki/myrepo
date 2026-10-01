@@ -12,6 +12,28 @@ import { r2Storage } from '../../utils/r2';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 
+async function applyProjectListViewerLikes<T extends {
+  projects: Array<{ id: string; userLiked: boolean }>;
+}>(
+  c: AppContext,
+  userId: string | undefined,
+  response: T,
+): Promise<T> {
+  if (!userId || response.projects.length === 0) return response;
+  const likedProjectIds = await projectDb.getLikedProjectIds(
+    c,
+    response.projects.map(project => project.id),
+    userId,
+  );
+  return {
+    ...response,
+    projects: response.projects.map(project => ({
+      ...project,
+      userLiked: likedProjectIds.has(project.id),
+    })),
+  } as T;
+}
+
 /**
  * 获取项目列表 (公开 - 只返回已审核通过的项目)
  */
@@ -86,7 +108,7 @@ export class ProjectList extends OpenAPIRoute {
     const { page, pageSize, projectType, tag, tags, search, minLikes, minDownloads, sort } = data.query;
     const payload = await getCurrentUserFromRequest(c);
     const publicCounts = await projectDb.getPublicCounts(c);
-    const cacheable = !payload && page < 3 && [5, 10, 20, 48, 49, 50].includes(pageSize)
+    const cacheable = page < 3 && [5, 10, 20, 48, 49, 50].includes(pageSize)
       && ['discover', 'published', 'updated', 'downloads', 'likes'].includes(sort)
       && !tag && !tags && !search?.trim() && !minLikes && !minDownloads;
     const cacheUrl = new URL(c.req.url);
@@ -99,7 +121,13 @@ export class ProjectList extends OpenAPIRoute {
     const cacheRequest = new Request(cacheUrl.toString());
     if (cacheable) {
       const cached = await caches.default.match(cacheRequest);
-      if (cached) return c.json(await cached.json());
+      if (cached) {
+        const cachedResponse = await cached.json() as {
+          projects: Array<{ id: string; userLiked: boolean }>;
+          [key: string]: unknown;
+        };
+        return applyProjectListViewerLikes(c, payload?.userId, cachedResponse);
+      }
     }
     const tagFilters = String(tags || '')
       .split(',')
@@ -118,7 +146,9 @@ export class ProjectList extends OpenAPIRoute {
       minLikes,
       minDownloads,
       sort,
-      currentUser: payload,
+      // Keep the shared list payload viewer-neutral. Per-user likes are applied
+      // after the public response has been read from or written to Cache API.
+      currentUser: null,
     });
 
     // 添加作者头像 URL
@@ -142,7 +172,7 @@ export class ProjectList extends OpenAPIRoute {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
       }));
     }
-    return response;
+    return applyProjectListViewerLikes(c, payload?.userId, response);
   }
 }
 
