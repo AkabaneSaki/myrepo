@@ -52,6 +52,8 @@ const WORKSHOP_META_RE=/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-m
 const KNOWN_HELPERS=new Set(['getvar','setvar','incvar','decvar','delvar','insvar','getLocalVar','setLocalVar','incLocalVar','decLocalVar','delLocalVar','insertLocalVar','getGlobalVar','setGlobalVar','incGlobalVar','decGlobalVar','delGlobalVar','insertGlobalVar','getMessageVar','setMessageVar','incMessageVar','decMessageVar','delMessageVar','insertMessageVar','patchVariables','setVariableSchema','getwi','getWorldInfo','getchr','getchar','getChara','getprp','getpreset','getPresetPrompt','getqr','getQuickReply','evalTemplate','activewi','activateWorldInfo','activateWorldInfoByKeywords','activateRegex','injectPrompt','getPromptsInjected','hasPromptsInjected','define','execute','getChatMessage','getChatMessages','matchChatMessages','parseJSON','jsonPatch']);
 const WRITE_HELPERS=new Set(['setvar','incvar','decvar','delvar','insvar','setLocalVar','incLocalVar','decLocalVar','delLocalVar','insertLocalVar','setGlobalVar','incGlobalVar','decGlobalVar','delGlobalVar','insertGlobalVar','setMessageVar','incMessageVar','decMessageVar','delMessageVar','insertMessageVar','patchVariables']);
 const READ_HELPERS=new Set(['getvar','getLocalVar','getGlobalVar','getMessageVar']);
+const ASYNC_HELPERS=new Set(['getwi','getWorldInfo','getchr','getchar','getChara','getprp','getpreset','getPresetPrompt','getqr','getQuickReply','evalTemplate']);
+const WORLDINFO_HELPERS=new Set(['getwi','getWorldInfo']);
 const q=id=>document.getElementById(id);
 const state={books:[],findings:[],report:null};
 
@@ -69,7 +71,17 @@ function extractEntries(json,fileName){
     if(!value||typeof value!=='object'||typeof value.content!=='string')continue;
     const cleaned=stripWorkshopMeta(value.content);if(!cleaned.includes('<%'))continue;
     const parsed=parseDecorators(cleaned);
-    out.push({id:fileName+':'+key,fileName,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key),body:parsed.body,decorators:parsed.decorators,isPrivate:parsed.isPrivate,code:'',syntaxError:null,helpers:[],reads:[],writes:[],defines:[],vars:[],urls:[]});
+    out.push({id:fileName+':'+key,fileName,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key),body:parsed.body,decorators:parsed.decorators,isPrivate:parsed.isPrivate,code:'',syntaxError:null,helpers:[],reads:[],writes:[],defines:[],vars:[],urls:[],calls:[],worldRefs:[],stateAccess:[]});
+  }
+  return out;
+}
+function extractEntryCatalog(json,fileName){
+  const raw=[json&&json.entries,json&&json.data&&json.data.entries,json&&json.world_info&&json.world_info.entries].filter(Boolean)[0];
+  if(!raw||(typeof raw!=='object'&&!Array.isArray(raw)))return[];
+  const list=Array.isArray(raw)?raw.map((v,i)=>[String(i),v]):Object.entries(raw),out=[];
+  for(const [key,value] of list){
+    if(!value||typeof value!=='object')continue;
+    out.push({id:fileName+':'+key,fileName,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key)});
   }
   return out;
 }
@@ -120,6 +132,101 @@ function collectVarNames(code){
 function collectUrls(code){
   const out=[],re=/https?:\/\/[^\s"'<>\\)\]]+/g;let m;while((m=re.exec(code)))out.push(m[0]);return[...new Set(out)];
 }
+function extractEjsSegments(content){
+  const out=[];let cursor=0;
+  while(cursor<content.length){
+    const open=content.indexOf('<%',cursor);if(open<0)break;
+    let pos=open+2,mode='',mark=content[pos]||'';if('=_-#%'.includes(mark)){mode=mark;pos++}
+    const close=content.indexOf('%>',pos);if(close<0)break;
+    let code=content.slice(pos,close);if(code.endsWith('-')||code.endsWith('_'))code=code.slice(0,-1);
+    if(mode!=='#'&&mode!=='%')out.push({mode,code});
+    cursor=close+2;
+  }
+  return out;
+}
+function findCalls(code,fnNames){
+  const clean=maskStringsAndComments(code),names=Array.from(fnNames).sort((a,b)=>b.length-a.length).map(escapeRegex).join('|');
+  const re=new RegExp('\\b('+names+')\\s*\\(','g'),out=[];let m;
+  while((m=re.exec(clean))){
+    if(clean[m.index-1]==='.')continue;
+    const open=clean.indexOf('(',m.index+m[1].length);if(open<0)continue;
+    let paren=1,brace=0,bracket=0,last=open+1,end=-1;const args=[];
+    for(let i=open+1;i<clean.length;i++){
+      const ch=clean[i];
+      if(ch==='(')paren++;
+      else if(ch===')'){
+        paren--;
+        if(paren===0){const arg=code.slice(last,i).trim();if(arg||args.length)args.push(arg);end=i+1;break}
+      }else if(ch==='{')brace++;
+      else if(ch==='}')brace=Math.max(0,brace-1);
+      else if(ch==='[')bracket++;
+      else if(ch===']')bracket=Math.max(0,bracket-1);
+      else if(ch===','&&paren===1&&brace===0&&bracket===0){args.push(code.slice(last,i).trim());last=i+1}
+    }
+    if(end<0)continue;
+    const before=clean.slice(Math.max(0,m.index-80),m.index);
+    out.push({fn:m[1],args,start:m.index,end,awaited:/\bawait\s*$/.test(before),returned:/\breturn\s*$/.test(before)});
+  }
+  return out;
+}
+function literalStringValue(source){
+  const s=(source||'').trim();if(s.length<2)return null;
+  const q=s[0];if((q!=="'"&&q!=='"')||s[s.length-1]!==q)return null;
+  return s.slice(1,-1).replace(new RegExp('\\\\'+q,'g'),q).replace(/\\\\/g,'\\');
+}
+function optionString(source,key){
+  if(!source)return null;
+  const re=new RegExp("\\b"+escapeRegex(key)+"\\s*:\\s*(['\"])(global|local|message|cache|initial)\\1");
+  const m=source.match(re);return m?m[2]:null;
+}
+function helperScope(fn,args,kind){
+  if(fn.includes('Global'))return'global';
+  if(fn.includes('Local'))return'local';
+  if(fn.includes('Message'))return'message';
+  if(kind==='read'&&fn==='getvar')return optionString(args[1],'scope')||'cache';
+  if(kind==='write'){
+    if(fn==='setvar')return optionString(args[2],'scope')||'message';
+    if(fn==='incvar'||fn==='decvar')return optionString(args[2],'outscope')||'message';
+    if(fn==='insvar')return optionString(args[3],'scope')||'message';
+    if(fn=='delvar')return optionString(args[2],'scope')||'message';
+  }
+  return null;
+}
+function collectStateAccess(entry){
+  const calls=findCalls(entry.code,new Set([...READ_HELPERS,...WRITE_HELPERS]));
+  const access=[];
+  for(const call of calls){
+    const key=literalStringValue(call.args[0]);if(key==null)continue;
+    const kind=READ_HELPERS.has(call.fn)?'read':'write',scope=helperScope(call.fn,call.args,kind);
+    if(scope)access.push({kind,scope,key,helper:call.fn,explicitScope:call.fn!=='getvar'||optionString(call.args[1],'scope')!=null});
+  }
+  return access;
+}
+function worldRefFromCall(call){
+  if(!WORLDINFO_HELPERS.has(call.fn))return null;
+  const first=literalStringValue(call.args[0]);if(first==null)return null;
+  const second=(call.args[1]||'').trim();
+  if(!second||second.startsWith('{'))return{title:first,world:null};
+  const secondLiteral=literalStringValue(second);if(secondLiteral!=null)return{title:secondLiteral,world:first};
+  return null;
+}
+function inspectAsyncUsage(entry,findings){
+  for(const segment of extractEjsSegments(entry.body)){
+    for(const call of findCalls(segment.code,ASYNC_HELPERS)){
+      if(call.awaited||call.returned)continue;
+      const severity=(segment.mode==='='||segment.mode==='-')?'high':'warn';
+      findings.push(finding(severity,'异步 helper 未 await',entry,call.fn+'(...) 返回 Promise；当前写法没有 await，可能得到 [object Promise]、旧值或未处理的异步错误。'));
+    }
+  }
+}
+function inspectDynamicTemplate(entry,findings){
+  for(const call of entry.calls.filter(x=>x.fn==='evalTemplate')){
+    const arg=(call.args[0]||'').trim();
+    const q=arg[0],staticQuoted=(q==="'"||q==='"')&&arg[arg.length-1]===q;
+    const staticTemplate=q&&q.charCodeAt(0)===96&&arg[arg.length-1]===q&&!arg.includes('${');
+    if(!staticQuoted&&!staticTemplate)findings.push(finding('warn','动态 evalTemplate 输入',entry,'evalTemplate(...) 的模板来自运行时表达式，而不是固定字符串。若内容来自变量、消息或模型输出，会形成 data → code 执行链。'));
+  }
+}
 function finding(severity,title,entry,detail,extra={}){
   return{severity,title,detail,book:entry?entry.fileName:(extra.book||''),entry:entry?entry.name:(extra.entry||''),uid:entry?entry.uid:(extra.uid??''),...extra};
 }
@@ -128,12 +235,17 @@ function inspectEntry(entry,findings){
   if(!entry.syntaxError)entry.syntaxError=compileOnly(entry.code);
   if(entry.syntaxError){findings.push(finding('high','EJS 无法编译',entry,entry.syntaxError));return}
   entry.helpers=allHelperCalls(entry.code);
+  entry.calls=findCalls(entry.code,KNOWN_HELPERS);
+  entry.worldRefs=entry.calls.map(worldRefFromCall).filter(Boolean);
+  entry.stateAccess=collectStateAccess(entry);
   const staticCalls=literalFirstArgCalls(entry.code,new Set([...READ_HELPERS,...WRITE_HELPERS,'define']));
   entry.reads=staticCalls.filter(x=>READ_HELPERS.has(x.fn)).map(x=>({helper:x.fn,key:x.value}));
   entry.writes=staticCalls.filter(x=>WRITE_HELPERS.has(x.fn)).map(x=>({helper:x.fn,key:x.value}));
   entry.defines=staticCalls.filter(x=>x.fn==='define').map(x=>x.value);
   entry.vars=collectVarNames(entry.code);entry.urls=collectUrls(entry.code);
+  inspectAsyncUsage(entry,findings);inspectDynamicTemplate(entry,findings);
   const clean=maskStringsAndComments(entry.code);
+  if(/\.forEach\s*\(\s*async\b/.test(clean))findings.push(finding('warn','forEach(async ...) 不会等待回调',entry,'Array.forEach 不会等待 async 回调完成；后续代码可能在异步读写完成前继续执行。'));
   if(entry.vars.length&&!entry.isPrivate)findings.push(finding('warn','使用 var，可能跨条目共享/覆盖',entry,'检测到：'+entry.vars.join(', ')+'。当前条目没有 @@private；var 是函数作用域，可能与同次模板处理中的其他代码共享/覆盖。'));
   const dangerous=[
     [/\beval\s*\(/,'eval() 动态执行代码'],[/\bFunction\s*\(/,'Function() 动态创建代码'],
@@ -166,25 +278,64 @@ function detectCompileCollisions(entries,findings){
     conflictPool.push(entry);
   }
 }
+function pathOverlap(a,b){
+  return a===b||a.startsWith(b+'.')||b.startsWith(a+'.')||a.startsWith(b+'[')||b.startsWith(a+'[');
+}
+function detectWorldInfoDependencies(entries,catalog,findings){
+  const good=entries.filter(e=>!e.syntaxError),codeByTitle=new Map(),allByTitle=new Map(),seen=new Set();
+  for(const item of catalog){if(!allByTitle.has(item.name))allByTitle.set(item.name,[]);allByTitle.get(item.name).push(item)}
+  for(const e of good){if(!codeByTitle.has(e.name))codeByTitle.set(e.name,[]);codeByTitle.get(e.name).push(e)}
+  for(const e of good){
+    for(const ref of e.worldRefs){
+      if(ref.world!=null)continue;
+      const allTargets=allByTitle.get(ref.title)||[],books=new Set(allTargets.map(x=>x.fileName));
+      if(books.size>1){
+        const key='amb:'+ref.title+':'+[...books].sort().join('|');
+        if(!seen.has(key)){seen.add(key);findings.push({severity:'warn',title:'getwi 标题在多本世界书中重名',detail:'getwi("'+ref.title+'") 没有指定世界书；启用多本含同名条目的世界书时，实际解析目标可能受当前主世界书与启用顺序影响。',book:[...books].join(' ↔ '),entry:e.name,uid:String(e.uid)})}
+      }
+      if(ref.title===e.name){
+        const key='self:'+e.id;
+        if(!seen.has(key)){seen.add(key);findings.push(finding('warn','getwi 可能递归调用自身',e,'当前条目通过 getwi("'+ref.title+'") 引用了与自己同名的条目；当该世界书是解析目标时会反复重新评估自身。'))}
+      }
+      for(const target of codeByTitle.get(ref.title)||[]){
+        if(target.id===e.id)continue;
+        const reverse=target.worldRefs.some(r=>r.world==null&&r.title===e.name);
+        if(reverse){
+          const key='cycle:'+[e.id,target.id].sort().join('|');
+          if(!seen.has(key)){seen.add(key);findings.push({severity:'warn',title:'检测到 getwi 循环依赖',detail:e.name+' → '+target.name+' → '+e.name+'。两边同时可解析时会形成递归评估，可能直到栈溢出。',book:e.fileName+' ↔ '+target.fileName,entry:e.name+' ↔ '+target.name,uid:String(e.uid)+' ↔ '+String(target.uid)})}
+        }
+      }
+    }
+  }
+}
 function detectSharedState(entries,findings){
-  const writeMap=new Map(),defineMap=new Map(),varMap=new Map();
+  const defineMap=new Map(),varMap=new Map(),writes=[],reads=[],seen=new Set();
   for(const e of entries.filter(x=>!x.syntaxError)){
-    for(const w of e.writes){const k=w.helper+'::'+w.key;if(!writeMap.has(k))writeMap.set(k,[]);writeMap.get(k).push(e)}
+    for(const access of e.stateAccess)(access.kind==='write'?writes:reads).push({entry:e,...access});
     for(const name of e.defines){if(!defineMap.has(name))defineMap.set(name,[]);defineMap.get(name).push(e)}
     if(!e.isPrivate)for(const name of e.vars){if(!varMap.has(name))varMap.set(name,[]);varMap.get(name).push(e)}
   }
-  for(const [key,list]of writeMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;const idx=key.indexOf('::'),helper=key.slice(0,idx),path=key.slice(idx+2);findings.push({severity:'warn',title:'多个世界书写入同一状态键',detail:helper+'("'+path+'")\n这不一定是错误，但两个项目可能互相覆盖状态，需要确认是否设计为共享。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
+  for(let i=0;i<writes.length;i++)for(let j=i+1;j<writes.length;j++){
+    const a=writes[i],b=writes[j];if(a.entry.fileName===b.entry.fileName||a.scope!==b.scope||!pathOverlap(a.key,b.key))continue;
+    const exact=a.key===b.key,key='write:'+a.scope+':'+[a.entry.id,b.entry.id].sort().join('|')+':'+[a.key,b.key].sort().join('|');if(seen.has(key))continue;seen.add(key);
+    findings.push({severity:'warn',title:exact?'多个世界书写入同一状态键':'跨世界书状态路径重叠',detail:(exact?'两本世界书都写入 ':'两个写入路径存在父/子重叠：')+a.scope+' scope 的 "'+a.key+'" ↔ "'+b.key+'"。ST-Prompt-Template 使用 lodash 路径语义，标量与子路径可能互相覆盖。',book:a.entry.fileName+' ↔ '+b.entry.fileName,entry:a.entry.name+' ↔ '+b.entry.name,uid:String(a.entry.uid)+' ↔ '+String(b.entry.uid)});
+  }
+  for(const w of writes)for(const r of reads){
+    if(w.entry.fileName!==r.entry.fileName||w.key!==r.key||!r.explicitScope||r.scope==='cache'||w.scope===r.scope)continue;
+    const key='scope:'+w.entry.fileName+':'+w.key+':'+w.scope+':'+r.scope;if(seen.has(key))continue;seen.add(key);
+    findings.push({severity:'warn',title:'同一项目对同一状态键使用不同作用域',detail:'键 "'+w.key+'" 写入 '+w.scope+'，但读取 '+r.scope+'。如果不是刻意跨作用域读取，结果会一直读不到刚写入的值。',book:w.entry.fileName,entry:w.entry.name+' ↔ '+r.entry.name,uid:String(w.entry.uid)+' ↔ '+String(r.entry.uid)});
+  }
   for(const [name,list]of defineMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;findings.push({severity:'warn',title:'跨世界书 define() 名称重复',detail:'define("'+name+'", ...) 会写入 ST-Prompt-Template 的 SharedDefines。不同项目使用同名定义时可能互相覆盖。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
-  for(const [name,list]of varMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;findings.push({severity:'warn',title:'跨世界书共享 var 名称',detail:'var '+name+' 在多个项目中出现。var 是函数作用域，普通 { } / @@private 不能像 const/let 一样可靠隔离它。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
+  for(const [name,list]of varMap){const books=new Set(list.map(x=>x.fileName));if(books.size<2)continue;findings.push({severity:'warn',title:'跨世界书共享 var 名称',detail:'var '+name+' 在多个未使用 @@private 的项目中出现；这些声明进入同一模板函数时可能共享或覆盖。',book:[...books].join(' ↔ '),entry:list.map(x=>x.name).join(' ↔ '),uid:list.map(x=>x.uid).join(' ↔ ')})}
 }
 async function parseFile(file){
   if(file.size>MAX_FILE_BYTES)throw new Error('文件超过 12 MB 上限');
-  const json=JSON.parse(await file.text());return{fileName:file.name,size:file.size,entries:extractEntries(json,file.name)};
+  const json=JSON.parse(await file.text());return{fileName:file.name,size:file.size,entries:extractEntries(json,file.name),catalog:extractEntryCatalog(json,file.name)};
 }
 async function analyzeFiles(files){
   const books=[],findings=[];
   for(const file of files){try{books.push(await parseFile(file))}catch(err){findings.push({severity:'high',title:'无法读取世界书',detail:String(err.message||err),book:file.name,entry:'',uid:''})}}
-  const entries=books.flatMap(b=>b.entries);for(const e of entries)inspectEntry(e,findings);detectCompileCollisions(entries,findings);detectSharedState(entries,findings);
+  const entries=books.flatMap(b=>b.entries),catalog=books.flatMap(b=>b.catalog);for(const e of entries)inspectEntry(e,findings);detectCompileCollisions(entries,findings);detectWorldInfoDependencies(entries,catalog,findings);detectSharedState(entries,findings);
   if(!entries.length&&books.length)findings.push({severity:'info',title:'没有找到用户 EJS',detail:'未发现包含 <% ... %> 的世界书条目。Poem Workshop metadata 注释块会被自动忽略。',book:'',entry:'',uid:''});
   findings.sort((a,b)=>rank(a.severity)-rank(b.severity)||a.title.localeCompare(b.title,'zh-CN'));
   state.books=books;state.findings=findings;state.report={generatedAt:new Date().toISOString(),tool:'Poem Workshop EJS Preflight',books:books.map(b=>({fileName:b.fileName,size:b.size,ejsEntries:b.entries.length})),findings};render();
