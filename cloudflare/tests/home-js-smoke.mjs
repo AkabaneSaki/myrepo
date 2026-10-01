@@ -85,6 +85,11 @@ assert.match(fragments.homeModalsScript, /data-admin-review-view="full"/, "updat
 assert.match(fragments.homeModalsScript, /data-admin-review-full-body/, "full review entries must start as lazy shells");
 assert.match(fragments.homeModalsScript, /body\.dataset\.loaded/, "full review entry content must hydrate only after expansion");
 assert.match(homeStylesSource, /\.admin-review-full-content \.entry-content\.open \{[^}]*max-height:min\(56vh,560px\);[^}]*overflow:auto;/, "expanded full review entries must stay height-limited and scrollable");
+assert.match(fragments.homeModalsScript, /cw-admin-review-theme/, "admin review theme choice must persist locally");
+assert.match(fragments.homeModalsScript, /data-admin-review-theme-option="light"/, "admin review must expose a light theme option");
+assert.match(fragments.homeModalsScript, /data-admin-review-theme-option="dark"/, "admin review must expose a dark theme option");
+assert.match(fragments.homeModalsScript, /document\.querySelectorAll\("\.admin-review-overlay,\.admin-review-detail-overlay"\)/, "theme changes must sync queue and detail overlays");
+assert.match(homeStylesSource, /\.admin-review-overlay\[data-admin-review-theme="light"\]/, "admin review must include scoped light-theme styling");
 
 assert.doesNotMatch(
   fragments.homeTavernBridgeScript,
