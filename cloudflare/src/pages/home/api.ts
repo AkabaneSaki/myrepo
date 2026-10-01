@@ -245,6 +245,39 @@ async function deleteDevTeamRecommendation(projectId) {
   return fetchDevTeamRecommendations(true);
 }
 
+const PROJECT_LIST_CLIENT_CACHE_FRESH_MS = 15 * 1000;
+const PROJECT_LIST_CLIENT_CACHE_MAX_STALE_MS = 60 * 1000;
+const PROJECT_LIST_CLIENT_CACHE_MAX_ENTRIES = 24;
+const projectListClientCache = new Map();
+
+function clearProjectListClientCache() {
+  projectListClientCache.clear();
+}
+
+function writeProjectListClientCache(key, data) {
+  if (!key || !data) return;
+  projectListClientCache.delete(key);
+  projectListClientCache.set(key, { cachedAt: Date.now(), data });
+  while (projectListClientCache.size > PROJECT_LIST_CLIENT_CACHE_MAX_ENTRIES) {
+    const oldestKey = projectListClientCache.keys().next().value;
+    if (!oldestKey) break;
+    projectListClientCache.delete(oldestKey);
+  }
+}
+
+function applyProjectListClientCacheData(data, pageSize) {
+  const projectList = Array.isArray(data?.projects) ? data.projects : [];
+  setProjectsPage({
+    projects: projectList,
+    page: data?.page,
+    pageSize: data?.pageSize || pageSize,
+    hasMore: data?.hasMore,
+    publicCounts: data?.publicCounts,
+  });
+  syncProjectStats(state.projects);
+  renderApp();
+}
+
 async function fetchProjects(forceRefresh = false, options = {}) {
   const pageSize = state.projectPagination.pageSizeLocked
     ? state.projectPagination.pageSize
@@ -275,6 +308,32 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   const minDownloads = Math.max(0, Math.floor(Number(state.minDownloads || 0)));
   if (minDownloads > 0) params.set('minDownloads', String(minDownloads));
 
+  const canUseProjectListClientCache = !state.showOnlyMyProjects && !state.showSubscribedAndInstalledProjects;
+  forceRefresh = Boolean(forceRefresh && options.bypassClientCache);
+  // Writes clear this cache directly; bypassClientCache is only for an explicit uncached reread.
+  const projectListClientCacheKey = (state.currentUser?.id || 'anonymous') + '|' + params.toString();
+  let cachedFallbackData = null;
+
+  if (forceRefresh) {
+    clearProjectListClientCache();
+  } else if (canUseProjectListClientCache) {
+    const cached = projectListClientCache.get(projectListClientCacheKey);
+    if (cached) {
+      const ageMs = Date.now() - Number(cached.cachedAt || 0);
+      if (ageMs <= PROJECT_LIST_CLIENT_CACHE_MAX_STALE_MS) {
+        cachedFallbackData = cached.data;
+        if (isLatestProjectRequestToken(requestToken)) {
+          applyProjectListClientCacheData(cached.data, pageSize);
+        }
+        if (ageMs <= PROJECT_LIST_CLIENT_CACHE_FRESH_MS) {
+          return cached.data;
+        }
+      } else {
+        projectListClientCache.delete(projectListClientCacheKey);
+      }
+    }
+  }
+
   try {
     if (forceRefresh) {
       params.set('_', String(Date.now()));
@@ -282,6 +341,9 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     const data = await apiFetch('/api/projects?' + params.toString());
     if (!isLatestProjectRequestToken(requestToken)) {
       return null;
+    }
+    if (canUseProjectListClientCache) {
+      writeProjectListClientCache(projectListClientCacheKey, data);
     }
     const projectList = data.projects || [];
 
@@ -324,6 +386,10 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   } catch (error) {
     if (!isLatestProjectRequestToken(requestToken)) {
       return null;
+    }
+    if (cachedFallbackData) {
+      console.warn('[CreativeWorkshop] 项目列表后台刷新失败，继续显示刚才的内容', error);
+      return cachedFallbackData;
     }
     if (nextPage > 0) {
       setProjectPageLoading(false);
@@ -597,6 +663,7 @@ async function toggleLike(projectId) {
   try {
     const data = await apiFetch('/api/projects/' + projectId + '/like', { method: 'POST' });
     updateLikeState(projectId, { liked: data.liked, count: data.count });
+    clearProjectListClientCache();
     invalidateProjectDetailCache(projectId);
     renderApp();
   } catch (error) {
@@ -709,6 +776,7 @@ async function fetchProjectEntries(projectOrId, options = {}) {
 }
 
 async function createProject(payload) {
+  clearProjectListClientCache();
   return apiFetch('/api/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -716,6 +784,7 @@ async function createProject(payload) {
 }
 
 async function updateProject(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId, {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -725,6 +794,7 @@ async function updateProject(projectId, payload) {
 }
 
 async function updateProjectVisibility(projectId, visibility) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/visibility', {
     method: 'PUT',
     body: JSON.stringify({ visibility }),
@@ -734,12 +804,14 @@ async function updateProjectVisibility(projectId, visibility) {
 }
 
 async function deleteProject(projectId) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId, { method: 'DELETE' });
   invalidateProjectDetailCache(projectId);
   return result;
 }
 
 async function uploadProjectFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   try {
     const response = await fetch('/api/projects/' + projectId + '/upload', {
@@ -762,6 +834,7 @@ async function uploadProjectFile(projectId, file) {
 }
 
 async function uploadRegexFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   try {
     const response = await fetch('/api/projects/' + projectId + '/upload-regex', {
@@ -784,6 +857,7 @@ async function uploadRegexFile(projectId, file) {
 }
 
 async function uploadCoverFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   const formData = new FormData();
   formData.append('cover', file);
@@ -813,6 +887,7 @@ async function fetchDiscoverBanner() {
 }
 
 async function updateCoverPresentation(projectId, presentation) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/cover-presentation', {
     method: 'PUT',
     body: JSON.stringify(presentation),
@@ -875,6 +950,7 @@ async function fetchAdminReviewDetail(projectId) {
 }
 
 async function reviewProject(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/admin/review/' + projectId, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -901,6 +977,7 @@ async function fetchCharacterReferenceVersionItems(versionId) {
 
 
 async function updateProjectCompatibility(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/compatibility', {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -916,6 +993,7 @@ async function setAdmin(userId, isAdmin) {
   });
 }
 async function removeProjectEntry(projectId, kind, entryKey) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/entries/remove', {
     method: 'POST',
     body: JSON.stringify({ kind, entryKey }),
