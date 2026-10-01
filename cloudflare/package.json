@@ -61,6 +61,7 @@
     "check:public-counts": "node tests/public-project-counts.mjs",
     "check:public-list-cache": "node tests/public-project-list-cache-smoke.mjs",
     "check:project-list-client-cache": "node tests/project-list-client-cache-smoke.mjs",
+    "check:home-asset-cache": "node tests/home-asset-cache-smoke.mjs",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",

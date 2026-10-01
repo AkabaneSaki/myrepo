@@ -157,7 +157,7 @@ app.use('*', async (c, next) => {
         hasAuthorization ? 'private, no-store' : 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
       );
     } else if (c.req.path === '/assets/home.js') {
-      c.res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     }
   }
 });
@@ -174,7 +174,7 @@ app.get('/assets/home.js', c => {
   return new Response(homeScriptPage(), {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
 });
