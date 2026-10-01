@@ -452,15 +452,21 @@ async function readProjectPreview(
     worldbookEjsLengthEstimates?: Record<string, string>;
   },
 ) {
-  const projectObject = await readProjectContentForEdit(c, project, 'worldbook');
-  const regexObject = await readProjectContentForEdit(c, project, 'regex');
-  const worldbookEntriesPreview = projectObject
+  const [projectObject, regexObject] = await Promise.all([
+    readProjectContentForEdit(c, project, 'worldbook'),
+    readProjectContentForEdit(c, project, 'regex'),
+  ]);
+  const [worldbookText, regexText] = await Promise.all([
+    projectObject ? projectObject.text() : Promise.resolve(null),
+    regexObject ? regexObject.text() : Promise.resolve(null),
+  ]);
+  const worldbookEntriesPreview = worldbookText
     ? attachWorldbookEjsLengthEstimates(
-        parseWorldbookEntriesPreview(await projectObject.text()),
+        parseWorldbookEntriesPreview(worldbookText),
         project.worldbookEjsLengthEstimates || {},
       )
     : [];
-  const regexEntriesPreview = regexObject ? parseRegexEntriesPreview(await regexObject.text()) : [];
+  const regexEntriesPreview = regexText ? parseRegexEntriesPreview(regexText) : [];
   return { worldbookEntriesPreview, regexEntriesPreview };
 }
 
