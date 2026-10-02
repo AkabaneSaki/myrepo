@@ -123,7 +123,7 @@ const state = {
     loading: false,
   },
   discoverBanner: {
-    imageUrl: '/discover-preview-banner.png',
+    imageUrl: null,
     positionX: 50,
     positionY: 50,
     zoom: 1,

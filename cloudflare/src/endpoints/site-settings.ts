@@ -22,7 +22,7 @@ function isPreviewHost(c: AppContext): boolean {
 function toPublicBanner(c: AppContext, settings: Awaited<ReturnType<typeof siteSettingsDb.getDiscoverBanner>>) {
   const imageUrl = settings.imageKey
     ? r2Storage.getProxyUrl(c, settings.imageKey)
-    : isPreviewHost(c) ? '/discover-preview-banner.png' : null;
+    : null;
   return { ...settings, imageUrl };
 }
 

@@ -881,7 +881,7 @@ async function uploadCoverFile(projectId, file) {
 }
 
 async function fetchDiscoverBanner() {
-  const result = await apiFetch('/api/site/discover-banner', { cache: 'no-store' });
+  const result = await apiFetch('/api/site/discover-banner');
   setDiscoverBanner(result?.banner || {});
   return result?.banner || {};
 }

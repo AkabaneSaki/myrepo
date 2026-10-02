@@ -103,7 +103,8 @@ function openDiscoverBannerSettingsModal() {
   }
 
   const banner = state.discoverBanner || {};
-  const imageUrl = banner.imageUrl || '/discover-preview-banner.png';
+  const imageUrl = banner.imageUrl || '';
+  const imageSrcAttribute = imageUrl ? ' src="' + escapeHtml(imageUrl) + '"' : '';
   const desktopX = clampVisualValue(banner.positionX, 0, 100, 50);
   const desktopY = clampVisualValue(banner.positionY, 0, 100, 50);
   const desktopZoom = clampVisualValue(banner.zoom, 1, 3, 1);
@@ -114,8 +115,8 @@ function openDiscoverBannerSettingsModal() {
   const html = '<form id="discoverBannerForm" class="visual-editor-form banner-editor-form">'
     + '<p class="visual-editor-note">管理员可以替换全站 Banner，也可以分别调整桌面与手机构图。只调位置不会重新上传图片。</p>'
     + '<div class="banner-editor-previews">'
-    + '<div><small>DESKTOP · 10:3</small><div class="banner-editor-preview banner-editor-preview--desktop"><img id="desktopPreviewImage" src="' + escapeHtml(imageUrl) + '" alt="桌面 Banner 预览"></div></div>'
-    + '<div><small>MOBILE · 16:9</small><div class="banner-editor-preview banner-editor-preview--mobile"><img id="mobilePreviewImage" src="' + escapeHtml(imageUrl) + '" alt="手机 Banner 预览"></div></div>'
+    + '<div><small>DESKTOP · 10:3</small><div class="banner-editor-preview banner-editor-preview--desktop"><img id="desktopPreviewImage"' + imageSrcAttribute + ' alt="桌面 Banner 预览"></div></div>'
+    + '<div><small>MOBILE · 16:9</small><div class="banner-editor-preview banner-editor-preview--mobile"><img id="mobilePreviewImage"' + imageSrcAttribute + ' alt="手机 Banner 预览"></div></div>'
     + '</div>'
     + '<label class="banner-editor-upload"><span>替换 Banner 图片</span><input id="bannerFileInput" type="file" accept="image/jpeg,image/png,image/webp"><small>不选文件时只保存构图参数。</small></label>'
     + '<div class="banner-editor-control-grid">'

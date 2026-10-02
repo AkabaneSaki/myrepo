@@ -1,5 +1,14 @@
 import type { AppContext } from '../types';
 
+export const DISCOVER_BANNER_CACHE_TTL_SECONDS = 5 * 60;
+
+function getDiscoverBannerCacheRequest(c: AppContext): Request {
+  const cacheUrl = new URL(c.req.url);
+  cacheUrl.pathname = '/__cache/site/discover-banner';
+  cacheUrl.search = '';
+  return new Request(cacheUrl.toString());
+}
+
 export type DiscoverBannerSettings = {
   imageKey: string | null;
   positionX: number;
@@ -41,15 +50,34 @@ export function normalizeDiscoverBannerSettings(value: unknown): DiscoverBannerS
 
 export const siteSettingsDb = {
   getDiscoverBanner: async (c: AppContext): Promise<DiscoverBannerSettings> => {
+    const cacheRequest = getDiscoverBannerCacheRequest(c);
+    const cached = await caches.default.match(cacheRequest);
+    if (cached) {
+      try {
+        return normalizeDiscoverBannerSettings(await cached.json());
+      } catch {
+        await caches.default.delete(cacheRequest);
+      }
+    }
+
     const row = await c.env.DB.prepare('SELECT value FROM site_settings WHERE key = ?')
       .bind('discover_banner')
       .first<{ value: string }>();
-    if (!row?.value) return { ...DEFAULT_DISCOVER_BANNER };
+
+    let settings = { ...DEFAULT_DISCOVER_BANNER };
     try {
-      return normalizeDiscoverBannerSettings(JSON.parse(row.value));
+      if (row?.value) settings = normalizeDiscoverBannerSettings(JSON.parse(row.value));
     } catch {
-      return { ...DEFAULT_DISCOVER_BANNER };
+      settings = { ...DEFAULT_DISCOVER_BANNER };
     }
+
+    await caches.default.put(cacheRequest, new Response(JSON.stringify(settings), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': `public, max-age=${DISCOVER_BANNER_CACHE_TTL_SECONDS}`,
+      },
+    }));
+    return settings;
   },
 
   setDiscoverBanner: async (c: AppContext, settings: DiscoverBannerSettings, actorId: string): Promise<void> => {
@@ -60,5 +88,6 @@ export const siteSettingsDb = {
     `)
       .bind('discover_banner', JSON.stringify(normalizeDiscoverBannerSettings(settings)), actorId)
       .run();
+    await caches.default.delete(getDiscoverBannerCacheRequest(c));
   },
 };

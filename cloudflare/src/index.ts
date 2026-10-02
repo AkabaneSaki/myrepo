@@ -159,6 +159,8 @@ app.use('*', async (c, next) => {
     } else if (c.req.path === '/api/devteam-recommendations') {
       c.res.headers.append('Vary', 'Authorization');
       c.res.headers.set('Cache-Control', 'private, no-store');
+    } else if (c.req.path === '/api/site/discover-banner') {
+      c.res.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
     } else if (c.req.path === '/assets/home.js') {
       c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     }
