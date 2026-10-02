@@ -72,7 +72,7 @@ async function bumpDlcKitchenRevision(c: AppContext, actorId: string): Promise<v
 
 async function applyDlcKitchenViewerLikes(c: AppContext, response: any, userId?: string) {
   if (!userId || !Array.isArray(response?.curators)) return response;
-  const projectIds = Array.from(new Set(
+  const projectIds: string[] = Array.from(new Set<string>(
     response.curators.flatMap((curator: any) =>
       (Array.isArray(curator?.recommendations) ? curator.recommendations : [])
         .map((item: any) => String(item?.project?.id || '').trim())
