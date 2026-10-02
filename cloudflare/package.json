@@ -64,6 +64,8 @@
     "check:home-asset-cache": "node tests/home-asset-cache-smoke.mjs",
     "check:project-detail-r2-parallel": "node tests/project-detail-r2-parallel-smoke.mjs",
     "check:dlc-kitchen-cache": "node tests/dlc-kitchen-cache-smoke.mjs",
+    "check:discover-banner-cache": "node tests/discover-banner-cache-smoke.mjs",
+    "check:cache-regression": "npm run check:public-list-cache && npm run check:project-list-client-cache && npm run check:home-asset-cache && npm run check:project-detail-r2-parallel && npm run check:dlc-kitchen-cache && npm run check:discover-banner-cache && npm run check:types && npm run check:home-js-smoke && npm run check:production",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
     "check:creative-workshop-stale-id-rebind": "node tests/creative-workshop-stale-id-rebind-smoke.mjs",
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",
