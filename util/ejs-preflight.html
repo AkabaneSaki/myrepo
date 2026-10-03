@@ -4,40 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Poem Workshop · EJS Preflight</title>
+<title>Poem Workshop · EJS / 正则检查</title>
 <style>
 :root{color-scheme:light dark;--bg:#f4f5f7;--panel:#fff;--panel2:#f8f9fb;--text:#1d2028;--muted:#687080;--line:#d9dde5;--accent:#5965d8;--danger:#b92f41;--dangerbg:#fff0f2;--warn:#9a6700;--warnbg:#fff7df;--ok:#18794e;--okbg:#ebf9f1;--info:#315a9c;--infobg:#eef5ff;--shadow:0 12px 40px rgba(28,35,52,.08);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#111318;--panel:#191c23;--panel2:#20242c;--text:#edf0f7;--muted:#9ba3b4;--line:#323846;--accent:#929aff;--danger:#ff8794;--dangerbg:#3a2025;--warn:#f3c45f;--warnbg:#3a321e;--ok:#66d79d;--okbg:#18382a;--info:#8eb8ff;--infobg:#1c2d49;--shadow:none}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input{font:inherit}.shell{width:min(1080px,calc(100% - 28px));margin:auto;padding:32px 0 64px}.hero{margin-bottom:20px}h1{margin:0 0 8px;font-size:clamp(26px,5vw,40px);letter-spacing:-.03em}.sub{margin:0;color:var(--muted);line-height:1.65;max-width:850px}.privacy{display:inline-flex;gap:8px;align-items:center;margin-top:12px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ok);background:var(--okbg);font-size:13px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.drop{display:block;padding:26px;text-align:center;border:2px dashed var(--line);border-radius:16px;margin:18px;transition:.15s ease;cursor:pointer;background:var(--panel2)}.drop.drag{border-color:var(--accent)}.drop strong{display:block;font-size:18px;margin-bottom:7px}.drop small{display:block;color:var(--muted);line-height:1.6}.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}.btn{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:9px 14px;cursor:pointer;font-weight:650}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}#fileInput{display:none}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.metric{padding:16px}.metric b{display:block;font-size:26px;margin-bottom:3px}.metric span{color:var(--muted);font-size:13px}.section{margin-top:18px;padding:18px}.section h2{margin:0 0 14px;font-size:19px}.finding{border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:10px 0;background:var(--panel2)}.finding-head{display:flex;align-items:flex-start;gap:10px}.badge{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 8px}.badge.high{color:var(--danger);background:var(--dangerbg)}.badge.warn{color:var(--warn);background:var(--warnbg)}.badge.info{color:var(--info);background:var(--infobg)}.finding-title{font-weight:750;line-height:1.4}.finding p{margin:7px 0 0;color:var(--muted);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.fix{color:var(--text)!important}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}.books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}.book h3{margin:0 0 8px;font-size:15px;overflow-wrap:anywhere}.book-meta{color:var(--muted);font-size:13px;line-height:1.55}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.65}.hidden{display:none!important}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input{font:inherit}.shell{width:min(1080px,calc(100% - 28px));margin:auto;padding:32px 0 64px}.hero{margin-bottom:20px}h1{margin:0 0 8px;font-size:clamp(26px,5vw,40px);letter-spacing:-.03em}.sub{margin:0;color:var(--muted);line-height:1.65;max-width:850px}.privacy{display:inline-flex;gap:8px;align-items:center;margin-top:12px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ok);background:var(--okbg);font-size:13px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.drop{display:block;padding:26px;text-align:center;border:2px dashed var(--line);border-radius:16px;margin:18px;transition:.15s ease;cursor:pointer;background:var(--panel2)}.drop.drag{border-color:var(--accent)}.drop strong{display:block;font-size:18px;margin-bottom:7px}.drop small{display:block;color:var(--muted);line-height:1.6}.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}.btn{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:9px 14px;cursor:pointer;font-weight:650}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}#fileInput{display:none}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.metric{padding:16px}.metric b{display:block;font-size:26px;margin-bottom:3px}.metric span{color:var(--muted);font-size:13px}.metric.status.pass b{color:var(--ok)}.metric.status.review b{color:var(--warn)}.metric.status.fail b{color:var(--danger)}.standard-note{margin-top:14px;padding:14px 16px;border-left:4px solid var(--accent);background:var(--panel2);border-radius:10px;line-height:1.65;color:var(--muted)}.standard-note strong{color:var(--text)}.section{margin-top:18px;padding:18px}.section h2{margin:0 0 14px;font-size:19px}.finding{border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:10px 0;background:var(--panel2)}.finding-head{display:flex;align-items:flex-start;gap:10px}.badge{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 8px}.badge.high{color:var(--danger);background:var(--dangerbg)}.badge.warn{color:var(--warn);background:var(--warnbg)}.badge.info,.badge.hint{color:var(--info);background:var(--infobg)}.finding-title{font-weight:750;line-height:1.4}.finding p{margin:7px 0 0;color:var(--muted);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.fix{color:var(--text)!important}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}.books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}.book h3{margin:0 0 8px;font-size:15px;overflow-wrap:anywhere}.book-meta{color:var(--muted);font-size:13px;line-height:1.55}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.65}.hidden{display:none!important}
 @media(max-width:760px){.shell{width:min(100% - 18px,1080px);padding-top:18px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.books{grid-template-columns:1fr}.drop{margin:10px;padding:22px 14px}.section{padding:14px}}
 </style>
 </head>
 <body>
 <main class="shell">
 <header class="hero">
-<h1>EJS Preflight</h1>
-<p class="sub">把 SillyTavern 世界书 JSON 拖进来，检查 EJS 作用域/泄露、明显危险代码、外链与 EJS 语法。外链检查覆盖所有条目内容；EJS 只做静态分析，不会执行。</p>
+<h1>Workshop EJS / 正则检查</h1>
+<p class="sub">同一个离线工具检查世界书 EJS 与 SillyTavern 正则脚本。EJS 会额外检查 L1–L6 组合公约；EJS 与正则里的 JavaScript 共用 M1–M5，外部地址共用 U2–U5。带“?”的人工审核提示不会改变 PASS / REVIEW / FAIL，也不会执行上传内容。</p><div class="standard-note"><strong>绿色通过 ≠ “绝对无 bug”。</strong> L 系列只约束 EJS 的 scope / 共享状态，不能拿去要求正则脚本。M / U 是两类内容共用的硬规则；性能、DOM 复杂度、动画数量等由作者自己负责。人工审核提示只是提醒同事多看一眼，不算违规。</div>
 <div class="privacy">● 文件只在当前浏览器本地读取，不上传</div>
 </header>
 <section class="panel">
 <label class="drop" id="dropZone" for="fileInput">
-<strong>拖入世界书 JSON，或点这里选择</strong>
-<small>可一次选择多个文件；结果会标明规则 ID、条目、行号与修复建议</small>
+<strong>拖入世界书 / 正则 JSON，或点这里选择</strong>
+<small>可一次选择多个文件；会自动识别类型，并标明规则 ID、条目/脚本、行号与处理建议</small>
 <div class="actions"><span class="btn primary">选择 JSON</span><button class="btn" type="button" id="clearBtn">清空</button><button class="btn" type="button" id="exportBtn" disabled>导出报告</button></div>
 </label>
 <input id="fileInput" type="file" accept=".json,application/json" multiple>
 </section>
 <section id="resultRoot" class="hidden">
 <div class="summary">
-<div class="panel metric"><b id="mBooks">0</b><span>世界书</span></div>
-<div class="panel metric"><b id="mEntries">0</b><span>已扫描条目</span></div>
-<div class="panel metric"><b id="mHigh">0</b><span>高风险 / 确定错误</span></div>
-<div class="panel metric"><b id="mWarn">0</b><span>需要处理 / 确认</span></div>
+<div class="panel metric status" id="statusMetric"><b id="mStatus">待检查</b><span>公约状态</span></div>
+<div class="panel metric"><b id="mBooks">0</b><span>文件</span></div>
+<div class="panel metric"><b id="mEntries">0</b><span>已扫描内容</span></div>
+<div class="panel metric"><b id="mHigh">0</b><span>阻断通过</span></div>
+<div class="panel metric"><b id="mWarn">0</b><span>需要确认</span></div>
+<div class="panel metric"><b id="mHints">0</b><span>? 人工留意</span></div>
 </div>
+<section class="panel section"><h2>公约结论</h2><div id="certSummary"></div></section>
 <section class="panel section"><h2>检查结果</h2><div id="findings"></div></section>
-<section class="panel section"><h2>已读取世界书</h2><div id="books" class="books"></div></section>
+<section class="panel section"><h2>已读取文件</h2><div id="books" class="books"></div></section>
 </section>
-<p class="foot">规则范围：L1–L6（作用域与共享状态）、M1–M6（危险/难理解代码）、U2–U5（外链）以及 EJS 解析错误。工具刻意只做可解释的静态检查；没有告警不等于运行时绝对安全。</p>
+<p class="foot">Poem Workshop Code Check v1：EJS 使用 L1–L6；EJS / 正则共用 M1–M5、U2–U5；另有不影响认证结果的 ? 人工审核提示。阻断和“需要确认”都会阻止绿色通过；信息与 ? 提示不会。结果不是“无 bug”保证。</p>
 </main>
 <script>
 (() => {
@@ -45,6 +48,7 @@
 const MAX_FILE_BYTES=12*1024*1024;
 const WORKSHOP_META_RE=/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi;
 const GENERIC_GLOBAL_NAMES=new Set(['data','value','result','state','temp','tmp','config','ctx','context','output','response','item']);
+const SENSITIVE_STORAGE_WORDS=new Set(['token','auth','session','password','passwd','secret','cookie','credential','bearer']);
 const OFFICIAL_URL_RULES=[
   {host:'testingcf.jsdelivr.net',path:/^\/gh\/StageDog\/tavern_resource(?:\/|$)/i},
   {host:'cdn.jsdelivr.net',path:/^\/gh\/StageDog\/tavern_resource(?:\/|$)/i},
@@ -56,20 +60,44 @@ const state={books:[],findings:[],report:null};
 
 function preserveLines(text){return String(text||'').replace(WORKSHOP_META_RE,m=>'\n'.repeat((m.match(/\n/g)||[]).length))}
 function parseDecorators(content){
-  const lines=content.replace(/\r\n/g,'\n').split('\n'),decorators=[];
-  for(const line of lines){if(!line.startsWith('@@')||line.startsWith('@@@'))break;decorators.push(line.trim())}
+  const lines=content.replace(/\r\n/g,'\n').split('\n'),decorators=[];let i=0;
+  while(i<lines.length&&lines[i].trim()==='')i++;
+  for(;i<lines.length;i++){const line=lines[i];if(!line.startsWith('@@')||line.startsWith('@@@'))break;decorators.push(line.trim())}
   return{isPrivate:decorators.some(x=>x.split(/\s+/,1)[0]==='@@private')};
 }
+function worldbookEntries(json){
+  const candidates=[json&&json.entries,json&&json.data&&json.data.entries,json&&json.world_info&&json.world_info.entries];
+  return candidates.find(x=>x&&(typeof x==='object'||Array.isArray(x)));
+}
 function extractEntries(json,fileName,bookOrder){
-  const raw=[json&&json.entries,json&&json.data&&json.data.entries,json&&json.world_info&&json.world_info.entries].filter(Boolean)[0];
+  const raw=worldbookEntries(json);
   if(!raw||(typeof raw!=='object'&&!Array.isArray(raw)))throw new Error('找不到世界书 entries');
   const list=Array.isArray(raw)?raw.map((v,i)=>[String(i),v]):Object.entries(raw),out=[];let order=0;
   for(const [key,value] of list){
     if(!value||typeof value!=='object'||typeof value.content!=='string')continue;
     const content=preserveLines(value.content),parsed=parseDecorators(content);
-    out.push({id:fileName+':'+key,fileName,bookOrder,entryOrder:order++,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key),content,isPrivate:parsed.isPrivate,hasEjs:content.includes('<%'),symbols:[]});
+    out.push({id:fileName+':'+key,fileName,bookOrder,entryOrder:order++,key,uid:value.uid??key,name:value.comment||value.name||('Entry '+key),content,isPrivate:parsed.isPrivate,hasEjs:content.includes('<%'),sourceType:'worldbook',symbols:[]});
   }
   return out;
+}
+function isRegexScript(value){
+  return !!value&&typeof value==='object'&&typeof value.replaceString==='string'&&(typeof value.findRegex==='string'||typeof value.scriptName==='string'||typeof value.id==='string');
+}
+function extractRegexScripts(json,fileName,bookOrder){
+  let list=[];
+  if(isRegexScript(json))list=[json];
+  else if(Array.isArray(json))list=json.filter(isRegexScript);
+  else{
+    for(const key of ['regex_scripts','regexScripts','scripts']){
+      if(Array.isArray(json&&json[key])){list=json[key].filter(isRegexScript);if(list.length)break}
+    }
+  }
+  if(!list.length)throw new Error('找不到世界书 entries 或正则脚本 replaceString');
+  return list.map((value,i)=>({
+    id:fileName+':regex:'+i,fileName,bookOrder,entryOrder:i,key:String(i),uid:value.id??i,
+    name:value.scriptName||value.name||('Regex '+(i+1)),content:String(value.replaceString||''),
+    isPrivate:false,hasEjs:false,sourceType:'regex',symbols:[],findRegex:String(value.findRegex||'')
+  }));
 }
 function lineFromIndex(text,index){return(text.slice(0,Math.max(0,index)).match(/\n/g)||[]).length+1}
 function blankRange(chars,start,end){for(let i=start;i<end;i++)if(chars[i]!=='\n')chars[i]=' '}
@@ -78,7 +106,7 @@ function ejsCodeMask(content){
   while(cursor<content.length){
     const open=content.indexOf('<%',cursor);if(open<0)break;
     let pos=open+2,mode='',mark=content[pos]||'';if('=_-#%'.includes(mark)){mode=mark;pos++}
-    const close=content.indexOf('%>',pos);if(close<0)break;
+    const close=(mode==='#'||mode==='%')?content.indexOf('%>',pos):findEjsClose(content,pos);if(close<0)break;
     let end=close;if(content[end-1]==='-'||content[end-1]==='_')end--;
     if(mode!=='#'&&mode!=='%')for(let i=pos;i<end;i++)out[i]=content[i];
     cursor=close+2;
@@ -94,43 +122,246 @@ function looksLikeRegexStart(a,index){
   return['return','throw','case','delete','void','typeof','instanceof','in','of','yield','await'].includes(word);
 }
 function maskStringsAndComments(code){
-  const a=code.split('');let i=0;
-  while(i<a.length){
-    const c=a[i],n=a[i+1];
-    if(c==='/'&&n==='/'){const s=i;i+=2;while(i<a.length&&a[i]!=='\n')i++;blankRange(a,s,i);continue}
-    if(c==='/'&&n==='*'){const s=i;i+=2;while(i<a.length-1&&!(a[i]==='*'&&a[i+1]==='/'))i++;i=Math.min(a.length,i+2);blankRange(a,s,i);continue}
-    if(c==='/'&&looksLikeRegexStart(a,i)){
-      const s=i;let inClass=false,closed=false;i++;
-      while(i<a.length){
-        if(a[i]==='\\'){i+=2;continue}
-        if(a[i]==='\n')break;
-        if(a[i]==='['){inClass=true;i++;continue}
-        if(a[i]===']'){inClass=false;i++;continue}
-        if(a[i]==='/'&&!inClass){i++;while(i<a.length&&/[A-Za-z]/.test(a[i]))i++;closed=true;break}
-        i++;
-      }
-      if(closed){blankRange(a,s,i);continue}
-      i=s+1;continue;
+  const src=code.split(''),out=code.split('');
+  const blank=(start,end)=>blankRange(out,start,end);
+  const scanQuoted=(start,quote)=>{
+    let i=start+1;
+    while(i<src.length){
+      if(src[i]==='\\'){i=Math.min(src.length,i+2);continue}
+      if(src[i]===quote){i++;break}
+      i++;
     }
-    if(c==="'"||c==='"'||c.charCodeAt(0)===96){const s=i,quote=c;i++;while(i<a.length){if(a[i]==='\\'){i+=2;continue}if(a[i]===quote){i++;break}i++}blankRange(a,s,i);continue}
-    i++;
-  }
-  return a.join('');
+    blank(start,i);return i;
+  };
+  const scanLineComment=(start)=>{let i=start+2;while(i<src.length&&src[i]!=='\n')i++;blank(start,i);return i};
+  const scanBlockComment=(start)=>{
+    let i=start+2;while(i<src.length-1&&!(src[i]==='*'&&src[i+1]==='/'))i++;
+    i=Math.min(src.length,i+2);blank(start,i);return i;
+  };
+  const scanRegex=(start)=>{
+    let i=start+1,inClass=false,closed=false;
+    while(i<src.length){
+      if(src[i]==='\\'){i=Math.min(src.length,i+2);continue}
+      if(src[i]==='\n')break;
+      if(src[i]==='['){inClass=true;i++;continue}
+      if(src[i]===']'){inClass=false;i++;continue}
+      if(src[i]==='/'&&!inClass){i++;while(i<src.length&&/[A-Za-z]/.test(src[i]))i++;closed=true;break}
+      i++;
+    }
+    if(closed){blank(start,i);return i}
+    return start+1;
+  };
+  let scanJs,scanTemplate;
+  scanTemplate=(start)=>{
+    blank(start,start+1);let i=start+1;
+    while(i<src.length){
+      const c=src[i],n=src[i+1];
+      if(c==='\\'){const end=Math.min(src.length,i+2);blank(i,end);i=end;continue}
+      if(c.charCodeAt(0)===96){blank(i,i+1);return i+1}
+      if(c.charCodeAt(0)===36&&n==='{'){
+        out[i]=' ';out[i+1]='(';
+        const end=scanJs(i+2,true);
+        if(end<src.length&&src[end]==='}'){out[end]=')';i=end+1;continue}
+        return end;
+      }
+      blank(i,i+1);i++;
+    }
+    return i;
+  };
+  scanJs=(start,untilTemplateClose)=>{
+    let i=start,braceDepth=0;
+    while(i<src.length){
+      const c=src[i],n=src[i+1];
+      if(c==='/'&&n==='/'){i=scanLineComment(i);continue}
+      if(c==='/'&&n==='*'){i=scanBlockComment(i);continue}
+      if(c==='/'&&looksLikeRegexStart(src,i)){const next=scanRegex(i);if(next!==i+1){i=next;continue}}
+      if(c==="'"||c==='"'){i=scanQuoted(i,c);continue}
+      if(c.charCodeAt(0)===96){i=scanTemplate(i);continue}
+      if(untilTemplateClose&&c==='{'){braceDepth++;i++;continue}
+      if(untilTemplateClose&&c==='}'){if(braceDepth===0)return i;braceDepth--;i++;continue}
+      i++;
+    }
+    return i;
+  };
+  scanJs(0,false);
+  return out.join('');
+}
+function findEjsClose(content,start){const masked=maskStringsAndComments(content.slice(start)),relative=masked.indexOf('%>');return relative<0?-1:start+relative}
+function matchingClose(text,open,openChar,closeChar){
+  let depth=1;
+  for(let i=open+1;i<text.length;i++){if(text[i]===openChar)depth++;else if(text[i]===closeChar&&--depth===0)return i}
+  return-1;
 }
 function inForHeader(clean,index){
-  const before=clean.slice(Math.max(0,index-240),index);
-  return/\bfor(?:\s+await)?\s*\([^)]*$/.test(before);
+  let nested=0;
+  for(let i=index-1;i>=0;i--){
+    if(clean[i]===')'){nested++;continue}
+    if(clean[i]!=='(')continue;
+    if(nested){nested--;continue}
+    return/\bfor(?:\s+await)?\s*$/.test(clean.slice(0,i));
+  }
+  return false;
 }
 function functionRanges(clean){
-  const ranges=[],re=/\b(?:async\s+)?function\s*\*?\s*(?:[A-Za-z_$][\w$]*)?\s*\([^)]*\)\s*\{/g;let m;
-  while((m=re.exec(clean))){
-    const open=clean.indexOf('{',m.index),start=open+1;let depth=1,i=start;
-    for(;i<clean.length;i++){if(clean[i]==='{')depth++;else if(clean[i]==='}'&&--depth===0)break}
-    if(depth===0)ranges.push([start,i]);
+  const ranges=[],seen=new Set(),add=open=>{if(open<0||seen.has(open))return;const close=matchingClose(clean,open,'{','}');if(close>=0){seen.add(open);ranges.push([open+1,close])}};
+  const stack=[],control=new Set(['if','for','while','switch','catch','with']);
+  for(let i=0;i<clean.length;i++){
+    if(clean[i]==='('){stack.push(i);continue}
+    if(clean[i]!==')'||!stack.length)continue;
+    const openParen=stack.pop();let after=i+1;while(after<clean.length&&/\s/.test(clean[after]))after++;
+    if(clean.slice(after,after+2)=='=>'){
+      after+=2;while(after<clean.length&&/\s/.test(clean[after]))after++;if(clean[after]==='{')add(after);continue;
+    }
+    if(clean[after]!=='{')continue;
+    let before=openParen-1;while(before>=0&&/\s/.test(clean[before]))before--;
+    const prefix=clean.slice(Math.max(0,before-180),before+1),functionLike=/\b(?:async\s+)?function\s*\*?\s*(?:[A-Za-z_$][\w$]*)?$/.test(prefix),methodName=/([A-Za-z_$][\w$]*)\s*$/.exec(prefix);
+    if(functionLike||(methodName&&!control.has(methodName[1])))add(after);
   }
+  const singleArrow=/\b(?:async\s+)?[A-Za-z_$][\w$]*\s*=>\s*\{/g;let m;
+  while((m=singleArrow.exec(clean)))add(m.index+m[0].lastIndexOf('{'));
   return ranges;
 }
 function insideRanges(index,ranges){return ranges.some(([start,end])=>index>=start&&index<end)}
+function trimSpan(text,start,end){
+  while(start<end&&/\s/.test(text[start]))start++;
+  while(end>start&&/\s/.test(text[end-1]))end--;
+  return[start,end];
+}
+function findTopLevelToken(text,start,end,token){
+  let paren=0,bracket=0,brace=0;
+  for(let i=start;i<end;i++){
+    const c=text[i];
+    if(c==='(')paren++;
+    else if(c===')')paren=Math.max(0,paren-1);
+    else if(c==='[')bracket++;
+    else if(c===']')bracket=Math.max(0,bracket-1);
+    else if(c==='{')brace++;
+    else if(c==='}')brace=Math.max(0,brace-1);
+    else if(c===token&&paren===0&&bracket===0&&brace===0)return i;
+  }
+  return-1;
+}
+function findTopLevelDefaultEquals(text,start,end){
+  let paren=0,bracket=0,brace=0;
+  for(let i=start;i<end;i++){
+    const c=text[i];
+    if(c==='(')paren++;
+    else if(c===')')paren=Math.max(0,paren-1);
+    else if(c==='[')bracket++;
+    else if(c===']')bracket=Math.max(0,bracket-1);
+    else if(c==='{')brace++;
+    else if(c==='}')brace=Math.max(0,brace-1);
+    else if(c==='='&&paren===0&&bracket===0&&brace===0){
+      const prev=text[i-1]||'',next=text[i+1]||'';
+      if(!/[=<>!+\-*\/%?&|]/.test(prev)&&next!=='='&&next!=='>')return i;
+    }
+  }
+  return-1;
+}
+function splitTopLevelSpans(text,start,end,separator=','){
+  const spans=[];let partStart=start,paren=0,bracket=0,brace=0;
+  for(let i=start;i<end;i++){
+    const c=text[i];
+    if(c==='(')paren++;
+    else if(c===')')paren=Math.max(0,paren-1);
+    else if(c==='[')bracket++;
+    else if(c===']')bracket=Math.max(0,bracket-1);
+    else if(c==='{')brace++;
+    else if(c==='}')brace=Math.max(0,brace-1);
+    else if(c===separator&&paren===0&&bracket===0&&brace===0){spans.push([partStart,i]);partStart=i+1}
+  }
+  spans.push([partStart,end]);return spans;
+}
+function findEmptyConditionFor(clean){
+  const re=/\bfor\s*\(/g;let m;
+  while((m=re.exec(clean))){
+    const open=clean.indexOf('(',m.index),close=matchingClose(clean,open,'(',')');if(close<0)continue;
+    const spans=splitTopLevelSpans(clean,open+1,close,';');
+    if(spans.length===3){const middle=trimSpan(clean,spans[1][0],spans[1][1]);if(middle[0]===middle[1])return{index:m.index,0:clean.slice(m.index,close+1)}}
+    re.lastIndex=close+1;
+  }
+  return null;
+}
+function collectBindingInfo(text,start,end,names,assignmentStarts){
+  [start,end]=trimSpan(text,start,end);if(start>=end)return;
+  if(text.slice(start,start+3)==='...'){start+=3;[start,end]=trimSpan(text,start,end);if(start>=end)return}
+  const eq=findTopLevelDefaultEquals(text,start,end),patternEnd=eq>=0?eq:end;
+  let ps=start,pe=patternEnd;[ps,pe]=trimSpan(text,ps,pe);if(ps>=pe)return;
+  const simple=text.slice(ps,pe);
+  if(/^[A-Za-z_$][\w$]*$/.test(simple)){
+    if(names)names.push({name:simple,index:ps});
+    if(eq>=0&&assignmentStarts)assignmentStarts.add(ps);
+    return;
+  }
+  if(text[ps]==='{'&&text[pe-1]==='}'){
+    for(const span of splitTopLevelSpans(text,ps+1,pe-1)){
+      let [s,e]=trimSpan(text,span[0],span[1]);if(s>=e)continue;
+      if(text.slice(s,s+3)==='...'){collectBindingInfo(text,s+3,e,names,assignmentStarts);continue}
+      const colon=findTopLevelToken(text,s,e,':');
+      collectBindingInfo(text,colon>=0?colon+1:s,e,names,assignmentStarts);
+    }
+    return;
+  }
+  if(text[ps]==='['&&text[pe-1]===']'){
+    for(const span of splitTopLevelSpans(text,ps+1,pe-1))collectBindingInfo(text,span[0],span[1],names,assignmentStarts);
+  }
+}
+function collectBindingDefaultStarts(text,start,end,out){collectBindingInfo(text,start,end,null,out)}
+function parameterBindingAssignmentStarts(clean){
+  const out=new Set(),stack=[],control=new Set(['if','for','while','switch','catch','with']);
+  for(let i=0;i<clean.length;i++){
+    const c=clean[i];
+    if(c==='('){stack.push(i);continue}
+    if(c!==')'||!stack.length)continue;
+    const open=stack.pop(),close=i;let after=close+1;
+    while(after<clean.length&&/\s/.test(clean[after]))after++;
+    let before=open-1;while(before>=0&&/\s/.test(clean[before]))before--;
+    const prefix=clean.slice(Math.max(0,before-160),before+1);
+    const functionParams=/\b(?:async\s+)?function\s*\*?\s*(?:[A-Za-z_$][\w$]*)?$/.test(prefix);
+    const arrowParams=clean.slice(after,after+2)==='=>';
+    const methodName=/([A-Za-z_$][\w$]*)\s*$/.exec(prefix);
+    const methodParams=clean[after]==='{'&&methodName&&!control.has(methodName[1]);
+    if(!functionParams&&!arrowParams&&!methodParams)continue;
+    for(const span of splitTopLevelSpans(clean,open+1,close))collectBindingDefaultStarts(clean,span[0],span[1],out);
+  }
+  return out;
+}
+function declarationEnd(clean,start){
+  let paren=0,bracket=0,brace=0,sawTopLevelEquals=false;
+  for(let i=start;i<clean.length;i++){
+    const c=clean[i];
+    if(c==='('){paren++;continue}
+    if(c===')'){if(paren===0&&bracket===0&&brace===0)return i;paren=Math.max(0,paren-1);continue}
+    if(c==='['){bracket++;continue}
+    if(c===']'){bracket=Math.max(0,bracket-1);continue}
+    if(c==='{'){brace++;continue}
+    if(c==='}'){if(brace===0&&paren===0&&bracket===0)return i;brace=Math.max(0,brace-1);continue}
+    if(paren||bracket||brace)continue;
+    if(c===';')return i;
+    if(c==='='&&findTopLevelDefaultEquals(clean,i,i+1)===i){sawTopLevelEquals=true;continue}
+    if(!sawTopLevelEquals&&(clean.slice(i,i+2)==='of'||clean.slice(i,i+2)==='in')){
+      const before=clean[i-1]||' ',after=clean[i+2]||' ';
+      if(!/[\w$]/.test(before)&&!/[\w$]/.test(after))return i;
+    }
+    if(c==='\n'){
+      let j=i-1;while(j>=start&&/\s/.test(clean[j]))j--;
+      if(j<start||!/[=,([{.+\-*\/%?:&|]/.test(clean[j]))return i;
+    }
+  }
+  return clean.length;
+}
+function collectDeclarations(clean){
+  const out=[],re=/\b(var|let|const)\b/g;let m;
+  while((m=re.exec(clean))){
+    let prev=m.index-1;while(prev>=0&&/\s/.test(clean[prev]))prev--;
+    if(clean[prev]==='.')continue;
+    const start=m.index+m[0].length,end=declarationEnd(clean,start),names=[],assignmentStarts=new Set();
+    for(const span of splitTopLevelSpans(clean,start,end))collectBindingInfo(clean,span[0],span[1],names,assignmentStarts);
+    out.push({kind:m[1],index:m.index,end,names,assignmentStarts});
+    re.lastIndex=Math.max(re.lastIndex,end);
+  }
+  return out;
+}
 function depthMap(clean){
   const depth=new Int32Array(clean.length+1);let d=0;
   for(let i=0;i<clean.length;i++){depth[i]=d;if(clean[i]==='{')d++;else if(clean[i]==='}')d=Math.max(0,d-1)}
@@ -141,7 +372,7 @@ function templateToJs(content,privateScope=false){
   while(cursor<content.length){
     const open=content.indexOf('<%',cursor);if(open<0)break;
     let pos=open+2,mode='',mark=content[pos]||'';if('=_-#%'.includes(mark)){mode=mark;pos++}
-    const close=content.indexOf('%>',pos);if(close<0)throw new SyntaxError('EJS 标签未闭合：缺少 %>');
+    const close=(mode==='#'||mode==='%')?content.indexOf('%>',pos):findEjsClose(content,pos);if(close<0)throw new SyntaxError('EJS 标签未闭合：缺少 %>');
     let code=content.slice(pos,close);if(code.endsWith('-')||code.endsWith('_'))code=code.slice(0,-1);
     const skipped=content.slice(cursor,open);out+='\n'.repeat((skipped.match(/\n/g)||[]).length);
     if(mode==='#')out+='\n'.repeat((code.match(/\n/g)||[]).length);
@@ -160,31 +391,92 @@ function finding(ruleId,severity,title,entry,index,detail,suggestion,extra={}){
   return{ruleId,severity,title,detail,suggestion,book:entry?entry.fileName:(extra.book||''),entry:entry?entry.name:(extra.entry||''),uid:entry?entry.uid:(extra.uid??''),line:entry?lineFromIndex(entry.content,index||0):(extra.line||1),bookOrder:entry?entry.bookOrder:(extra.bookOrder??999999),entryOrder:entry?entry.entryOrder:(extra.entryOrder??999999)};
 }
 function firstMatch(re,text){re.lastIndex=0;return re.exec(text)}
+function firstBracketCall(rawCode,clean,bases,names){
+  const re=new RegExp("\\b("+bases.join("|")+")\\s*(?:\\?\\.\\s*)?\\[\\s*['\"]("+names.join("|")+")['\"]\\s*\\]\\s*(?:\\?\\.\\s*)?\\(","g");let m;
+  while((m=re.exec(rawCode))){if(clean.slice(m.index,m.index+m[1].length)===m[1])return m}
+  return null;
+}
+function isSensitiveStorageKey(key){
+  const words=String(key||'').match(/[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|[0-9]+/g)||[];
+  return words.some(word=>SENSITIVE_STORAGE_WORDS.has(word.toLowerCase()));
+}
 function hasLeakDocumentation(content,index,name){
   const area=content.slice(Math.max(0,index-700),Math.min(content.length,index+700)).toLowerCase();
   return(/\bintentional\b|\bdeclared\b|故意|刻意|设计行为/.test(area))&&(/\bowner\s*:|归属|负责人|责任/.test(area))&&(/\blifecycle\s*:|生命周期/.test(area))&&(/\bcleanup\s*:|清理|delete\s+(?:globalthis|window)\s*\./.test(area))&&!!name;
 }
-function collectDirectUrls(content){const out=[],re=/https?:\/\/[^\s"'<>\\)]+/gi;let m;while((m=re.exec(content)))out.push({url:m[0],index:m.index});return out}
+function collectDirectUrls(content){
+  const out=[],absolute=/https?:\/\/[^\s"'<>\\)]+/gi,protocolRelative=/(^|[\s"'(=,])\/\/((?:\[[0-9A-Fa-f:]+\]|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?:[^\s"'<>\\)]*)?)/gm;let m;
+  while((m=absolute.exec(content))){
+    const url=m[0].replace(/[;,]+$/,'');
+    if(/^http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)$/i.test(url))continue;
+    out.push({url,index:m.index});
+  }
+  while((m=protocolRelative.exec(content))){
+    const raw='//'+m[2],url=raw.replace(/[;,]+$/,''),index=m.index+m[1].length;
+    out.push({url,index});
+  }
+  return out.sort((a,b)=>a.index-b.index);
+}
 function isIpHost(host){
   const h=host.replace(/^\[|\]$/g,'');if(h.includes(':'))return true;
   const p=h.split('.');return p.length===4&&p.every(x=>/^\d{1,3}$/.test(x)&&Number(x)>=0&&Number(x)<=255);
 }
+function parseDirectUrl(url){return new URL(String(url).startsWith('//')?'https:'+url:url)}
 function isOfficialUrl(url){
-  try{const u=new URL(url);return OFFICIAL_URL_RULES.some(r=>u.hostname.toLowerCase()===r.host&&r.path.test(u.pathname))}
+  try{const u=parseDirectUrl(url);return OFFICIAL_URL_RULES.some(r=>u.hostname.toLowerCase()===r.host&&r.path.test(u.pathname))}
   catch{return false}
 }
-function inspectLinks(entry,findings){
-  for(const item of collectDirectUrls(entry.content)){
-    let u;try{u=new URL(item.url)}catch{continue}
-    if(isIpHost(u.hostname))findings.push(finding('U4','warn','外链使用 IP 直连',entry,item.index,item.url,'改用可识别、可审核的 HTTPS 域名；若确有必要，请明确说明用途。'));
-    else if(u.protocol==='http:')findings.push(finding('U3','warn','外链使用不安全 HTTP',entry,item.index,item.url,'改成 HTTPS；若目标不支持 HTTPS，不建议把它作为世界书依赖。'));
-    else if(!isOfficialUrl(item.url))findings.push(finding('U2','warn','外链来自非官方域名',entry,item.index,item.url,'确认域名归属与用途；若是项目依赖，建议使用已知可信来源并在条目中说明。'));
+function executableCodeMask(entry){
+  const out=Array.from(entry.content,ch=>ch==='\n'?'\n':' ');
+  const copyRange=(body,start)=>{for(let i=0;i<body.length;i++)out[start+i]=body[i]};
+  const copy=(mask)=>{for(let i=0;i<mask.length;i++)if(mask[i]!==' '&&mask[i]!=='\n')out[i]=mask[i]};
+  if(entry.hasEjs)copy(ejsCodeMask(entry.content));
+  const scriptRe=/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;let m;
+  while((m=scriptRe.exec(entry.content))){
+    const body=m[1],start=m.index+m[0].indexOf(body);copyRange(body,start);
   }
-  const concatRe=/((?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*(?:\+\s*(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*'))+)/g;let m;
-  while((m=concatRe.exec(entry.content))){
-    const parts=m[0].match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'/g)||[];
-    const joined=parts.map(p=>{const q=p[0];return p.slice(1,-1).replace(new RegExp('\\\\'+q,'g'),q).replace(/\\\\/g,'\\')}).join('');
-    if(/^https?:\/\//i.test(joined))findings.push(finding('U5','warn','URL 由字符串拼接隐藏',entry,m.index,joined,'直接写出完整 URL，让审核者能一眼看到真实目标地址。'));
+  const inlineRe=/\bon[a-z][\w:-]*\s*=\s*(['"])([\s\S]*?)\1/gi;
+  while((m=inlineRe.exec(entry.content))){
+    const body=m[2],start=m.index+m[0].indexOf(body);copyRange(body,start);
+  }
+  const inlineUnquotedRe=/\bon[a-z][\w:-]*\s*=\s*(?!['"])([^\s"'<>\x60=]+)/gi;
+  while((m=inlineUnquotedRe.exec(entry.content))){
+    const body=m[1],start=m.index+m[0].indexOf(body);copyRange(body,start);
+  }
+  const jsUrlRe=/\b(?:href|src)\s*=\s*(['"])\s*javascript\s*:\s*([\s\S]*?)\1/gi;
+  while((m=jsUrlRe.exec(entry.content))){
+    const body=m[2],start=m.index+m[0].indexOf(body);copyRange(body,start);
+  }
+  return out.join('');
+}
+function inspectLinks(entry,findings,u2SeenHosts){
+  const seen=new Set();
+  for(const item of collectDirectUrls(entry.content)){
+    let u;try{u=parseDirectUrl(item.url)}catch{continue}
+    const host=u.hostname.toLowerCase(),key=u.protocol+'//'+host;
+    if(isIpHost(host)){
+      if(!seen.has('U4:'+key)){seen.add('U4:'+key);findings.push(finding('U4','warn','外链使用 IP 直连',entry,item.index,item.url,'改用可识别、可审核的 HTTPS 域名；若确有必要，请明确说明用途。'))}
+    }else if(u.protocol==='http:'){
+      if(!seen.has('U3:'+key)){seen.add('U3:'+key);findings.push(finding('U3','warn','外链使用不安全 HTTP',entry,item.index,item.url,'改成 HTTPS；若目标不支持 HTTPS，不建议把它作为项目依赖。'))}
+    }else if(!isOfficialUrl(item.url)){
+      if(!u2SeenHosts.has(host)){u2SeenHosts.add(host);findings.push(finding('U2','warn','外链来自未确认的第三方域名',entry,item.index,host,'确认这个域名确实是项目需要的资源来源。相同域名在本次扫描中只提示一次，避免跨条目/文件刷屏。'))}
+    }
+  }
+  const dynamicPatterns=[
+    /https?:\/\/[^\s"'<>\\)]*(?:\x24\d+|\x24<[A-Za-z][\w]*>)[^\s"'<>\\)]*/gi,
+    /(['"])https?:\/\/[^'"]*\1\s*\+\s*(?!\s*['"])/gi,
+    /`https?:\/\/[^`]*\$\{[^}]+\}[^`]*`/gi
+  ];
+  for(const re of dynamicPatterns){
+    let m;while((m=re.exec(entry.content))){
+      const key='U5:'+m.index;if(seen.has(key))continue;seen.add(key);
+      findings.push(finding('U5','warn','远程资源目标不是固定可审阅集合',entry,m.index,m[0].slice(0,220),'把可能访问的远程资源写成有限、明确的 URL 映射。像 mood → 固定 URL 可以；不要让 $1/$2、任意变量直接决定远程文件路径。'));
+    }
+  }
+  const code=maskStringsAndComments(executableCodeMask(entry));
+  const unknownCall=/\b(?:fetch|WebSocket|EventSource)\s*\(\s*([A-Za-z_$][\w$]*)/g;let call;
+  while((call=unknownCall.exec(code))){
+    findings.push(finding('U5','warn','网络目标由运行时变量决定',entry,call.index,call[0],'如果这是固定资源，请改成有限、明确的 URL 映射；如果确实必须动态联网，需要人工确认实际目标范围。'));
   }
 }
 function inspectSyntax(entry,findings){
@@ -193,44 +485,62 @@ function inspectSyntax(entry,findings){
   const error=compileOnly(code);if(error)findings.push(finding('EJS-PARSE','high','EJS 无法编译',entry,0,error,'检查括号、引号、花括号以及 EJS 标签内的 JavaScript 语法。'));
 }
 function inspectLexical(entry,findings){
+  entry.symbols=[];
   if(!entry.hasEjs)return;
-  const rawMask=ejsCodeMask(entry.content),clean=maskStringsAndComments(rawMask),depth=depthMap(clean),declaredNames=new Set(),fnRanges=functionRanges(clean),topVars=new Map();let m;
+  const rawMask=ejsCodeMask(entry.content),clean=maskStringsAndComments(rawMask),depth=depthMap(clean),declaredNames=new Set(),fnRanges=functionRanges(clean),parameterBindings=parameterBindingAssignmentStarts(clean),declarations=collectDeclarations(clean),declarationAssignments=new Set(),topVars=new Map();let m;
+  for(const decl of declarations){for(const binding of decl.names)declaredNames.add(binding.name);for(const at of decl.assignmentStarts)declarationAssignments.add(at)}
 
   const fnRe=/\b(?:async\s+)?function\s*\*?\s+([A-Za-z_$][\w$]*)\s*\(/g;
   while((m=fnRe.exec(clean))){
-    declaredNames.add(m[1]);
+    const name=m[1];declaredNames.add(name);
     if(depth[m.index]!==0||entry.isPrivate)continue;
-    entry.symbols.push({name:m[1],index:m.index,type:'function'});
+    entry.symbols.push({name,index:m.index,type:'function'});
+    findings.push(finding('L3','high','顶层函数不符合 Workshop 组合兼容公约',entry,m.index,'函数 '+name+' 暴露在 EJS 顶层。它当前可能正常运行，但若其他项目在同一编译单元使用同名函数，会发生静默覆盖。','把只供本条目使用的函数放进本条目的 { ... } 局部块。若它本来用于跨条目共享，不要依赖顶层函数名；改用项目专属的显式共享命名空间。'));
+  }
+  const classRe=/\bclass\s+([A-Za-z_$][\w$]*)\b/g;
+  while((m=classRe.exec(clean))){
+    const name=m[1];declaredNames.add(name);
+    if(depth[m.index]!==0||entry.isPrivate)continue;
+    entry.symbols.push({name,index:m.index,type:'class'});
+    findings.push(finding('L3','high','顶层 class 不符合 Workshop 组合兼容公约',entry,m.index,'class '+name+' 暴露在 EJS 顶层；同名 class 进入同一编译单元会发生词法声明冲突。','把只供本条目使用的 class 放进本条目的 { ... } 局部块；不要把普通顶层 class 当作跨项目共享接口。'));
   }
 
-  const varRe=/\bvar\s+([A-Za-z_$][\w$]*)/g;
-  while((m=varRe.exec(clean))){
-    const name=m[1];declaredNames.add(name);
-    findings.push(finding('L1','info','检测到 var（预防提示）',entry,m.index,'检测到 var '+name+'。var 使用函数作用域；若多个同时激活的世界书条目用了同名 var，可能静默共享或覆盖。','如果这里只需要局部临时变量，优先使用 const/let；不要机械批量替换，先确认作用域与后续赋值。'));
-    if(entry.isPrivate||insideRanges(m.index,fnRanges))continue;
-    entry.symbols.push({name,index:m.index,type:'var'});
-    if(!topVars.has(name))topVars.set(name,[]);
-    topVars.get(name).push(m.index);
+  for(const decl of declarations){
+    if(decl.kind!=='var')continue;
+    const label=decl.names.length?decl.names.map(x=>x.name).join(', '):'（未识别绑定）';
+    const functionLocal=insideRanges(decl.index,fnRanges)||entry.isPrivate;
+    if(functionLocal){
+      findings.push(finding('L1','info','检测到局部 var（维护提示）',entry,decl.index,'检测到 var '+label+'。这里已有函数/private 隔离，因此不会作为顶层组合兼容阻断。','新模板仍建议按是否重新赋值选择 const 或 let；不要机械把 var 改成 const。'));
+      continue;
+    }
+    for(const binding of decl.names){
+      entry.symbols.push({name:binding.name,index:binding.index,type:'var'});
+      if(!topVars.has(binding.name))topVars.set(binding.name,[]);
+      topVars.get(binding.name).push(binding.index);
+    }
+    findings.push(finding('L1','high','顶层 var 不符合 Workshop 组合兼容公约',entry,decl.index,'var '+label+' 使用 EJS 函数作用域；即使写在 { ... } 或 for 块里，也可能与未来同时进入同一编译单元的项目共享/覆盖。','如果这是本条目的临时状态：不再赋值时用 const，会重新赋值时用 let，并放进本条目的 { ... } 局部块。不要机械批量替换。'));
   }
   for(const [name,positions] of topVars){
-    if(positions.length>1)findings.push(finding('L1','warn','同一条目重复声明同名 var',entry,positions[1],'var '+name+' 在同一个 EJS 函数作用域内重复声明 '+positions.length+' 次；这些声明实际操作的是同一个变量。','确认是否有意复用同一个变量；否则只声明一次，后续用普通赋值，或改用更清楚的局部作用域。'));
+    if(positions.length>1)findings.push(finding('L1','high','同一条目重复声明同名 var',entry,positions[1],'var '+name+' 在同一个 EJS 函数作用域内重复声明 '+positions.length+' 次；这些声明实际操作的是同一个变量。','只声明一次；后续若确实要修改值，使用普通赋值。若它只是本条目临时状态，同时按公约放入局部 { ... }。'));
   }
 
-  const declRe=/\b(let|const)\s+([A-Za-z_$][\w$]*)/g;
-  while((m=declRe.exec(clean))){
-    const kind=m[1],name=m[2],at=m.index,top=depth[at]===0&&!entry.isPrivate&&!inForHeader(clean,at);
-    declaredNames.add(name);
-    if(top)entry.symbols.push({name,index:at,type:kind});
+  for(const decl of declarations){
+    if(decl.kind==='var')continue;
+    const top=depth[decl.index]===0&&!entry.isPrivate&&!inForHeader(clean,decl.index);
+    if(!top)continue;
+    const label=decl.names.length?decl.names.map(x=>x.name).join(', '):'（解构/多声明）';
+    for(const binding of decl.names)entry.symbols.push({name:binding.name,index:binding.index,type:decl.kind});
+    findings.push(finding('L2','high','顶层 '+decl.kind+' 未局部化（Workshop 公约阻断）',entry,decl.index,decl.kind+' '+label+' 位于 EJS 顶层。它在当前 placement/API 下可能完全正常，但 Workshop 不允许依赖 message、position、depth 或 role 的隔离来获得组合兼容通过。','如果这些变量只供当前条目使用，把相关代码放进一个 { ... } 局部块；for (let/const ...) 的循环头本身已有块作用域，不需要为了消警告改写。'));
   }
 
   const reportGlobal=(base,name,index)=>{
     const documented=hasLeakDocumentation(entry.content,index,name);
     entry.symbols.push({name,index,type:'global'});
-    if(documented)findings.push(finding('L4','info','已声明的共享全局行为',entry,index,base+'.'+name+' 的用途、Owner、Lifecycle 与 Cleanup 已有说明。','保持说明与清理责任同步；若不再需要共享，改回局部状态。'));
-    else{
-      findings.push(finding('L4','warn','写入共享全局状态',entry,index,base+'.'+name+' 会写入共享全局对象；同一次运行中的其他条目也能读写它。','若确实需要共享状态，请说明用途、生命周期与清理方式；否则改成局部变量。'));
-      if(GENERIC_GLOBAL_NAMES.has(name))findings.push(finding('L5','info','共享名称过于通用',entry,index,name+' 是常见通用名；作为共享状态时更容易与其他条目或脚本撞名。','若确实需要共享状态，改用带项目/功能前缀的唯一名称。'));
+    const generic=GENERIC_GLOBAL_NAMES.has(name);
+    if(generic){
+      findings.push(finding('L5','high','共享全局名称过于通用（公约阻断）',entry,index,base+'.'+name+' 使用常见通用名，未来极易与其他项目或脚本撞名。','跨条目共享必须使用项目专属命名空间。Workshop 集成版应以项目稳定 ID 校验，例如 globalThis.__PW_<PROJECT_ID>__。'));
     }
+    findings.push(finding('L4','warn',documented?'已声明的共享全局行为仍需确认':'显式共享全局状态需要确认',entry,index,base+'.'+name+' 会写入浏览器共享全局对象。'+(documented?'附近已有 Owner/Lifecycle/Cleanup 说明，但离线 checker 无法确认这个命名空间是否真正属于当前 Workshop 项目。':'Workshop 公约要求跨条目共享必须显式、项目专属，并说明生命周期与清理方式。'),'如果确实需要跨条目共享：使用项目专属的唯一命名空间，并写清 Owner、Lifecycle、Cleanup；最终 uploader 应用项目稳定 ID 做自动校验。否则改成本条目的局部状态。'));
   };
   const assignOp='(?:=(?!=|>)|\\+=|-=|\\*=|\\/=|%=|\\?\\?=|&&=|\\|\\|=)';
   const dotGlobalRe=new RegExp('\\b(globalThis|window|self)\\s*\\.\\s*([A-Za-z_$][\\w$]*)\\s*'+assignOp,'g');
@@ -243,32 +553,73 @@ function inspectLexical(entry,findings){
   const reportImplicit=(name,nameIndex)=>{
     if(declaredNames.has(name))return;
     entry.symbols.push({name,index:nameIndex,type:'implicit'});
-    findings.push(finding('L4','warn','未声明赋值会改写共享环境或全局状态',entry,nameIndex,name+' 没有 let/const/var 声明。真实 ST 测试表明，这类写入可能覆盖 EJS 提供的环境值，也可能形成共享全局。','如果只是临时变量，请先用 const/let 声明；若确实要共享，请改成明确的共享状态并写清用途与清理方式。'));
-    if(GENERIC_GLOBAL_NAMES.has(name))findings.push(finding('L5','info','共享名称过于通用',entry,nameIndex,name+' 是常见通用名；一旦成为共享状态，更容易与其他条目或脚本撞名。','若确实需要共享状态，改用带项目/功能前缀的唯一名称。'));
+    findings.push(finding('L4','high','裸赋值不符合 Workshop 组合兼容公约',entry,nameIndex,name+' 没有 let/const/var 声明。真实 ST 测试表明，这可能覆盖 EJS 环境值（例如 userName），也可能创建共享全局。','如果只是本条目的临时变量，先用 const/let 声明并放进局部 { ... }。如果确实需要跨条目共享，改用项目专属的显式 globalThis 命名空间；不要用裸赋值。'));
+    if(GENERIC_GLOBAL_NAMES.has(name))findings.push(finding('L5','high','裸共享名称过于通用',entry,nameIndex,name+' 是常见通用名，一旦形成共享状态非常容易与其他项目撞名。','不要共享这个裸名字；局部化，或使用项目专属的显式共享命名空间。'));
   };
-  const bareAssignRe=/(?:^|[;{}\n)])\s*([A-Za-z_$][\w$]*)\s*(?:=(?!=|>)|\+=|-=|\*=|\/=|%=|\?\?=|&&=|\|\|=)/gm;
-  while((m=bareAssignRe.exec(clean))){const name=m[1];reportImplicit(name,m.index+m[0].indexOf(name))}
-  const prefixIncRe=/(?:^|[;{}\n)])\s*(?:\+\+|--)\s*([A-Za-z_$][\w$]*)/gm;
+  const bareAssignRe=/(?:^|[;{}\n(),?:])\s*([A-Za-z_$][\w$]*)\s*(?:=(?!=|>)|\+=|-=|\*=|\/=|%=|\?\?=|&&=|\|\|=)/gm;
+  while((m=bareAssignRe.exec(clean))){const name=m[1],nameIndex=m.index+m[0].indexOf(name);if(parameterBindings.has(nameIndex)||declarationAssignments.has(nameIndex))continue;reportImplicit(name,nameIndex)}
+  const prefixIncRe=/(?:^|[;{}\n(),?:])\s*(?:\+\+|--)\s*([A-Za-z_$][\w$]*)/gm;
   while((m=prefixIncRe.exec(clean))){const name=m[1];reportImplicit(name,m.index+m[0].lastIndexOf(name))}
-  const postfixIncRe=/(?:^|[;{}\n)])\s*([A-Za-z_$][\w$]*)\s*(?:\+\+|--)/gm;
+  const postfixIncRe=/(?:^|[;{}\n(),?:])\s*([A-Za-z_$][\w$]*)\s*(?:\+\+|--)/gm;
   while((m=postfixIncRe.exec(clean))){const name=m[1];reportImplicit(name,m.index+m[0].indexOf(name))}
 
-  let sensitiveHit=firstMatch(/(?:^|[^\w$.])(?:localStorage|sessionStorage|indexedDB)\s*(?:\.|\[)|\b(?:window|globalThis|self)\s*\.\s*(?:localStorage|sessionStorage|indexedDB)\b|\bdocument\s*\.\s*cookie\b/gm,clean);
-  if(!sensitiveHit){
-    const bracketCookie=/\bdocument\s*\[\s*(['"])cookie\1\s*\]/g;let b;
-    while((b=bracketCookie.exec(rawMask))){if(clean.slice(b.index,b.index+8)==='document'){sensitiveHit=b;break}}
-  }
-  if(sensitiveHit)findings.push(finding('M3','warn','访问敏感浏览器数据',entry,sensitiveHit.index,sensitiveHit[0],'确认是否真的需要访问浏览器存储/凭据；不要读取与功能无关的 token、Cookie 或用户数据。'));
-
-  const rules=[
-    ['M1','high','使用 eval 动态执行代码',/\beval\s*\(/g,'避免 eval；把逻辑写成明确函数或数据映射。'],
-    ['M2','high','使用 Function 构造器动态创建代码',/\b(?:new\s+)?(?:(?:window|globalThis|self)\s*\.\s*)?Function\s*\(/g,'避免 Function 构造器；改用固定函数或显式分支。'],
-    ['M4','warn','检测到网络请求 / 数据外发能力',/\b(?:fetch\s*\(|XMLHttpRequest\b|WebSocket\s*\(|EventSource\s*\(|(?:navigator\.)?sendBeacon\s*\()/g,'确认请求目标、发送内容与必要性；若不需要联网，请删除。'],
-    ['M5','high','检测到明显无界循环',/\bwhile\s*\(\s*(?:true|1)\s*\)|\bfor\s*\(\s*;\s*;\s*\)/g,'为循环加入明确结束条件；不要让世界书代码无限占用页面线程。'],
-    ['M6','warn','检测到难以审核的字符串混淆',/\b(?:String\.(?:fromCharCode|fromCodePoint)\s*\(|atob\s*\()/g,'直接写出可读字符串；不要用字符码/Base64 隐藏关键文本或地址。']
-  ];
-  for(const [ruleId,severity,title,re,suggestion] of rules){const hit=firstMatch(re,clean);if(hit)findings.push(finding(ruleId,severity,title,entry,hit.index,hit[0],suggestion))}
 }
+function inspectCapabilities(entry,findings){
+  const rawCode=executableCodeMask(entry);
+  if(!/\S/.test(rawCode))return;
+  const clean=maskStringsAndComments(rawCode);
+
+  let m1=firstMatch(/\b(?:(?:window|globalThis|self)\s*(?:\?\.\s*|\.\s*))?eval\s*\(/g,clean);
+  if(!m1)m1=firstMatch(/\(\s*0\s*,\s*eval\s*\)\s*\(/g,clean);
+  if(!m1)m1=firstBracketCall(rawCode,clean,['window','globalThis','self'],['eval']);
+  if(m1)findings.push(finding('M1','high','使用 eval 动态执行代码（公约阻断）',entry,m1.index,m1[0],'Workshop 项目禁止可执行 eval。注释和普通字符串里的 “eval” 不算违规；真正调用 eval 才阻断。'));
+
+  let m2=firstMatch(/\b(?:new\s+)?(?:(?:window|globalThis|self)\s*(?:\?\.\s*|\.\s*))?Function\s*\(/g,clean);
+  if(!m2)m2=firstBracketCall(rawCode,clean,['window','globalThis','self'],['Function']);
+  if(m2)findings.push(finding('M2','high','使用 Function 构造器动态创建代码（公约阻断）',entry,m2.index,m2[0],'Workshop 项目不要用 Function 构造器生成可执行代码；改用固定函数或明确分支。'));
+
+  let sensitive=firstMatch(/\bdocument\s*(?:\?\.\s*|\.\s*)cookie\b|\bObject\s*\.\s*keys\s*\(\s*(?:window\s*(?:\?\.\s*|\.\s*))?(?:localStorage|sessionStorage)\s*\)/g,clean);
+  if(!sensitive){
+    const bracketCookie=/\bdocument\s*\[\s*(['"])cookie\1\s*\]/g,b=bracketCookie.exec(rawCode);if(b)sensitive=b;
+  }
+  if(!sensitive){
+    const storage=/\b(?:(?:window|globalThis|self)\s*(?:\?\.\s*|\.\s*))?(?:localStorage|sessionStorage)\s*(?:\?\.\s*|\.\s*)getItem\s*\(/g;let hit;
+    while((hit=storage.exec(clean))){
+      const tail=rawCode.slice(hit.index,hit.index+180),km=/getItem\s*\(\s*(['"])([^'"]+)\1/.exec(tail);
+      if(km&&isSensitiveStorageKey(km[2])){sensitive={index:hit.index,0:km[0]};break}
+    }
+  }
+  if(!sensitive){
+    const bracketStorage=/\b(window|globalThis|self)\s*(?:\?\.\s*)?\[\s*['"](localStorage|sessionStorage)['"]\s*\]\s*(?:\?\.\s*|\.\s*)getItem\s*\(/g;let hit;
+    while((hit=bracketStorage.exec(rawCode))){
+      if(clean.slice(hit.index,hit.index+hit[1].length)!==hit[1])continue;
+      const tail=rawCode.slice(hit.index,hit.index+220),km=/getItem\s*\(\s*(['"])([^'"]+)\1/.exec(tail);
+      if(km&&isSensitiveStorageKey(km[2])){sensitive={index:hit.index,0:km[0]};break}
+    }
+  }
+  if(sensitive)findings.push(finding('M3','warn','访问敏感或大范围浏览器数据，需要确认',entry,sensitive.index,sensitive[0],'项目自己的主题、字号等明确本地设置可以使用 localStorage；Cookie、token/secret 类键名或枚举整份存储需要人工确认。'));
+
+  let m4=firstMatch(/\b(?:fetch\s*\(|XMLHttpRequest\b|WebSocket\s*\(|EventSource\s*\(|(?:navigator\s*(?:\?\.\s*|\.\s*))?sendBeacon\s*\()/g,clean);
+  if(!m4)m4=firstBracketCall(rawCode,clean,['window','globalThis','self'],['fetch','XMLHttpRequest','WebSocket','EventSource']);
+  if(!m4)m4=firstBracketCall(rawCode,clean,['navigator'],['sendBeacon']);
+  if(m4)findings.push(finding('M4','warn','检测到主动网络请求 / 数据外发能力，需要确认',entry,m4.index,m4[0],'确认请求目标、发送内容与必要性。静态图片/CSS URL 由 U 系列检查；这里针对脚本主动联网。'));
+
+  let m5=firstMatch(/\bwhile\s*\(\s*(?:true|1)\s*\)/g,clean);
+  if(!m5)m5=findEmptyConditionFor(clean);
+  if(m5)findings.push(finding('M5','high','检测到明显无界循环（公约阻断）',entry,m5.index,m5[0],'必须有清楚可靠的退出方式。Workshop 不负责一般性能优化，只阻断这种明显可能把页面线程或资源打爆的写法。'));
+
+  const hints=[
+    ['AH1','发现编码 / 解码式字符串构造',/\b(?:atob|btoa)\s*\(|\bString\s*\.\s*(?:fromCharCode|fromCodePoint)\s*\(/g,'不代表有问题；人工审核时确认结果没有被继续当作代码或隐藏远程目标。'],
+    ['AH2','发现动态 / 间接函数调用形状',/\b(?:window|globalThis|self)\s*\[\s*[A-Za-z_$][\w$]*\s*\]\s*\(|(?:=|:)\s*eval\b(?!\s*\()/g,'机器无法可靠知道最终调用什么；请人工顺着变量看最终函数。']
+  ];
+  for(const [ruleId,title,re,suggestion] of hints){const hit=firstMatch(re,rawCode);if(hit)findings.push(finding(ruleId,'hint',title,entry,hit.index,hit[0].slice(0,180),suggestion))}
+  const ejsRewrite=/(?:replace|replaceAll|split|join)\s*\([^\n]{0,180}(?:<%|%>)/g,er=ejsRewrite.exec(rawCode);
+  if(er)findings.push(finding('AH3','hint','发现运行时操作 EJS 标记',entry,er.index,er[0].slice(0,180),'不自动判错；请确认它不会把原本的注释/文本重新变成可执行 EJS。'));
+  const scriptCreate=/\bcreateElement\s*\(\s*(['"])script\1\s*\)/g,sc=scriptCreate.exec(rawCode);
+  if(sc)findings.push(finding('AH4','hint','发现运行时创建 <script>',entry,sc.index,sc[0],'不自动判错；人工审核时确认 script.src / textContent 最终来自哪里，以及是否绕过了正常的 U / M 检查。'));
+}
+
+function isProjectNamespaceName(name){return /^__PW_[A-Za-z0-9][A-Za-z0-9_]*__$/.test(name)}
 function detectCrossEntryCollisions(entries,findings){
   const map=new Map();
   for(const entry of entries){
@@ -279,65 +630,55 @@ function detectCrossEntryCollisions(entries,findings){
       if(!map.has(symbol.name))map.set(symbol.name,[]);map.get(symbol.name).push({entry,symbol});
     }
   }
-  const emit=(ruleId,severity,title,name,items,detail,suggestion)=>{
-    const a=items[0],f=finding(ruleId,severity,title,a.entry,a.symbol.index,detail,suggestion);
-    f.entry=items.map(x=>x.entry.name).join(' ↔ ');f.uid=items.map(x=>String(x.entry.uid)).join(' ↔ ');findings.push(f);
-  };
   for(const [name,list] of map){
-    const entryCount=items=>new Set(items.map(x=>x.entry.id)).size;
-    if(entryCount(list)<2)continue;
-
-    const declarations=list.filter(x=>['let','const','var','function'].includes(x.symbol.type));
-    const lexical=declarations.filter(x=>x.symbol.type==='let'||x.symbol.type==='const');
-    if(lexical.length&&entryCount(declarations)>=2){
-      emit('L2','high','不同条目的顶层声明会直接冲突',name,declarations,name+' 在多个可能同时激活的条目中被顶层声明。真实 ST 测试会出现重复声明/编译失败。涉及：'+declarations.map(x=>x.entry.name+' ('+x.symbol.type+')').join(' ↔ '),'给每个条目的顶层名称加唯一前缀，或把临时 let/const 放进独立 { ... } 块 / @@private。');
-      continue;
-    }
-
-    const functions=list.filter(x=>x.symbol.type==='function');
-    if(entryCount(functions)>=2){
-      emit('L3','warn','不同条目的同名顶层函数会互相覆盖',name,functions,'函数 '+name+' 同时出现在：'+functions.map(x=>x.entry.name).join(' ↔ ')+'。真实 ST 测试中这类冲突可能不报错，而是多个条目调用到同一个函数实现。','给函数加项目/条目前缀，或放进独立 { ... } 块 / @@private，避免静默覆盖。');
-      continue;
-    }
-
-    const localShared=list.filter(x=>x.symbol.type!=='global');
-    const explicitGlobals=list.filter(x=>x.symbol.type==='global');
-    let participants=[];
-    if(entryCount(localShared)>=2)participants=localShared;
-    else if(entryCount(explicitGlobals)>=2)participants=explicitGlobals;
-    else if(!declarations.length&&entryCount(list)>=2)participants=list;
-    if(participants.length){
-      emit('L6','warn','不同条目正在共享或覆盖同一个名称',name,participants,name+' 同时出现在：'+participants.map(x=>x.entry.name+' ('+x.symbol.type+')').join(' ↔ ')+'。真实 ST 测试表明，这类名称可在条目之间串值或互相覆盖。','如果它不是刻意共享状态，请改成唯一名称或局部声明；如果是刻意共享，请明确用途、生命周期与清理方式。');
-    }
+    const uniqueEntries=new Set(list.map(x=>x.entry.id));
+    if(uniqueEntries.size<2)continue;
+    if(isProjectNamespaceName(name)&&list.every(x=>x.symbol.type==='global'))continue;
+    const a=list[0],f=finding('L6','high','不同条目公开了同一个名称（组合兼容阻断）',a.entry,a.symbol.index,name+' 同时出现在：'+list.map(x=>x.entry.name+' ('+x.symbol.type+')').join(' ↔ ')+'。这些条目当前未必处于同一 EJS compilation unit，但 Workshop 公约不依赖 position/depth/role/API 设置提供隔离；一旦进入同一编译单元，可能编译失败、串值或静默覆盖。','把临时状态局部化。若确实需要跨条目共享，只通过项目专属的显式命名空间共享，不要复用普通顶层名称。');
+    f.entry=list.map(x=>x.entry.name).join(' ↔ ');f.uid=list.map(x=>String(x.entry.uid)).join(' ↔ ');findings.push(f);
   }
 }
 function compareFindings(a,b){return a.bookOrder-b.bookOrder||a.entryOrder-b.entryOrder||a.line-b.line||a.ruleId.localeCompare(b.ruleId,'en')}
 async function parseFile(file,bookOrder){
   if(file.size>MAX_FILE_BYTES)throw new Error('文件超过 12 MB 上限');
-  const json=JSON.parse(await file.text());return{fileName:file.name,size:file.size,bookOrder,entries:extractEntries(json,file.name,bookOrder)};
+  const json=JSON.parse(await file.text());
+  const isWorldbook=!!worldbookEntries(json),entries=isWorldbook?extractEntries(json,file.name,bookOrder):extractRegexScripts(json,file.name,bookOrder);
+  return{fileName:file.name,size:file.size,bookOrder,type:isWorldbook?'worldbook':'regex',entries};
 }
 async function analyzeFiles(files){
   const books=[],findings=[];
   for(let i=0;i<files.length;i++){
     try{books.push(await parseFile(files[i],i))}
-    catch(err){findings.push({ruleId:'FILE',severity:'high',title:'无法读取世界书',detail:String(err.message||err),suggestion:'确认这是有效的 SillyTavern 世界书 JSON，且文件小于 12 MB。',book:files[i].name,entry:'',uid:'',line:1,bookOrder:i,entryOrder:-1})}
+    catch(err){findings.push({ruleId:'FILE',severity:'high',title:'无法读取文件',detail:String(err.message||err),suggestion:'确认这是有效的 SillyTavern 世界书或正则 JSON，且文件小于 12 MB。',book:files[i].name,entry:'',uid:'',line:1,bookOrder:i,entryOrder:-1})}
   }
-  const entries=books.flatMap(b=>b.entries);
-  for(const entry of entries){inspectSyntax(entry,findings);inspectLexical(entry,findings);inspectLinks(entry,findings)}
+  const entries=books.flatMap(b=>b.entries),u2SeenHosts=new Set();
+  for(const entry of entries){inspectSyntax(entry,findings);inspectLexical(entry,findings);inspectCapabilities(entry,findings);inspectLinks(entry,findings,u2SeenHosts)}
   detectCrossEntryCollisions(entries,findings);findings.sort(compareFindings);
-  state.books=books;state.findings=findings;state.report={generatedAt:new Date().toISOString(),tool:'Poem Workshop EJS Preflight',rules:'L1-L6,M1-M6,U2-U5,EJS-PARSE',books:books.map(b=>({fileName:b.fileName,size:b.size,entries:b.entries.length,ejsEntries:b.entries.filter(e=>e.hasEjs).length})),findings};render();
+  const certification=certificationStatus(findings);state.books=books;state.findings=findings;state.report={generatedAt:new Date().toISOString(),tool:'Poem Workshop EJS / Regex Check',standard:'PW-CODE-CHECK-v1',certification,rules:'EJS:L1-L6; COMMON:M1-M5,U2-U5; HINTS:AH1-AH4; EJS-PARSE',files:books.map(b=>({fileName:b.fileName,size:b.size,type:b.type,items:b.entries.length,ejsEntries:b.entries.filter(e=>e.hasEjs).length})),findings};render();
   return{books,entries,findings};
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function certificationStatus(findings){
+  if(findings.some(f=>f.severity==='high'))return'fail';
+  if(findings.some(f=>f.severity==='warn'))return'review';
+  return'pass';
+}
 function render(){
-  const entries=state.books.flatMap(b=>b.entries),high=state.findings.filter(f=>f.severity==='high').length,warn=state.findings.filter(f=>f.severity==='warn').length;
-  q('mBooks').textContent=state.books.length;q('mEntries').textContent=entries.length;q('mHigh').textContent=high;q('mWarn').textContent=warn;q('resultRoot').classList.remove('hidden');q('exportBtn').disabled=!state.report;
-  if(!state.findings.length)q('findings').innerHTML='<div class="finding"><div class="finding-head"><span class="badge info">OK</span><div class="finding-title">没有发现当前规则覆盖的静态问题</div></div><p>这不代表运行时绝对安全，但 L/M/U 与 EJS 解析检查均未命中。</p></div>';
-  else q('findings').innerHTML=state.findings.map(f=>{const badge=f.severity==='high'?'高风险':f.severity==='warn'?'处理':'信息';return'<article class="finding"><div class="finding-head"><span class="badge '+f.severity+'">'+badge+'</span><div class="finding-title">['+esc(f.ruleId)+'] '+esc(f.title)+'</div></div><p>'+(f.book?'文件：'+esc(f.book)+'\n':'')+(f.entry?'条目：'+esc(f.entry)+(f.uid!==''?' (UID '+esc(f.uid)+')':'')+'\n':'')+'行号：'+esc(f.line)+'\n'+esc(f.detail)+'</p><p class="fix"><strong>建议：</strong>'+esc(f.suggestion)+'</p></article>'}).join('');
-  q('books').innerHTML=state.books.map(b=>'<article class="book"><h3>'+esc(b.fileName)+'</h3><div class="book-meta">已扫描条目：'+b.entries.length+'<br>包含 EJS：'+b.entries.filter(e=>e.hasEjs).length+'</div></article>').join('');
+  const entries=state.books.flatMap(b=>b.entries),high=state.findings.filter(f=>f.severity==='high').length,warn=state.findings.filter(f=>f.severity==='warn').length,hints=state.findings.filter(f=>f.severity==='hint').length,status=certificationStatus(state.findings),statusMetric=q('statusMetric');
+  q('mBooks').textContent=state.books.length;q('mEntries').textContent=entries.length;q('mHigh').textContent=high;q('mWarn').textContent=warn;q('mHints').textContent=hints;q('resultRoot').classList.remove('hidden');q('exportBtn').disabled=!state.report;
+  statusMetric.classList.remove('pass','review','fail');statusMetric.classList.add(status);
+  q('mStatus').textContent=status==='pass'?'通过':status==='review'?'需确认':'未通过';
+  q('certSummary').innerHTML=status==='pass'
+    ?'<div class="finding"><div class="finding-head"><span class="badge info">PASS</span><div class="finding-title">通过 Workshop 代码检查</div></div><p>当前没有阻断或需要确认的项目。EJS 的绿色结果包含组合兼容公约；正则只应用共用 M / U 规则。? 人工审核提示不会改变这个状态。</p></div>'
+    :status==='review'
+      ?'<div class="finding"><div class="finding-head"><span class="badge warn">需确认</span><div class="finding-title">暂不获得绿色兼容结果</div></div><p>没有公约阻断，但存在需要作者处理或人工确认的共享状态、外部依赖或敏感能力。确认完成前不要显示为“已通过”。</p></div>'
+      :'<div class="finding"><div class="finding-head"><span class="badge high">未通过</span><div class="finding-title">未通过 Workshop 代码检查</div></div><p>检测到违反公约或明确高风险的问题。先按建议修改，再重新检查。</p></div>';
+  if(!state.findings.length)q('findings').innerHTML='<div class="finding"><div class="finding-head"><span class="badge info">OK</span><div class="finding-title">没有额外 finding</div></div><p>公约结论以上方状态为准。</p></div>';
+  else q('findings').innerHTML=state.findings.map(f=>{const badge=f.severity==='high'?'阻断':f.severity==='warn'?'确认':f.severity==='hint'?'?':'信息';return'<article class="finding"><div class="finding-head"><span class="badge '+f.severity+'">'+badge+'</span><div class="finding-title">['+esc(f.ruleId)+'] '+esc(f.title)+'</div></div><p>'+(f.book?'文件：'+esc(f.book)+'\n':'')+(f.entry?'内容：'+esc(f.entry)+(f.uid!==''?' ('+esc(f.uid)+')':'')+'\n':'')+'行号：'+esc(f.line)+'\n'+esc(f.detail)+'</p><p class="fix"><strong>'+(f.severity==='hint'?'人工留意：':'怎么处理：')+'</strong>'+esc(f.suggestion)+'</p></article>'}).join('');
+  q('books').innerHTML=state.books.map(b=>'<article class="book"><h3>'+esc(b.fileName)+'</h3><div class="book-meta">类型：'+(b.type==='regex'?'正则脚本':'世界书')+'<br>已扫描内容：'+b.entries.length+'<br>包含 EJS：'+b.entries.filter(e=>e.hasEjs).length+'</div></article>').join('');
 }
 function clearAll(){state.books=[];state.findings=[];state.report=null;q('fileInput').value='';q('resultRoot').classList.add('hidden');q('exportBtn').disabled=true}
-function exportReport(){if(!state.report)return;const blob=new Blob([JSON.stringify(state.report,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ejs-preflight-report-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportReport(){if(!state.report)return;const blob=new Blob([JSON.stringify(state.report,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='workshop-code-check-report-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function onFiles(fileList){const files=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.json'));if(files.length)await analyzeFiles(files)}
 
 function makeFixtureEntries(){return{
@@ -355,12 +696,12 @@ function makeFixtureEntries(){return{
 11:{uid:11,comment:'EJS-M03-敏感数据',content:"<%_ {\n  const ejsM03 = localStorage.getItem('ejs-fixture-token');\n_%>\nEJS fixture: <%= ejsM03 || 'none' %>\n<%_ } _%>"},
 12:{uid:12,comment:'EJS-M04-网络外发',content:"<%_ {\n  const ejsM04 = navigator.sendBeacon('/ejs-fixture-report', 'payload');\n_%>\nEJS fixture beacon queued: <%= ejsM04 %>\n<%_ } _%>"},
 13:{uid:13,comment:'EJS-M05-无限循环',content:"<%_ {\n  while (true) {\n    // fixture: unbounded loop\n  }\n} _%>\nEJS fixture: never reached"},
-14:{uid:14,comment:'EJS-M06-混淆难懂',content:"<%_ {\n  const ejsM06 = String.fromCharCode(102, 105, 120);\n_%>\nEJS fixture: <%= ejsM06 %>\n<%_ } _%>"},
+14:{uid:14,comment:'EJS-AH01-人工留意',content:"<%_ {\n  const decoded = String.fromCharCode(102, 105, 120);\n  void decoded;\n} _%>"},
 15:{uid:15,comment:'EJS-U00-官方依赖对照',content:"Official dependency reference: https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js"},
 16:{uid:16,comment:'EJS-U02-非官方域名',content:"Untrusted link: https://ejs-fixture.example.com/tool.js"},
 17:{uid:17,comment:'EJS-U03-不安全HTTP',content:"Insecure link: http://ejs-fixture.example.com/tool.js"},
 18:{uid:18,comment:'EJS-U04-IP直连',content:"Direct IP link: https://203.0.113.10/ejs-fixture.js"},
-19:{uid:19,comment:'EJS-U05-拼接隐藏',content:"<%_ {\n  const ejsU05 = 'https://' + 'ejs-fixture' + '.example.com/tool.js';\n_%>\nAssembled link: <%= ejsU05 %>\n<%_ } _%>"}
+19:{uid:19,comment:'EJS-U05-动态远程目标',content:"<%_ {\n  const host = 'ejs-fixture.example.com';\n  const ejsU05 = 'https://' + host + '/tool.js';\n_%>\nAssembled link: <%= ejsU05 %>\n<%_ } _%>"}
 }}
 async function selfTest(){
   const file=new File([JSON.stringify({entries:makeFixtureEntries()})],'ejs-test-fixtures.json',{type:'application/json'}),result=await analyzeFiles([file]);
@@ -368,10 +709,10 @@ async function selfTest(){
   const expected=[
     ['EJS-L00-合格局部作用域',[]],
     ['EJS-L01-var预防提示',['L1']],
-    ['EJS-L02-词法冲突甲',['L2']],
-    ['EJS-L02-词法冲突乙',['L2']],
-    ['EJS-L03-函数冲突甲',['L3']],
-    ['EJS-L03-函数冲突乙',['L3']],
+    ['EJS-L02-词法冲突甲',['L2','L6']],
+    ['EJS-L02-词法冲突乙',['L2','L6']],
+    ['EJS-L03-函数冲突甲',['L3','L6']],
+    ['EJS-L03-函数冲突乙',['L3','L6']],
     ['EJS-L04-L05-通用隐式共享',['L4','L5']],
     ['EJS-L06-跨entry覆盖甲',['L4','L6']],
     ['EJS-L06-跨entry覆盖乙',['L4','L6']],
@@ -380,18 +721,18 @@ async function selfTest(){
     ['EJS-M03-敏感数据',['M3']],
     ['EJS-M04-网络外发',['M4']],
     ['EJS-M05-无限循环',['M5']],
-    ['EJS-M06-混淆难懂',['M6']],
+    ['EJS-AH01-人工留意',['AH1']],
     ['EJS-U00-官方依赖对照',[]],
     ['EJS-U02-非官方域名',['U2']],
     ['EJS-U03-不安全HTTP',['U3']],
     ['EJS-U04-IP直连',['U4']],
-    ['EJS-U05-拼接隐藏',['U5']]
+    ['EJS-U05-动态远程目标',['U5']]
   ];
   const exact=expected.every(([name,rules])=>JSON.stringify(rulesFor(name))===JSON.stringify(rules));
   const fields=result.findings.every(f=>f.severity&&f.entry!==undefined&&Number.isInteger(f.line)&&f.line>=1&&f.ruleId&&f.suggestion);
   const sorted=result.findings.every((f,i,a)=>i===0||compareFindings(a[i-1],f)<=0);
-  const ok=exact&&fields&&sorted&&!result.findings.some(f=>f.ruleId==='EJS-PARSE'||f.ruleId==='L7');
-  document.title=(ok?'SELFTEST PASS':'SELFTEST FAIL')+' · EJS Preflight';
+  const ok=exact&&fields&&sorted&&!result.findings.some(f=>f.ruleId==='EJS-PARSE'||f.ruleId==='L7'||f.ruleId==='M6');
+  document.title=(ok?'SELFTEST PASS':'SELFTEST FAIL')+' · Workshop EJS Compatibility';
   const box=document.createElement('div');box.id='selftest';box.style.cssText='position:fixed;right:12px;bottom:12px;z-index:9999;padding:10px 14px;border-radius:10px;background:'+(ok?'#18794e':'#b92f41')+';color:white;font-weight:800';box.textContent=ok?'SELFTEST PASS':'SELFTEST FAIL';document.body.appendChild(box);
 }
 
@@ -403,7 +744,7 @@ q('exportBtn').addEventListener('click',e=>{e.preventDefault();exportReport()});
 ['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));
 drop.addEventListener('drop',e=>onFiles(e.dataTransfer.files));
 if(new URLSearchParams(location.search).get('selftest')==='1')selfTest();
-window.EjsPreflight={analyzeFiles,templateToJs,compileOnly,compareFindings};
+window.EjsPreflight={analyzeFiles,templateToJs,compileOnly,compareFindings,certificationStatus,extractRegexScripts,executableCodeMask,inspectLexical,getReport:()=>state.report};
 })();
 </script>
 </body>
