@@ -11,6 +11,8 @@
     "check:taxonomy-migration": "node tests/project-taxonomy-migration-smoke.mjs",
     "check:home-js-smoke": "node tests/home-js-smoke.mjs",
     "check:ejs-gate": "node tests/ejs-preflight-gate.mjs",
+    "check:ejs-v2": "node scripts/check-ejs-v2.mjs",
+    "build:ejs-offline": "node scripts/build-ejs-offline.mjs",
     "check:types": "tsc -p tsconfig.json",
     "dev": "wrangler dev",
     "dev:local-test": "wrangler dev --local --config wrangler.local-test.jsonc",

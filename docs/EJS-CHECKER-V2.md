@@ -62,3 +62,9 @@ HTML 内由 EJS 运行结果生成的脚本无法在不执行模板的前提下�
 离线工具由 `node cloudflare/scripts/build-ejs-offline.mjs` 构建共用 v2 浏览器包，附完整第三方许可，不再保留第二套语法判断。桌面和手机共 100 项浏览器验收通过（原 98 项及新增 2 项）；上传卡片、复制单条/全部提示、Markdown 导出、审核结果与检查版本均已验证，新增流程没有浏览器脚本错误。Browser plugin 未提供，本轮使用项目现有 Playwright Chromium；截图保存在测试输出目录。
 
 旧浏览器测试的三个预期已迁移：真实解析位置指向原文第 19 列；`javascript :` 的空格使浏览器将其识别为普通路径，真正带制表符的协议仍检出；重复扫描通过共用引擎的公开入口验证，不保留旧内部函数。检查规则版本仍为 `PW-CODE-CHECK-v1`，独立的检查引擎版本为 `v2`。
+
+## 服务端切换检查
+
+服务端原入口已直接导出 v2；上传预检、实际上传、审核读取和批准门禁都继续使用同一个入口。旧引擎只保留在测试快照，不进入线上构建。`npm run check:ejs-v2` 汇总九组针对性测试，`npm run check:types`、完整差异审计及 production/staging 两个 Worker dry-run 均通过。dry-run 只构建，不部署 production。
+
+本地 workerd 实际运行完整入口，并处理 Master 的世界书：报告引擎为 v2，55 条含 EJS 的条目无 EJS-PARSE、JS-PARSE 或内部失败；L1×4、L2×12 的真实兼容阻断保留。Worker 完整构建体积 2061.75 KiB，gzip 420.54 KiB。部署记录以部署助手生成的确切 Git SHA 与 Worker Version ID 为准，不修改客户端 SemVer。
