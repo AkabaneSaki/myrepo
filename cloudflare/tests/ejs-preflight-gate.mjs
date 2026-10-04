@@ -47,6 +47,23 @@ const multilineAssignment = analyzeProjectCode([{
 }]);
 assert.ok(!rules(multilineAssignment).includes('EJS-PARSE'));
 
+const literalAssignments = analyzeProjectCode([{
+  fileName: 'literal-assignments.json',
+  type: 'worldbook',
+  text: worldbook([{
+    comment: 'valid-literals',
+    content: '<% { const name = "艾莉亚"; let mode = \'\'; const signal = `prefix`; const pattern = /abc/gi; void name; void mode; void signal; void pattern; } %>',
+  }]),
+}]);
+assert.ok(!rules(literalAssignments).includes('EJS-PARSE'));
+
+const commentOnlyMissingRhs = analyzeProjectCode([{
+  fileName: 'missing-rhs-comment.json',
+  type: 'worldbook',
+  text: worldbook([{ comment: 'broken-comment-rhs', content: '<% const broken = /* still empty */ ; %>' }]),
+}]);
+assert.ok(rules(commentOnlyMissingRhs).includes('EJS-PARSE'));
+
 const collision = analyzeProjectCode([{
   fileName: 'collision.json',
   type: 'worldbook',

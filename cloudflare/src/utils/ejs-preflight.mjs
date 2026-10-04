@@ -494,7 +494,16 @@ function compileOnly(code){
   }
   if(stack.length)return 'JavaScript 括号结构未闭合';
   const declarationAssignmentRe=/\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=(?!=|>)/g;let declarationMatch;
-  while((declarationMatch=declarationAssignmentRe.exec(clean))){let at=declarationAssignmentRe.lastIndex;while(at<clean.length&&/\s/.test(clean[at]))at++;if(at>=clean.length||clean[at]===';')return 'JavaScript 变量赋值缺少右侧表达式'}
+  while((declarationMatch=declarationAssignmentRe.exec(clean))){
+    let at=declarationAssignmentRe.lastIndex;
+    while(at<code.length){
+      if(/\s/.test(code[at])){at++;continue}
+      if(code[at]==='/'&&code[at+1]==='/'){at+=2;while(at<code.length&&code[at]!=='\n')at++;continue}
+      if(code[at]==='/'&&code[at+1]==='*'){const close=code.indexOf('*/',at+2);at=close<0?code.length:close+2;continue}
+      break;
+    }
+    if(at>=code.length||code[at]===';')return 'JavaScript 变量赋值缺少右侧表达式';
+  }
   if(/(?:^|[;{}]\s*)return\s*;\s*[^}\s]/m.test(clean))return null;
   return null;
 }
