@@ -40,6 +40,7 @@ import {
   ProjectSubscribeToggle,
   ProjectUpdate,
   ProjectUpload,
+  ProjectUploadPreflight,
   ProjectVisibilityUpdate,
 } from './endpoints/projects';
 
@@ -228,6 +229,7 @@ openapi.post('/api/projects/:projectId/subscribe', ProjectSubscribeToggle);
 openapi.put('/api/projects/:projectId/subscribe', ProjectSubscribeSet);
 
 // ============ 项目文件上传 ============
+openapi.post('/api/projects/preflight/:kind', ProjectUploadPreflight);
 openapi.post('/api/projects/:projectId/upload', ProjectUpload);
 openapi.post('/api/projects/:projectId/upload-cover', ProjectCoverUpload);
 openapi.put('/api/projects/:projectId/cover-presentation', ProjectCoverPresentationUpdate);

@@ -138,6 +138,22 @@ function renderUploadPreviewError(container, error) {
   container.innerHTML = '<div class="upload-preview-error"><i class="fas fa-triangle-exclamation"></i><span>' + escapeHtml(message) + '</span></div>';
 }
 
+function renderUploadPreflightStatus(container, status, message) {
+  if (!container) return;
+  container.querySelector('[data-upload-preflight-status]')?.remove();
+  const normalized = ['checking', 'ok', 'error'].includes(status) ? status : 'checking';
+  const icon = normalized === 'ok' ? 'fa-circle-check' : (normalized === 'error' ? 'fa-circle-xmark' : 'fa-spinner fa-spin');
+  const node = document.createElement('div');
+  node.className = 'upload-preflight-status upload-preflight-status--' + normalized;
+  node.dataset.uploadPreflightStatus = normalized;
+  node.setAttribute('role', normalized === 'error' ? 'alert' : 'status');
+  node.setAttribute('aria-live', normalized === 'error' ? 'assertive' : 'polite');
+  node.innerHTML = '<i class="fas ' + icon + '"></i><span>' + escapeHtml(message || '') + '</span>';
+  const summary = container.querySelector('.upload-preview-summary');
+  if (summary?.nextSibling) container.insertBefore(node, summary.nextSibling);
+  else container.appendChild(node);
+}
+
 function renderWorldbookUploadPreview(container, prepared) {
   if (!container) return;
   clearUploadPreview(container);

@@ -18,6 +18,75 @@ const MAX_UPLOAD_SIZE = WORKSHOP_LIMITS.projectUploadBytes;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + WORKSHOP_LIMITS.coverRequestOverheadBytes;
 const UPLOAD_SIZE_ERROR = `文件过大，最大 ${WORKSHOP_LIMITS.projectUploadLabel}`;
 
+export class ProjectUploadPreflight extends OpenAPIRoute {
+  schema = {
+    tags: ['Projects'],
+    summary: 'Check Project File Before Upload',
+    request: {
+      params: z.object({
+        kind: z.enum(['worldbook', 'regex']),
+      }),
+      headers: z.object({
+        authorization: z.string().describe('Session ID'),
+        'content-type': z.string().describe('File content type'),
+      }),
+    },
+    responses: {
+      '200': { description: 'Preflight passed' },
+      '400': { description: 'Invalid file' },
+      '413': { description: 'File too large' },
+      '422': { description: 'Script check rejected the file' },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const data = await this.getValidatedData<typeof this.schema>();
+    const kind = data.params.kind;
+    const contentLengthHeader = c.req.header('content-length');
+    const contentLength = contentLengthHeader ? Number(contentLengthHeader) : Number.NaN;
+    if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_SIZE) {
+      return c.json({ error: UPLOAD_SIZE_ERROR }, 413);
+    }
+
+    const arrayBuffer = await c.req.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_UPLOAD_SIZE) {
+      return c.json({ error: UPLOAD_SIZE_ERROR }, 413);
+    }
+
+    const contentType = c.req.header('content-type') || 'application/json';
+    if (!contentType.includes('application/json')) {
+      return c.json({ error: '只支持 JSON 文件' }, 400);
+    }
+
+    const text = new TextDecoder().decode(arrayBuffer);
+    const validation = validateProjectContentText(text, kind);
+    if (validation.valid === false) {
+      return c.json({ error: validation.error }, 400);
+    }
+
+    const fileName = kind === 'worldbook' ? '上传的世界书.json' : '上传的正则.json';
+    const codeCheck = analyzeProjectCode([{ fileName, type: kind, text }]);
+    const uploaderCodeCheck = toUploaderCodeCheck(codeCheck);
+    if (codeCheck.gate === 'reject') {
+      return c.json(
+        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: uploaderCodeCheck },
+        422,
+      );
+    }
+
+    return {
+      success: true,
+      message: '自动检查通过，可以继续。',
+      codeCheck: uploaderCodeCheck,
+    };
+  }
+}
+
 export class ProjectCoverPresentationUpdate extends OpenAPIRoute {
   schema = {
     tags: ['Projects'],

@@ -92,6 +92,28 @@ assert.match(assetsSource, /analyzeProjectCode\(\[\{ fileName: `project-\$\{proj
 assert.match(assetsSource, /analyzeProjectCode\(\[\{ fileName: `regex-\$\{projectId\}\.json`/);
 assert.match(assetsSource, /toUploaderCodeCheck\(codeCheck\)/);
 assert.match(assetsSource, /422/);
+assert.match(assetsSource, /class ProjectUploadPreflight/);
+assert.match(assetsSource, /自动检查通过，可以继续/);
+
+const indexSource = fs.readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+assert.match(indexSource, /\/api\/projects\/preflight\/:kind/);
+
+const apiSource = fs.readFileSync(new URL('../src/pages/home/api.ts', import.meta.url), 'utf8');
+assert.match(apiSource, /async function preflightProjectUpload\(file, kind\)/);
+assert.match(apiSource, /\/api\/projects\/preflight\//);
+
+const editorSource = fs.readFileSync(new URL('../src/pages/home/modal/project-editor.ts', import.meta.url), 'utf8');
+assert.match(editorSource, /runPreparedPreflight/);
+assert.match(editorSource, /preflightState !== "ok"/);
+assert.match(editorSource, /自动检查通过，可以继续/);
+
+const uploadPreviewSource = fs.readFileSync(new URL('../src/pages/home/upload-preview.ts', import.meta.url), 'utf8');
+assert.match(uploadPreviewSource, /function renderUploadPreflightStatus/);
+assert.match(uploadPreviewSource, /upload-preflight-status/);
+
+const stylesSource = fs.readFileSync(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8');
+assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-check-head strong/);
+assert.match(stylesSource, /data-admin-review-theme="light"\] \.external-links-note/);
 
 const adminSource = fs.readFileSync(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');
 assert.match(adminSource, /codeCheckInputs/);

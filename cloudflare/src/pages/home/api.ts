@@ -810,6 +810,32 @@ async function deleteProject(projectId) {
   return result;
 }
 
+async function preflightProjectUpload(file, kind) {
+  assertUploadSize(file);
+  const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
+  try {
+    const response = await fetch('/api/projects/preflight/' + normalizedKind, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+        'Content-Type': file.type || 'application/json',
+      },
+      body: file,
+    });
+    const { rawText, data } = await parseResponseBody(response);
+    if (!response.ok) {
+      const error = new Error(resolveApiErrorMessage(response.status, rawText, data, '自动检查失败'));
+      error.codeCheck = data?.codeCheck || null;
+      throw error;
+    }
+    return data || { success: true };
+  } catch (error) {
+    const normalized = normalizeThrownError(error, '自动检查失败');
+    normalized.codeCheck = error?.codeCheck || null;
+    throw normalized;
+  }
+}
+
 async function uploadProjectFile(projectId, file) {
   clearProjectListClientCache();
   assertUploadSize(file);

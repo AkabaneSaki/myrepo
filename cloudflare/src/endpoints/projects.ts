@@ -24,6 +24,7 @@ export {
   ProjectEntryRemove,
   ProjectRegexUpload,
   ProjectUpload,
+  ProjectUploadPreflight,
 } from './projects/assets';
 
 export {
