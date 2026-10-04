@@ -192,6 +192,19 @@ function firstAttributeLocations(source, tagLocation) {
   return locations;
 }
 
+// HTML GlobalEventHandlers plus the event-handler extensions for pointer,
+// touch, animation and transitions. Unknown "on..." attributes are plain data.
+// https://html.spec.whatwg.org/multipage/webappapis.html#globaleventhandlers
+const EVENT_ATTRIBUTES = new Set(('abort auxclick beforeinput beforematch beforetoggle blur cancel canplay canplaythrough change click close command contextlost contextmenu contextrestored copy cuechange cut dblclick drag dragend dragenter dragexit dragleave dragover dragstart drop durationchange emptied ended error focus focusin focusout formdata input invalid keydown keypress keyup load loadeddata loadedmetadata loadstart mousedown mouseenter mouseleave mousemove mouseout mouseover mouseup paste pause play playing progress ratechange reset resize scroll scrollend securitypolicyviolation seeked seeking select selectionchange selectstart slotchange stalled submit suspend timeupdate toggle volumechange waiting webkitanimationend webkitanimationiteration webkitanimationstart webkittransitionend wheel animationcancel animationend animationiteration animationstart transitioncancel transitionend transitionrun transitionstart gotpointercapture lostpointercapture pointercancel pointerdown pointerenter pointerleave pointermove pointerout pointerover pointerrawupdate pointerup touchcancel touchend touchmove touchstart scrollsnapchange scrollsnapchanging').split(' ').map(name=>'on'+name));
+const WINDOW_EVENT_ATTRIBUTES = new Set(('afterprint beforeprint beforeunload hashchange languagechange message messageerror offline online pagehide pagereveal pageshow pageswap popstate rejectionhandled storage unhandledrejection unload').split(' ').map(name=>'on'+name));
+function eventAttribute(node,name) {
+  if (EVENT_ATTRIBUTES.has(name)) return true;
+  if (WINDOW_EVENT_ATTRIBUTES.has(name)) return ['body','frameset','svg'].includes(node.tagName);
+  // SVG animation events only apply to animation elements.
+  // https://www.w3.org/TR/SVG2/interact.html#AnimationEvents
+  return node.namespaceURI==='http://www.w3.org/2000/svg' && ['animate','animateMotion','animateTransform','set'].includes(node.tagName) && ['onbegin','onend','onrepeat'].includes(name);
+}
+
 function attributeUnit(rawContent, attribute, kind) {
   const builder = new SourceBuilder(rawContent);
   const wrapped = kind === 'event';
@@ -231,7 +244,7 @@ export function buildRegexUnits(rawContent) {
       const attributeLocation = attributeLocations.get(name);
       if (!attributeLocation) continue;
       const attribute = attributeRange(rawContent, attributeLocation, parsedAttribute.value);
-      if (/^on[a-z]/i.test(name)) units.push(attributeUnit(rawContent, attribute, 'event'));
+      if (eventAttribute(node,name)) units.push(attributeUnit(rawContent, attribute, 'event'));
       else if (['href', 'src', 'action', 'formaction', 'xlink:href'].includes(name)) {
         const unit = attributeUnit(rawContent, attribute, 'javascript-url');
         if (unit) units.push(unit);

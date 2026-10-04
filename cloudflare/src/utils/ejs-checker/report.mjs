@@ -90,7 +90,8 @@ function isOfficialUrl(url){
 }
 function inspectLinks(entry,findings,u2SeenHosts){
   const seen=new Set();
-  for(const item of collectDirectUrls(entry.content)){
+  const linkContent=entry.sourceType==='worldbook' ? entry.content.replace(/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi, value=>value.replace(/[^\r\n]/g,' ')) : entry.content;
+  for(const item of collectDirectUrls(linkContent)){
     let u;try{u=parseDirectUrl(item.url)}catch{continue}
     const host=u.hostname.toLowerCase(),key=u.protocol+'//'+host;
     if(isIpHost(host)){

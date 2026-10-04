@@ -13,11 +13,15 @@ function literalString(node) {
   return null;
 }
 function unwrap(node) { return node?.type === 'ChainExpression' ? node.expression : node; }
+function globalObject(node, scope) {
+  node = unwrap(node);
+  if (node?.type === 'Identifier') return GLOBALS.has(node.name) && !resolveBinding(scope,node.name);
+  return node?.type === 'MemberExpression' && ['window','globalThis','self','top','parent','frames'].includes(memberName(node)) && globalObject(node.object,scope);
+}
 function builtin(node, names, scope) {
   node = unwrap(node);
   if (node?.type === 'Identifier') return names.has(node.name) && !resolveBinding(scope, node.name) ? node.name : null;
-  if (node?.type !== 'MemberExpression' || node.object.type !== 'Identifier'
-      || !GLOBALS.has(node.object.name) || resolveBinding(scope, node.object.name)) return null;
+  if (node?.type !== 'MemberExpression' || !globalObject(node.object,scope)) return null;
   const name = memberName(node);
   return names.has(name) ? name : null;
 }
@@ -97,6 +101,15 @@ export function inspectCapabilities(entry, parsed) {
     const { nodes }=buildScopes(unit);
     for (const { node,scope,parent } of nodes) {
       if (!unit.sourceMap.isOriginal(node.start)) continue;
+      if (node.type === 'ObjectPattern') {
+        const source = parent?.type === 'VariableDeclarator' && parent.id === node ? parent.init : parent?.type === 'AssignmentExpression' && parent.left === node ? parent.right : null;
+        if (globalObject(source,scope)) for (const property of node.properties) {
+          if (property.type !== 'Property') continue;
+          const key = property.computed ? literalString(property.key) : property.key.name ?? literalString(property.key);
+          if (key === 'eval') add(unit,property,'M1','high','使用 eval 动态执行代码（公约阻断）','Workshop 项目禁止调用、转存或间接使用 eval；请改成固定逻辑。');
+          if (key === 'Function') add(unit,property,'M2','high','使用 Function 构造器动态创建代码（公约阻断）','Workshop 项目禁止调用或转存 Function 构造器；请改用固定函数或明确分支。');
+        }
+      }
       if (reference(node,parent) && builtin(node,EVAL,scope)) add(unit,node,'M1','high','使用 eval 动态执行代码（公约阻断）',
         'Workshop 项目禁止调用、转存或间接使用 eval。不要把 eval 包装、别名化或换一种调用方式；请改成固定逻辑。');
       if (reference(node,parent) && builtin(node,FUNCTION,scope)) add(unit,node,'M2','high','使用 Function 构造器动态创建代码（公约阻断）',
@@ -148,7 +161,7 @@ export function inspectCapabilities(entry, parsed) {
           || (['fromCharCode','fromCodePoint'].includes(method) && builtin(callee.object,new Set(['String']),scope))) add(unit,node,'AH1','hint','发现编码 / 解码式字符串构造',
         '不代表有问题；人工审核时确认结果没有被继续当作代码或隐藏远程目标。');
       if (indirect || (callee.type === 'MemberExpression' && callee.computed && memberName(callee) === null
-          && callee.object.type === 'Identifier' && GLOBALS.has(callee.object.name) && !resolveBinding(scope,callee.object.name))) add(unit,node,'AH2','hint','发现动态 / 间接函数调用形状',
+          && globalObject(callee.object,scope))) add(unit,node,'AH2','hint','发现动态 / 间接函数调用形状',
         '机器无法可靠知道最终调用什么；只作为审核中心的黄色提示，不自动拒绝。');
       if (['replace','replaceAll','split','join'].includes(method)
           && node.arguments.some(argument => {const value=literalString(argument);return value !== null && (value.includes('<%') || value.includes('%>'));})) add(unit,node,'AH3','hint','发现运行时操作 EJS 标记',
