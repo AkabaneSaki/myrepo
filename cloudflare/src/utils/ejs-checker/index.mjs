@@ -1,6 +1,7 @@
 import { parseEjs, parseRegex } from './syntax.mjs';
 import { inspectAstPolicy, inspectSymbolCollisions } from './policy.mjs';
 import { inspectCapabilities } from './capabilities.mjs';
+import { inspectApiUsage } from './api-catalogue.mjs';
 import { syntaxFindings } from './syntax-findings.mjs';
 import { parseCodeCheckInput, finding, inspectDecorators, inspectLinks, compareFindings, gateStatus, auditStatus, certificationStatus } from './report.mjs';
 
@@ -46,6 +47,7 @@ export function analyzeProjectCodeV2(inputs) {
     entry.symbols=policy.symbols;
     for(const record of policy.findings)add(entry,record);
     for(const record of inspectCapabilities(entry,parsed))add(entry,record);
+    for(const record of inspectApiUsage(entry,parsed))add(entry,record);
     inspectLinks(entry,findings,seenHosts);
   }
   for(const record of inspectSymbolCollisions(entries))add(record.entry,record);
@@ -53,7 +55,7 @@ export function analyzeProjectCodeV2(inputs) {
   return {
     generatedAt:new Date().toISOString(),tool:'Poem Workshop EJS / Regex Check',standard:'PW-CODE-CHECK-v1',...CHECKER_VERSION,
     gate:gateStatus(findings),audit:auditStatus(findings),certification:certificationStatus(findings),
-    rules:'EJS:L1-L7; COMMON:M1-M5,U2-U5; HINTS:AH1-AH4; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL',
+    rules:'EJS:L1-L7; COMMON:M1-M5,U2-U5; API:API1-API2; HINTS:AH1-AH4; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL',
     files:books.map(book=>({fileName:book.fileName,size:book.size,type:book.type,items:book.entries.length,ejsEntries:book.entries.filter(entry=>entry.hasEjs).length})),findings,
   };
 }
