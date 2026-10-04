@@ -9,6 +9,7 @@
     "check:workshop-config": "node scripts/check-workshop-config.mjs",
     "check:workshop-bundles": "node scripts/check-workshop-bundles.mjs",
     "test:quick": "playwright test --config playwright.config.mjs --grep @quick",
+    "test:ejs-preflight": "playwright test tests/e2e/ejs-preflight.spec.mjs --config playwright.config.mjs --project desktop-chromium --retries=0 --reporter=line",
     "test:journey": "playwright test --config playwright.config.mjs --project desktop-chromium --project mobile-chromium",
     "test:st:setup": "node scripts/setup-st-test-profile.mjs",
     "test:st:setup:anonymous": "node scripts/setup-st-test-profile.mjs anonymous",

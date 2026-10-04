@@ -7,6 +7,7 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { attachWorldbookEjsLengthEstimates } from '../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
+import { analyzeProjectCode } from '../utils/ejs-preflight.mjs';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
 
 import { r2Storage } from '../utils/r2';
@@ -63,6 +64,7 @@ async function validateReviewPayloads(
   },
 ): Promise<{ valid: true } | { valid: false; error: string }> {
   const presence = { worldbook: false, regex: false };
+  const codeCheckInputs: Array<{ fileName: string; type: ProjectEntryKind; text: string }> = [];
 
   for (const kind of ['worldbook', 'regex'] as const) {
     const object = await readReviewContent(c, project.id, project.publishedProjectId, kind);
@@ -76,11 +78,23 @@ async function validateReviewPayloads(
       return { valid: false, error: validation.error };
     }
     presence[kind] = true;
+    codeCheckInputs.push({
+      fileName: kind === 'worldbook' ? `project-${project.id}.json` : `regex-${project.id}.json`,
+      type: kind,
+      text,
+    });
   }
 
   const policyValidation = validateProjectContentPolicy(project, presence);
   if (policyValidation.valid === false) {
     return { valid: false, error: policyValidation.error };
+  }
+
+  const codeCheck = analyzeProjectCode(codeCheckInputs);
+  if (codeCheck.gate === 'reject') {
+    const firstBlocker = codeCheck.findings.find(finding => finding.severity === 'high');
+    const label = firstBlocker ? `[${firstBlocker.ruleId}] ${firstBlocker.title}` : '脚本未通过自动检查';
+    return { valid: false, error: `项目仍有自动检查阻断项：${label}。请在审核详情查看后要求 Creator 修改。` };
   }
 
   return { valid: true };
@@ -270,6 +284,12 @@ export class AdminReviewDetail extends OpenAPIRoute {
         )
       : [];
     const regexEntriesPreview = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
+    const codeCheck = analyzeProjectCode([
+      ...(currentWorldbookText
+        ? [{ fileName: `project-${project.id}.json`, type: 'worldbook', text: currentWorldbookText }]
+        : []),
+      ...(currentRegexText ? [{ fileName: `regex-${project.id}.json`, type: 'regex', text: currentRegexText }] : []),
+    ]);
     const reviewDiff = buildProjectReviewDiff({
       previousWorldbookText,
       currentWorldbookText,
@@ -295,6 +315,7 @@ export class AdminReviewDetail extends OpenAPIRoute {
       worldbookEntriesPreview,
       regexEntriesPreview,
       reviewDiff,
+      codeCheck,
     };
   }
 }
