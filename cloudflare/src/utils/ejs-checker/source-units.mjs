@@ -89,6 +89,7 @@ export class TemplateSyntaxError extends SyntaxError {
 
 export function buildEjsUnit(rawContent, { privateScope = false } = {}) {
   const builder = new SourceBuilder(rawContent);
+  const templateRanges = [];
   const start = decoratorEnd(rawContent);
   const tokens = tokenizeEjs(rawContent.slice(start)).map(token => ({ ...token, start: token.start + start, end: token.end + start }));
   // No strict directive: ST uses async, non-module execution. This artificial
@@ -108,6 +109,7 @@ export function buildEjsUnit(rawContent, { privateScope = false } = {}) {
       }
       if (!closing) throw new TemplateSyntaxError('EJS 标签缺少对应的结束标签。', token.start);
       const mode = token.value.slice(2);
+      templateRanges.push({start:token.start,end:closing.end,mode});
       if (mode !== '#') {
         let end = closing.start;
         if (mode === '=' || mode === '-') {
@@ -131,7 +133,7 @@ export function buildEjsUnit(rawContent, { privateScope = false } = {}) {
     if (!isClosing(token)) builder.append(';void 0;\n', token.start);
   }
   builder.append('\n})', rawContent.length);
-  return builder.finish('ejs', { privateScope, sourceType: 'script', wrapped: true, async: true });
+  return builder.finish('ejs', { privateScope, sourceType: 'script', wrapped: true, async: true, templateRanges });
 }
 
 function appendHtmlText(builder, source, start, end, { attribute = false, foreign = false } = {}) {
