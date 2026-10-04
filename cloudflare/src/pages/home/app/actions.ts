@@ -81,6 +81,7 @@ export const homeAppActionsScript = String.raw`
       state.mobileToolMode = '';
       mobileToolSheet.classList.remove('show');
       mobileToolBackdrop.classList.remove('show');
+      document.body.classList.remove('mobile-tool-open');
       mobileToolSheet.inert = true;
       mobileToolSheet.setAttribute('aria-hidden', 'true');
       document.querySelectorAll('[data-mobile-tool]').forEach(button => button.classList.remove('active'));
@@ -96,6 +97,7 @@ export const homeAppActionsScript = String.raw`
       });
       mobileToolSheet.classList.add('show');
       mobileToolBackdrop.classList.add('show');
+      document.body.classList.add('mobile-tool-open');
       mobileToolSheet.inert = false;
       mobileToolSheet.setAttribute('aria-hidden', 'false');
       document.querySelectorAll('[data-mobile-tool]').forEach(button => button.classList.toggle('active', button.dataset.mobileTool === mode));

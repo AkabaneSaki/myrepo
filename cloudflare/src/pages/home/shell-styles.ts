@@ -598,6 +598,8 @@ export const homeShellStyles = String.raw`
     border-color:rgba(162,139,107,.16);
   }
 
+  body.mobile-tool-open { overflow:hidden; }
+
   .mobile-tool-backdrop {
     position:fixed;
     inset:0;

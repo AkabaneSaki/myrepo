@@ -272,6 +272,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .project-file-drop { min-height:92px; display:flex; align-items:center; justify-content:center; padding:18px 16px; border:1px dashed rgba(255,255,255,.16); border-radius:10px; background:#121316; color:#a9a7a2; font-size:.78rem; font-weight:650; line-height:1.5; }
 .project-file-drop:hover { border-color:rgba(190,164,125,.48); background:rgba(190,164,125,.045); color:#d7c5a8; }
 .project-file-drop.is-dragover { border-color:#bda47d; background:rgba(190,164,125,.08); box-shadow:0 0 0 3px rgba(190,164,125,.06) inset; }
+.project-file-input { display:none; }
 .project-form .upload-file-preview { margin-top:9px; }
 .project-form .upload-preview-summary { border-color:rgba(255,255,255,.08); background:#1c1d21; }
 .project-form .upload-file-preview .detail-section { gap:10px; }
@@ -489,6 +490,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-description summary::-webkit-details-marker { display:none; }
 .admin-review-description-hint { font-size:.72rem; font-weight:500; color:rgba(226,232,240,.5); }
 .admin-review-description-body { max-height:260px; overflow:auto; padding:0 13px 13px; white-space:pre-wrap; word-break:break-word; color:rgba(226,232,240,.8); line-height:1.55; }
+.admin-review-description-body--plain { white-space:pre-line; }
 .admin-review-sticky-actions { position:sticky; bottom:0; z-index:4; display:flex; justify-content:flex-end; gap:8px; padding:12px; border-radius:14px; border:1px solid rgba(148,163,184,.16); background:rgba(15,23,42,.92); backdrop-filter:blur(12px); box-shadow:0 -12px 28px rgba(0,0,0,.22); }
 .admin-review-sticky-actions .btn { min-width:108px; justify-content:center; }
 .admin-review-approve-btn { color:#DCFCE7; border:1px solid rgba(34,197,94,.38); background:rgba(22,163,74,.24); }
@@ -824,9 +826,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 
 .admin-list-item,.admin-card { border:1px solid rgba(255,255,255,.075); background:#1b1c1f; border-radius:10px; padding:12px; margin-bottom:12px; }
 .admin-list-item { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.admin-list-avatar { width:32px; height:32px; margin-right:8px; border-radius:50%; vertical-align:middle; }
+.admin-tools-divider { margin:20px 0; border:0; border-top:1px solid rgba(255,255,255,.08); }
 .admin-card-title { font-weight:bold; margin-bottom:4px; }
 .admin-card-desc { margin:8px 0; }
-#targetUserId { width:100%; min-height:42px; padding:9px 11px!important; margin-bottom:16px; border:1px solid rgba(255,255,255,.085); border-radius:8px; outline:none; background:#111214; color:#ececea; font:inherit; }
+#targetUserId { width:100%; min-height:42px; padding:9px 11px; margin-bottom:16px; border:1px solid rgba(255,255,255,.085); border-radius:8px; outline:none; background:#111214; color:#ececea; font:inherit; }
 #targetUserId:focus { border-color:rgba(190,164,125,.42); box-shadow:0 0 0 2px rgba(190,164,125,.08); }
 #confirmAdd { border:1px solid #bca47f; background:#aa916d; color:#151619; box-shadow:none; }
 #confirmAdd:hover { transform:none; border-color:#ccb48d; background:#bda27a; box-shadow:none; }
@@ -1276,32 +1280,6 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
   .project-tags .tag { font-size:.56rem; }
   .card-quality-signal span { display:none; }
   .card-quality-signal { gap:0; }
-  .mobile-tool-dock { position:fixed; left:50%; bottom:max(8px,env(safe-area-inset-bottom)); z-index:80; width:min(calc(100% - 18px),420px); transform:translateX(-50%); display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:4px; padding:5px; border:1px solid rgba(255,255,255,.10); border-radius:13px; background:rgba(33,34,38,.88); box-shadow:0 16px 42px rgba(0,0,0,.34); backdrop-filter:blur(22px); }
-  .mobile-tool-dock button { height:46px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid transparent; border-radius:9px; background:transparent; color:#aaa8a3; font:700 .68rem/1 system-ui,sans-serif; }
-  .mobile-tool-dock button i { font-size:.9rem; }
-  .mobile-tool-dock button.active,.mobile-tool-dock button:active { color:#c5ad8b; background:rgba(162,139,107,.10); border-color:rgba(162,139,107,.16); }
-  .mobile-tool-backdrop { position:fixed; inset:0; z-index:70; display:block; visibility:hidden; opacity:0; background:rgba(0,0,0,.34); transition:opacity .16s ease,visibility .16s ease; }
-  .mobile-tool-backdrop.show { visibility:visible; opacity:1; }
-  .mobile-tool-sheet { position:fixed; left:50%; bottom:calc(max(8px,env(safe-area-inset-bottom)) + 62px); z-index:75; width:min(calc(100% - 18px),604px); max-height:min(62dvh,560px); display:block; visibility:hidden; opacity:0; transform:translate(-50%,12px); overflow:hidden; border:1px solid rgba(255,255,255,.10); border-radius:13px; background:rgba(33,34,38,.96); box-shadow:0 24px 60px rgba(0,0,0,.38); backdrop-filter:blur(22px); transition:opacity .18s ease,transform .18s ease,visibility .18s ease; }
-  .mobile-tool-sheet.show { visibility:visible; opacity:1; transform:translate(-50%,0); }
-  .mobile-tool-sheet-head { height:50px; display:flex; align-items:center; padding:0 13px; border-bottom:1px solid rgba(255,255,255,.075); }
-  .mobile-tool-sheet-head strong { font-family:"LXGW WenKai Lite","Microsoft YaHei",sans-serif; font-size:.9rem; }
-  .mobile-tool-sheet-head button { margin-left:auto; height:36px; border:0; background:transparent; color:#c5ad8b; font-weight:700; }
-  .mobile-tool-panel { padding:13px; overflow:auto; max-height:calc(62dvh - 50px); }
-  .mobile-tool-panel[hidden] { display:none; }
-  .mobile-search-box { height:48px; display:flex; align-items:center; gap:9px; padding:0 12px; border:1px solid rgba(255,255,255,.10); border-radius:9px; background:#1b1c1f; color:#73726e; }
-  .mobile-search-box input { width:100%; height:100%; border:0; outline:0; background:transparent; color:#ececea; font-size:16px; }
-  .mobile-filter-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
-  .mobile-filter-option { min-height:42px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:transparent; color:#aaa8a3; font-size:.72rem; }
-  .mobile-filter-option.active { color:#c5ad8b; border-color:rgba(162,139,107,.26); background:rgba(162,139,107,.09); }
-  .mobile-sort-list { padding-top:5px; padding-bottom:5px; }
-  .mobile-sort-option { width:100%; height:48px; display:flex; align-items:center; gap:10px; border:0; border-bottom:1px solid rgba(255,255,255,.065); background:transparent; color:#d9d8d4; text-align:left; }
-  .mobile-sort-option:last-child { border-bottom:0; }
-  .mobile-sort-option i { margin-left:auto; color:#c5ad8b; }
-  .mobile-tool-empty { padding:24px 12px; text-align:center; color:#77756f; font-size:.72rem; }
-}
-@media (min-width:641px) {
-  .mobile-tool-dock,.mobile-tool-backdrop,.mobile-tool-sheet { display:none !important; }
 }
 
 /* Project detail v3: large modal workspace with bounded reading columns. */
