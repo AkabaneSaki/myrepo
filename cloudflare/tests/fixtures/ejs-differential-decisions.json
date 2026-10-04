@@ -1,0 +1,107 @@
+[
+  {
+    "project": "ast:named-function-expression",
+    "sha256": "1561187037e2ef1d71de29e94c5c30017bf14360d5daf2b0417851b763857168",
+    "signature": "f6ec01df91a62c540ed14afb19095d83be04c34e4b202ebc84fcad9cdf09c4e7",
+    "reason": "函数表达式的内部名称不属于 EJS 顶层公开声明，保留 helper 的 L2。",
+    "expected": true
+  },
+  {
+    "project": "ast:named-class-expression",
+    "sha256": "8ffa79e4c1e4ababe22c26e2a0b0cdf6cacea8556d6dab563f17fc3ec70bfd36",
+    "signature": "7f88d6b9e13b58318d337efbf4727f426df7cc72385d9783c7fe16abdd8b4336",
+    "reason": "class 表达式的内部名称不属于 EJS 顶层公开声明，保留 helper 的 L2。",
+    "expected": true
+  },
+  {
+    "project": "ast:global-shadow",
+    "sha256": "55895c60ff80dfc0b4a7fe984e6bef6059e5878696ec275c74e297431e827496",
+    "signature": "2da9cbb5083d9740c24b4d87d6097d6e3911170e493dad0bdab4416bd226b08f",
+    "reason": "这里 window 是本地对象，并非浏览器共享全局。",
+    "expected": true
+  },
+  {
+    "project": "ast:global-update",
+    "sha256": "cede8946bddb0850a9a5b37da3b5ebcea9b76e3b8f55760b283c28db6c83bc44",
+    "signature": "e785cfd39591704084240b352fb9379ae554e6e100b33735a655bd6ffb3581c4",
+    "reason": "更新表达式也是显式共享全局写入，按已有 L4 定义提醒审核。",
+    "expected": true
+  },
+  {
+    "project": "ast:global-nested",
+    "sha256": "666c8d758c6274a22b0894682f980fdcf8507afc50516170c40d0a715dead5d8",
+    "signature": "cdea2afd470e621d9a4fb903e6101eda473eb8deb14047d4e910a1c02ae7d5ed",
+    "reason": "嵌套成员写入也修改显式共享对象，按已有 L4 定义提醒审核。",
+    "expected": true
+  },
+  {
+    "project": "ast:html-entity",
+    "sha256": "72ba47bb74b6b941199e42448f92c64830cbcd6da1f4fd344695aca8868799cd",
+    "signature": "2c6ab89f5741a53bb6aefcf8f8d132792b7935128d199374e068c3b38cfd5629",
+    "reason": "浏览器会解码事件属性，实际调用 eval；HTML parser 消除旧实体漏检。",
+    "expected": true
+  },
+  {
+    "project": "ast:inert-script",
+    "sha256": "16cf84f156d73a50f2e9e6503af52d691b8f2c2ad9201e2e71b2379661fa544c",
+    "signature": "1674964f655e8296cdfc95007140954a5d5a3497e2595eb79d2ac38ed2d33895",
+    "reason": "application/json 是数据脚本，不是可执行 JavaScript，旧区域提取误报。",
+    "expected": true
+  },
+  {
+    "project": "ast:real-invalid",
+    "sha256": "7f7cad072495bba321938fc3633808767824280f90e380bb85466c784d780f98",
+    "signature": "eef260971b950a376fec227c4260fdaf8fa4f02b3f5e4af4f1980634e1262e77",
+    "reason": "相邻数值缺少运算符，真实语法错误被旧括号检查漏检。",
+    "expected": true
+  },
+  {
+    "project": "real-55",
+    "sha256": "839898049af4b933653cde1f72e022b1aa4bc3a1f22929a688e38d05caf7b3d5",
+    "signature": "1b84f28c2e866113936b0eb35edad011bf12c5f415f4cb1e4ed96fe88ce4d2d5",
+    "reason": "双子入口中的 const 与名称 a 分跨两行；a 是当前块的已声明绑定。v1 把它误判为裸赋值，v2 正确消除 L4；保留该世界书其他 L1/L2。",
+    "expected": true
+  },
+  {
+    "project": "broken:0",
+    "sha256": "77b9c969f5db9a517789601987230e1ad07bb16373ebef68831c1eeadc94998e",
+    "signature": "6d9e30bf9258a0e3ca189ef6d9e216f61d7400f31d5d140f03f1db4743277f38",
+    "reason": "const x=1 2 是真实语法错误；v1 只检查括号而漏检，v2 由 Acorn 报 EJS-PARSE 并拒绝。",
+    "expected": true
+  },
+  {
+    "project": "broken:1",
+    "sha256": "837c10aed084d1f50fbb6056575d4a722529d8f3fb469be71fdb1f7bc9d0685a",
+    "signature": "a82084f0353162d3f4b2cf3d97fbcac7bb0c397f54552a5c7565bfc09d9d470d",
+    "reason": "const = 1 没有合法声明名称；v1 误报裸赋值 L4，v2 报准确语法错误。解析失败不臆造完整 L AST。",
+    "expected": true
+  },
+  {
+    "project": "1849ba0f-a629-481e-a657-bf1141cadaa4",
+    "sha256": "59ab5997ce3d13295dd22d9fd93c6be235e43c94b462d96c3a3a01d155c36f5f",
+    "signature": "8d76dd25700c2585925cbd6a16c1f4296c3917bace2f885aa640df08d2cbc8f2",
+    "reason": "世界书 window.top.__hermLastForm 写入共享全局，补足旧 L4 漏检；两处 onclick 双引号在参数前提前结束，HTML 属性实际代码截断，JS-PARSE 两条是真错误。公共声明阻断保留。",
+    "expected": true
+  },
+  {
+    "project": "08aa5a5e-b21e-4436-b44b-96d2c246b83e",
+    "sha256": "ec447332c0ac25445012ff78ad9be4ca23b09e4003d45fcedbea7ec5da1ada97",
+    "signature": "0f14706d3a39a9e8271c4b987d843d12557601a2a6b5ecda916068c8b96b8ce6",
+    "reason": "pair[0].call(pair[1]) 是间接函数调用；v1 仅覆盖 identifier.call 而漏提示，v2 AST 补 AH2，不改变门禁或审核状态。",
+    "expected": true
+  },
+  {
+    "project": "a8fa22ac-60dc-4f5a-ad34-f6af8cc1eb9b",
+    "sha256": "4486fb1cdc48c08f14b4ee42339a83fdbd7434d6de30c558f1150da451b88f43",
+    "signature": "36d50ce8ed13e8599294edbc72bfd5fd8be5dec6080294a1dc27574ab96b2f1a",
+    "reason": "v1 将 fetch(new URL(...)) 的 new 关键字误当运行时变量。这里 distribution.js 和 const base 都是固定地址；消除该 U5 误报，保留 manifestUrl 和动态缓存键的旧提示，门禁不变。",
+    "expected": true
+  },
+  {
+    "project": "585ced49-ddcb-4358-bd50-c64085be8021",
+    "sha256": "6c943d34e5209aff19eb31aa46a9b3fb1148331f6eeae15bd6e5c5add7fdf80d",
+    "signature": "27a4b085e9544707ae1199fae73a8c912fa79e4dd138aed04ab4c97e3efdba83",
+    "reason": "效果对象的沸血狂澜字符串后缺少逗号，随后直接出现魔气侵袭属性；Acorn 在原文第100行第11列拒绝，旧括号检查漏检。",
+    "expected": true
+  }
+]

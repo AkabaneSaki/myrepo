@@ -175,6 +175,23 @@ function attributeRange(source, location, value) {
   return { start: cursor, end: location.endOffset - (quoted && source[location.endOffset - 1] === source[cursor - 1] ? 1 : 0), value };
 }
 
+function firstAttributeLocations(source, tagLocation) {
+  if (!tagLocation) return new Map();
+  const tag = source.slice(tagLocation.startOffset,tagLocation.endOffset);
+  const nameEnd = /^<[^\t\n\f\r />]+/.exec(tag)?.[0].length ?? 0;
+  const locations = new Map();
+  // parse5 keeps the first duplicate value but the last occurrence's location.
+  // Locate the first spelling in its parsed start tag to keep evidence aligned.
+  const spelling = /([^\t\n\f\r /=>]+)(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r >]*))?/g;
+  spelling.lastIndex=nameEnd;
+  let match;
+  while((match=spelling.exec(tag))){
+    const name=match[1].toLowerCase();
+    if(!locations.has(name))locations.set(name,{startOffset:tagLocation.startOffset+match.index,endOffset:tagLocation.startOffset+spelling.lastIndex});
+  }
+  return locations;
+}
+
 function attributeUnit(rawContent, attribute, kind) {
   const builder = new SourceBuilder(rawContent);
   const wrapped = kind === 'event';
@@ -208,9 +225,10 @@ export function buildRegexUnits(rawContent) {
     const node = pending.pop();
     if (!node.tagName) continue;
     const location = node.sourceCodeLocation;
+    const attributeLocations = firstAttributeLocations(rawContent,location?.startTag);
     for (const parsedAttribute of node.attrs ?? []) {
       const name = parsedAttribute.prefix ? parsedAttribute.prefix + ':' + parsedAttribute.name : parsedAttribute.name;
-      const attributeLocation = location?.attrs?.[name];
+      const attributeLocation = attributeLocations.get(name);
       if (!attributeLocation) continue;
       const attribute = attributeRange(rawContent, attributeLocation, parsedAttribute.value);
       if (/^on[a-z]/i.test(name)) units.push(attributeUnit(rawContent, attribute, 'event'));
