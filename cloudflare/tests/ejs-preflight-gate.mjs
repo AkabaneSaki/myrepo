@@ -187,11 +187,14 @@ assert.match(entryPrompt, /\[L4\]/);
 assert.match(entryPrompt, /<% let a = 1; %>/);
 assert.doesNotMatch(entryPrompt, /<% let b = 2; %>/);
 assert.doesNotMatch(entryPrompt, /no issue/);
-const exportedReport = uploadPreviewTest.buildUploadCheckReport({ gate: 'reject', findings: groupedFindings }, groupedPrepared, 'worldbook');
+const exportedReport = uploadPreviewTest.buildUploadCheckReport({ gate: 'reject', engine: 'v2', parserCompatibility: 'test parser', findings: groupedFindings }, groupedPrepared, 'worldbook');
 assert.match(exportedReport, /Poem Workshop 上传检查报告/);
 assert.match(exportedReport, /给 LLM 的修复提示/);
 assert.match(exportedReport, /Entry A/);
 assert.match(exportedReport, /Entry B/);
+assert.match(exportedReport, /检查版本：v2/);
+assert.match(exportedReport, /语法检查依据：test parser/);
+assert.match(uploadPreviewTest.buildUploadLlmFixPrompt([{ruleId:'CHECKER-INTERNAL'}], groupedPrepared, 'worldbook'), /无需因此修改源码/);
 
 const stylesSource = fs.readFileSync(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8');
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-check-head strong/);

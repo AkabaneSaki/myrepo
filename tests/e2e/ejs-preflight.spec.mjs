@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
+
+async function sourceModule(relativePath) {
+  return import('data:text/javascript;base64,' + Buffer.from(readFileSync(path.resolve(relativePath), 'utf8')).toString('base64'));
+}
 
 const toolUrl = pathToFileURL(path.resolve('util/ejs-preflight.html')).href;
 
@@ -40,6 +45,41 @@ test('offline coworker fixture selftest passes', async ({ page }) => {
   await page.goto(toolUrl + '?selftest=1');
   await expect(page).toHaveTitle(/SELFTEST PASS/);
   await expect(page.locator('#selftest')).toHaveText('SELFTEST PASS');
+});
+
+test('v2 reports preserve uploader controls, exports and admin findings', async ({ page }, testInfo) => {
+  const errors=[];
+  page.on('pageerror', error=>errors.push(error.message));
+  await loadEntries(page,{1:{uid:1,comment:'修改条目',content:'<% const exposed = 1; %>'}});
+  await expect(page.locator('#certSummary')).toContainText('检查版本：v2');
+  const report=await page.evaluate(()=>window.EjsPreflight.getReport());
+  const {homeUploadPreviewScript}=await sourceModule('cloudflare/src/pages/home/upload-preview.ts');
+  const {homeAdminReviewModalScript}=await sourceModule('cloudflare/src/pages/home/modal/admin-review.ts');
+  const {homeStyles}=await sourceModule('cloudflare/src/pages/home/styles.ts');
+  await page.setContent('<main class="container"><div id="upload" class="upload-preview"><div class="upload-preview-summary"></div></div><div id="admin"></div></main>');
+  await page.addStyleTag({content:homeStyles});
+  await page.addScriptTag({content:'function escapeHtml(value){return String(value??" ").replace(/[&<>"\']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;","\'":"&#39;"}[c]))} async function copyTextToClipboard(text){window.copiedText=text;return true} function showToast(){}\n'+homeUploadPreviewScript+'\n'+homeAdminReviewModalScript});
+  await page.evaluate(report=>{
+    const prepared={entries:[{uid:1,comment:'修改条目',content:'<% const exposed = 1; %>'}]};
+    renderUploadPreflightStatus(document.querySelector('#upload'),'error','检查未通过',report,prepared,'worldbook');
+    document.querySelector('#admin').innerHTML=renderAdminCodeCheck(report);
+  },report);
+  await expect(page.locator('#upload')).toContainText('检查版本：v2');
+  await expect(page.locator('#admin')).toContainText('检查版本：v2');
+  await expect(page.locator('#admin')).toContainText('[L2]');
+  await page.locator('[data-upload-copy-group]').click();
+  expect(await page.evaluate(()=>window.copiedText)).toContain('<% const exposed = 1; %>');
+  await page.locator('[data-upload-copy-all]').click();
+  expect(await page.evaluate(()=>window.copiedText)).toContain('[L2]');
+  const downloadPromise=page.waitForEvent('download');
+  await page.locator('[data-upload-export-report]').click();
+  const download=await downloadPromise;
+  const exported=readFileSync(await download.path(),'utf8');
+  expect(exported).toContain('检查版本：v2');
+  expect(exported).toContain('语法检查依据：EJS 3.1.9');
+  expect(exported).toContain('[L2]');
+  expect(errors).toEqual([]);
+  await page.screenshot({path:testInfo.outputPath('v2-upload-admin.png'),fullPage:true});
 });
 
 test('plain-text links cover unknown, HTTP, IPv4 and IPv6 without EJS', async ({ page }) => {
@@ -97,7 +137,7 @@ test('parse errors are explicit and include repair fields', async ({ page }) => 
 
   const finding = page.locator('.finding').filter({ hasText: 'broken-ejs' }).first();
   await expect(finding).toContainText('[EJS-PARSE]');
-  await expect(finding).toContainText('位置：第 1 行，第 1 列');
+  await expect(finding).toContainText('位置：第 1 行，第 19 列');
   await expect(finding).toContainText('怎么处理：');
   await expect(page.locator('#mStatus')).toHaveText('未通过');
 });
@@ -509,14 +549,17 @@ test('EJS close markers follow the real ST EJS tokenizer even inside JS strings 
   }
 });
 
-test('unquoted handlers and whitespace-tolerant javascript URLs remain executable for M checks', async ({ page }) => {
+test('unquoted handlers and browser-valid javascript URLs remain executable for M checks', async ({ page }) => {
   await loadRegex(page, [
     { id: 'unquoted-handler', scriptName: 'unquoted-handler', findRegex: '/x/g', replaceString: '<button onclick=eval(1)>x</button>' },
     { id: 'spaced-js-url', scriptName: 'spaced-js-url', findRegex: '/x/g', replaceString: '<a href="  javascript : eval(1)">x</a>' },
+    { id: 'tab-js-url', scriptName: 'tab-js-url', findRegex: '/x/g', replaceString: '<a href="  java&#9;script:eval(1)">x</a>' },
   ]);
 
   await expect(page.locator('.finding').filter({ hasText: 'unquoted-handler' }).filter({ hasText: '[M1]' })).toHaveCount(1);
-  await expect(page.locator('.finding').filter({ hasText: 'spaced-js-url' }).filter({ hasText: '[M1]' })).toHaveCount(1);
+  expect(await page.evaluate(() => new URL('  javascript : eval(1)', 'https://example.com/').protocol)).toBe('https:');
+  await expect(page.locator('.finding').filter({ hasText: 'spaced-js-url' }).filter({ hasText: '[M1]' })).toHaveCount(0);
+  await expect(page.locator('.finding').filter({ hasText: 'tab-js-url' }).filter({ hasText: '[M1]' })).toHaveCount(1);
 });
 
 test('obvious bracket and optional-chain capability variants are still detected', async ({ page }) => {
@@ -572,36 +615,18 @@ test('for-header detection does not depend on a short lookbehind window', async 
 test('re-scanning the same entry resets symbols instead of accumulating stale state', async ({ page }) => {
   await page.goto(toolUrl);
   const result = await page.evaluate(() => {
-    const entry = {
-      id: 'same-entry',
-      fileName: 'same.json',
-      bookOrder: 0,
-      entryOrder: 0,
-      key: '1',
-      uid: 1,
-      name: 'same-entry',
-      content: '<% const exposedOnce = 1; %>',
-      isPrivate: false,
-      hasEjs: true,
-      sourceType: 'worldbook',
-      symbols: [{ name: 'staleBeforeScan', index: 0, type: 'const' }],
-    };
-    const firstFindings = [];
-    window.EjsPreflight.inspectLexical(entry, firstFindings);
-    const firstSymbols = entry.symbols.map(x => x.name);
-    entry.symbols.push({ name: 'staleBetweenScans', index: 0, type: 'const' });
-    const secondFindings = [];
-    window.EjsPreflight.inspectLexical(entry, secondFindings);
+    const inputs = [{fileName:'same.json', type:'worldbook', text:JSON.stringify({entries:{1:{uid:1,comment:'same-entry',content:'<% const exposedOnce = 1; %>'}}})}];
+    const firstFindings = window.PoemEjsChecker.analyzeProjectCode(inputs).findings;
+    firstFindings.push({ruleId:'L6',entry:'staleBetweenScans'});
+    const secondFindings = window.PoemEjsChecker.analyzeProjectCode(inputs).findings;
     return {
-      firstSymbols,
-      secondSymbols: entry.symbols.map(x => x.name),
       firstL2: firstFindings.filter(x => x.ruleId === 'L2').length,
       secondL2: secondFindings.filter(x => x.ruleId === 'L2').length,
+      secondL6: secondFindings.filter(x => x.ruleId === 'L6').length,
     };
   });
 
-  expect(result.firstSymbols).toEqual(['exposedOnce']);
-  expect(result.secondSymbols).toEqual(['exposedOnce']);
+  expect(result.secondL6).toBe(0);
   expect(result.firstL2).toBe(1);
   expect(result.secondL2).toBe(1);
 });

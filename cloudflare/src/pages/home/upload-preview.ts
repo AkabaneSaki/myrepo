@@ -188,7 +188,8 @@ function getUploadPromptSources(findings, prepared, kind) {
 }
 
 function buildUploadLlmFixPrompt(findings, prepared, kind) {
-  const visible = Array.isArray(findings) ? findings : [];
+  const visible = Array.isArray(findings) ? findings.filter(item => item?.ruleId !== 'CHECKER-INTERNAL') : [];
+  if (!visible.length && findings?.some(item => item?.ruleId === 'CHECKER-INTERNAL')) return '检查服务未能完成检查，请稍后重试；无需因此修改源码。';
   const issues = visible.map(item => {
     const location = (item?.entry ? String(item.entry) : (item?.book ? String(item.book) : '文件'))
       + ' · 第 ' + Number(item?.line || 1) + ' 行，第 ' + Number(item?.column || 1) + ' 列';
@@ -223,6 +224,8 @@ function buildUploadCheckReport(codeCheck, prepared, kind) {
     + '- 状态：' + (codeCheck?.gate === 'reject' ? '未通过' : '通过自动门禁') + '\n'
     + '- 阻断项：' + blockers + '\n'
     + '- 受影响内容：' + groups.length + '\n'
+    + '- 检查版本：' + String(codeCheck?.engine || '未记录') + '\n'
+    + '- 语法检查依据：' + String(codeCheck?.parserCompatibility || '未记录') + '\n'
     + '- 导出时间：' + new Date().toISOString() + '\n\n'
     + '## 给 LLM 的修复提示\n\n'
     + buildUploadLlmFixPrompt(findings, prepared, kind) + '\n';
@@ -286,7 +289,8 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
   node.dataset.uploadPreflightStatus = normalized;
   node.setAttribute('role', normalized === 'error' ? 'alert' : 'status');
   node.setAttribute('aria-live', normalized === 'error' ? 'assertive' : 'polite');
-  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + toolsHtml + findingsHtml + '</div>';
+  const versionHtml = codeCheck?.engine ? '<details><summary>检查版本：' + escapeHtml(codeCheck.engine) + '</summary><p>语法检查依据：' + escapeHtml(codeCheck.parserCompatibility || '未记录') + '</p></details>' : '';
+  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + versionHtml + toolsHtml + findingsHtml + '</div>';
   const summary = container.querySelector('.upload-preview-summary');
   if (summary?.nextSibling) container.insertBefore(node, summary.nextSibling);
   else container.appendChild(node);
