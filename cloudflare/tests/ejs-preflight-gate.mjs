@@ -49,6 +49,20 @@ const collision = analyzeProjectCode([{
 }]);
 assert.ok(rules(collision).includes('L6'));
 
+const multiIssue = analyzeProjectCode([{
+  fileName: 'multi.json',
+  type: 'worldbook',
+  text: worldbook([
+    { comment: 'one', content: '<% const duplicate = 1; %>' },
+    { comment: 'two', content: '<% const duplicate = 2; %>' },
+    { comment: 'bad-private', content: '\n@@private\n<% const local = 1; %>' },
+  ]),
+}]);
+const multiUploader = toUploaderCodeCheck(multiIssue);
+assert.ok(multiUploader.findings.length >= 5);
+assert.ok(multiUploader.findings.some(item => item.ruleId === 'L6'));
+assert.ok(multiUploader.findings.some(item => item.ruleId === 'L7'));
+
 const decorator = analyzeProjectCode([{
   fileName: 'decorator.json',
   type: 'worldbook',
@@ -110,6 +124,11 @@ assert.match(editorSource, /自动检查通过，可以继续/);
 const uploadPreviewSource = fs.readFileSync(new URL('../src/pages/home/upload-preview.ts', import.meta.url), 'utf8');
 assert.match(uploadPreviewSource, /function renderUploadPreflightStatus/);
 assert.match(uploadPreviewSource, /upload-preflight-status/);
+assert.match(uploadPreviewSource, /codeCheck\.findings/);
+assert.match(uploadPreviewSource, /findings\.map/);
+assert.match(uploadPreviewSource, /自动检查未通过：发现/);
+assert.match(uploadPreviewSource, /upload-preflight-finding-title/);
+assert.match(editorSource, /prepared\.codeCheck\);/);
 
 const stylesSource = fs.readFileSync(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8');
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-check-head strong/);

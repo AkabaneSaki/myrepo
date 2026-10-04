@@ -138,17 +138,41 @@ function renderUploadPreviewError(container, error) {
   container.innerHTML = '<div class="upload-preview-error"><i class="fas fa-triangle-exclamation"></i><span>' + escapeHtml(message) + '</span></div>';
 }
 
-function renderUploadPreflightStatus(container, status, message) {
+function renderUploadPreflightStatus(container, status, message, codeCheck = null) {
   if (!container) return;
   container.querySelector('[data-upload-preflight-status]')?.remove();
   const normalized = ['checking', 'ok', 'error'].includes(status) ? status : 'checking';
   const icon = normalized === 'ok' ? 'fa-circle-check' : (normalized === 'error' ? 'fa-circle-xmark' : 'fa-spinner fa-spin');
+  const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
+  const blockerCount = findings.filter(item => item?.severity === 'high').length;
+  const headline = normalized === 'error' && blockerCount
+    ? '自动检查未通过：发现 ' + blockerCount + ' 个阻断项，请逐条修复后重新上传。'
+    : String(message || '');
+  const findingsHtml = findings.length
+    ? '<div class="upload-preflight-findings">' + findings.map(item => {
+      const ruleId = escapeHtml(item?.ruleId || 'CHECK');
+      const title = escapeHtml(item?.title || '需要处理');
+      const locationParts = [];
+      if (item?.entry) locationParts.push('条目：' + item.entry);
+      else if (item?.book) locationParts.push('文件：' + item.book);
+      if (Number.isFinite(Number(item?.line))) {
+        locationParts.push('第 ' + Number(item.line) + ' 行' + (Number.isFinite(Number(item?.column)) ? '，第 ' + Number(item.column) + ' 列' : ''));
+      }
+      const severityClass = item?.severity === 'high' ? 'high' : (item?.severity === 'warn' ? 'warn' : 'info');
+      return '<div class="upload-preflight-finding upload-preflight-finding--' + severityClass + '">'
+        + '<div class="upload-preflight-finding-title"><strong>[' + ruleId + '] ' + title + '</strong></div>'
+        + (locationParts.length ? '<div class="upload-preflight-finding-meta">' + escapeHtml(locationParts.join(' · ')) + '</div>' : '')
+        + (item?.detail ? '<div class="upload-preflight-finding-detail">' + escapeHtml(item.detail) + '</div>' : '')
+        + (item?.suggestion ? '<div class="upload-preflight-finding-fix"><strong>建议：</strong>' + escapeHtml(item.suggestion) + '</div>' : '')
+        + '</div>';
+    }).join('') + '</div>'
+    : '';
   const node = document.createElement('div');
   node.className = 'upload-preflight-status upload-preflight-status--' + normalized;
   node.dataset.uploadPreflightStatus = normalized;
   node.setAttribute('role', normalized === 'error' ? 'alert' : 'status');
   node.setAttribute('aria-live', normalized === 'error' ? 'assertive' : 'polite');
-  node.innerHTML = '<i class="fas ' + icon + '"></i><span>' + escapeHtml(message || '') + '</span>';
+  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + findingsHtml + '</div>';
   const summary = container.querySelector('.upload-preview-summary');
   if (summary?.nextSibling) container.insertBefore(node, summary.nextSibling);
   else container.appendChild(node);

@@ -220,8 +220,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .upload-preview-file-chip b { color:#d6c4a7; font-weight:600; }
 .upload-preview-error { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; border:1px solid rgba(248,113,113,.32); background:rgba(127,29,29,.18); color:#FECACA; font-size:.84rem; }
 .upload-preflight-status { display:flex; align-items:flex-start; gap:8px; padding:9px 11px; border:1px solid rgba(255,255,255,.08); border-radius:9px; background:#151619; color:#aaa8a3; font-size:.78rem; line-height:1.5; }
-.upload-preflight-status i { flex:none; margin-top:2px; }
-.upload-preflight-status span { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.upload-preflight-status > i { flex:none; margin-top:2px; }
+.upload-preflight-status-body { min-width:0; flex:1; display:flex; flex-direction:column; gap:8px; }
+.upload-preflight-headline { color:inherit; font-weight:750; white-space:pre-wrap; overflow-wrap:anywhere; }
+.upload-preflight-findings { display:flex; flex-direction:column; gap:7px; }
+.upload-preflight-finding { padding:8px 9px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:rgba(0,0,0,.12); color:#c9c6c0; }
+.upload-preflight-finding--high { border-color:rgba(225,120,112,.28); background:rgba(125,60,55,.12); }
+.upload-preflight-finding--warn { border-color:rgba(202,163,77,.25); background:rgba(125,100,45,.08); }
+.upload-preflight-finding-title { color:#ece8e1; overflow-wrap:anywhere; }
+.upload-preflight-finding-meta { margin-top:3px; color:#aaa69f; font-size:.72rem; overflow-wrap:anywhere; }
+.upload-preflight-finding-detail { margin-top:5px; color:#d0ccc5; white-space:pre-wrap; overflow-wrap:anywhere; }
+.upload-preflight-finding-fix { margin-top:5px; color:#c6b38f; white-space:pre-wrap; overflow-wrap:anywhere; }
 .upload-preflight-status--checking { color:#c6b38f; border-color:rgba(190,164,125,.2); background:rgba(190,164,125,.055); }
 .upload-preflight-status--ok { color:#b8d0b8; border-color:rgba(126,161,125,.26); background:rgba(91,126,90,.11); }
 .upload-preflight-status--error { color:#e1aaa5; border-color:rgba(190,105,98,.28); background:rgba(125,60,55,.13); }
