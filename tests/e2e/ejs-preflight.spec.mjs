@@ -97,7 +97,7 @@ test('parse errors are explicit and include repair fields', async ({ page }) => 
 
   const finding = page.locator('.finding').filter({ hasText: 'broken-ejs' }).first();
   await expect(finding).toContainText('[EJS-PARSE]');
-  await expect(finding).toContainText('行号：');
+  await expect(finding).toContainText('位置：第 1 行，第 1 列');
   await expect(finding).toContainText('怎么处理：');
   await expect(page.locator('#mStatus')).toHaveText('未通过');
 });
@@ -186,24 +186,38 @@ test('top-level lexical/function/class declarations are blocked and duplicate na
   await expect(page.locator('.finding').filter({ hasText: '[L6]' }).filter({ hasText: 'sameFn' })).toHaveCount(1);
 });
 
-test('block scope and @@private isolate lexical declarations, but private does not excuse bare globals', async ({ page }) => {
+test('block scope and valid @@private isolate declarations while invalid decorators fall back to public scope', async ({ page }) => {
   await loadEntries(page, {
     1: { uid: 1, comment: 'block-a', content: '<% { const isolated = "A"; } %>' },
     2: { uid: 2, comment: 'block-b', content: '<% { const isolated = "B"; } %>' },
     3: { uid: 3, comment: 'private-a', content: '@@private\n<% const privateSame = "A"; %>' },
     4: { uid: 4, comment: 'private-b', content: '@@private\n<% const privateSame = "B"; %>' },
     5: { uid: 5, comment: 'private-leak', content: '@@private\n<% leakedFromPrivate = 99; %>' },
-    6: { uid: 6, comment: 'private-leading-blank', content: '\n\n@@private\n<% const privateLeading = "ok"; %>' },
-    7: { uid: 7, comment: 'private-workshop-meta', content: '<%# poem-workshop-meta:v1-start\nproject: demo\npoem-workshop-meta:v1-end %>@@private\n<% const privateFromMeta = "ok"; %>' },
+    6: { uid: 6, comment: 'private-leading-blank', content: '\n@@private\n<% const privateLeading = "bad"; %>' },
+    7: { uid: 7, comment: 'private-workshop-meta', content: '<%# poem-workshop-meta:v1-start\nproject: demo\npoem-workshop-meta:v1-end %>\n@@private\n<% const privateFromMeta = "bad"; %>' },
     8: { uid: 8, comment: 'late-private-not-decorator', content: 'Visible text first\n@@private\n<% const stillTopLevel = 1; %>' },
+    9: { uid: 9, comment: 'split-decorators', content: '@@activate\n\n@@private\n<% const splitPrivate = 1; %>' },
+    10: { uid: 10, comment: 'continuous-decorators', content: '@@activate\n@@private\n<% const continuousPrivate = 1; %>' },
   });
 
-  for (const name of ['block-a', 'block-b', 'private-a', 'private-b', 'private-leading-blank', 'private-workshop-meta']) {
+  for (const name of ['block-a', 'block-b', 'private-a', 'private-b', 'continuous-decorators']) {
     await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[L2]' })).toHaveCount(0);
-    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[L3]' })).toHaveCount(0);
+    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[L7]' })).toHaveCount(0);
   }
   await expect(page.locator('.finding').filter({ hasText: 'private-leak' }).filter({ hasText: '[L4]' })).toHaveCount(1);
-  await expect(page.locator('.finding').filter({ hasText: 'late-private-not-decorator' }).filter({ hasText: '[L2]' })).toHaveCount(1);
+  for (const name of ['private-leading-blank', 'private-workshop-meta', 'late-private-not-decorator', 'split-decorators']) {
+    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[L7]' })).toHaveCount(1);
+    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[L2]' })).toHaveCount(1);
+  }
+  await expect(page.locator('.finding').filter({ hasText: 'private-leading-blank' }).filter({ hasText: '[L7]' })).toContainText('第 2 行，第 1 列');
+  await expect(page.locator('.finding').filter({ hasText: 'private-workshop-meta' }).filter({ hasText: '[L7]' })).toContainText('第 4 行，第 1 列');
+  const l7Prompt = await page.evaluate(() => {
+    const f = window.EjsPreflight.getReport().findings.find(x => x.ruleId === 'L7' && x.entry === 'private-workshop-meta');
+    return window.EjsPreflight.buildLlmFixPrompt(f);
+  });
+  expect(l7Prompt).toContain('[L7]');
+  expect(l7Prompt).toContain('先修 L7');
+  expect(l7Prompt).toContain('poem-workshop-meta:v1-start');
 });
 
 test('implicit env/global writes are strict: bare writes block, explicit globals require review, generic globals block', async ({ page }) => {
@@ -351,10 +365,12 @@ test('certification status distinguishes pass, review and fail', async ({ page }
     1: { uid: 1, comment: 'safe', content: '<% { const localOnly = 1; } %>' },
   }, 'pass.json');
   await expect(page.locator('#mStatus')).toHaveText('通过');
-  await expect(page.locator('#certSummary')).toContainText('通过 Workshop 代码检查');
+  await expect(page.locator('#certSummary')).toContainText('审核报告为绿色');
   const passReport = await page.evaluate(() => window.EjsPreflight.getReport());
   expect(passReport.standard).toBe('PW-CODE-CHECK-v1');
   expect(passReport.certification).toBe('pass');
+  expect(passReport.gate).toBe('accept');
+  expect(passReport.audit).toBe('green');
 
   await loadEntries(page, {
     1: { uid: 1, comment: 'review', content: '<% globalThis.__PW_demo__ = {}; %>' },
@@ -482,14 +498,14 @@ test('arrow, object and class method var declarations stay function-local', asyn
   for (let i = 0; i < 4; i++) await expect(l1.nth(i)).toContainText('信息');
 });
 
-test('EJS close markers inside JavaScript strings and regex literals do not close the tag', async ({ page }) => {
+test('EJS close markers follow the real ST EJS tokenizer even inside JS strings or regex literals', async ({ page }) => {
   await loadEntries(page, {
     1: { uid: 1, comment: 'close-in-string', content: '<% { const marker = "%>"; void marker; } %>' },
     2: { uid: 2, comment: 'close-in-regex', content: '<% { const marker = /foo%>bar/; void marker; } %>' },
   });
 
   for (const name of ['close-in-string', 'close-in-regex']) {
-    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[EJS-PARSE]' })).toHaveCount(0);
+    await expect(page.locator('.finding').filter({ hasText: name }).filter({ hasText: '[EJS-PARSE]' })).toHaveCount(1);
   }
 });
 
@@ -602,6 +618,197 @@ test('audit hints use question-mark severity and never change certification by t
   await expect(hint).toHaveCount(1);
   await expect(hint).toContainText('人工留意');
   await expect(page.locator('#mHints')).toHaveText('1');
-  await expect(page.locator('#mStatus')).toHaveText('通过');
+  await expect(page.locator('#mStatus')).toHaveText('需确认');
+  const report = await page.evaluate(() => window.EjsPreflight.getReport());
+  expect(report.certification).toBe('pass');
+  expect(report.gate).toBe('accept');
+  expect(report.audit).toBe('yellow');
   await expect(page.locator('#findings')).not.toContainText('[M6]');
+});
+
+test('EJS literal opener does not swallow later executable tags', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'literal-opener', content: '<%% literal opener\n<% { eval("1"); } %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'literal-opener' }).filter({ hasText: '[M1]' })).toHaveCount(1);
+});
+
+test('EJS close delimiter inside a line comment still closes the tag like ST Prompt Template', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'comment-close', content: '<% // comment closes here %>\n<% { eval("1"); } %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'comment-close' }).filter({ hasText: '[EJS-PARSE]' })).toHaveCount(0);
+  await expect(page.locator('.finding').filter({ hasText: 'comment-close' }).filter({ hasText: '[M1]' })).toHaveCount(1);
+});
+
+test('regex literals after control parentheses do not corrupt lexical brace depth', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'regex-depth', content: '<% if (true) /{/.test("x"); const exposedAfterRegex = 1; %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'regex-depth' }).filter({ hasText: '[L2]' })).toHaveCount(1);
+});
+
+test('function parameter reassignment is local while an outer write is still L4', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'param-write', content: '<% { function pick(card) { card = { ok: true }; return card; } void pick; } %>' },
+    2: { uid: 2, comment: 'block-does-not-forgive-outer', content: '<% { let scopedOnly = 1; void scopedOnly; } scopedOnly = 2; %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'param-write' }).filter({ hasText: '[L4]' })).toHaveCount(0);
+  await expect(page.locator('.finding').filter({ hasText: 'block-does-not-forgive-outer' }).filter({ hasText: '[L4]' })).toHaveCount(1);
+});
+
+test('nested declarations inside callback bodies are not bare L4 writes', async ({ page }) => {
+  const ejs = '<' + '% { const fn = () => { let value = 1; const copy = [value]; for (let i = 0; i < copy.length; i++) void copy[i]; return copy; }; void fn; } %' + '>';
+  await loadEntries(page, { 1: { uid: 1, comment: 'nested-declarations', content: ejs } });
+  await expect(page.locator('.finding').filter({ hasText: 'nested-declarations' }).filter({ hasText: '[L4]' })).toHaveCount(0);
+});
+
+test('dollar-prefixed and Unicode identifiers are tracked as whole bindings', async ({ page }) => {
+  const safe = '<' + '% { let $messages = []; const 源A = 1; const 上一轮AI = \'ok\'; $messages = [$messages.length]; void 源A; void 上一轮AI; } %' + '>';
+  const unsafe = '<' + '% { $rogue = 1; 裸变量 = 2; } %' + '>';
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'unicode-safe', content: safe },
+    2: { uid: 2, comment: 'unicode-bare', content: unsafe },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'unicode-safe' }).filter({ hasText: '[L4]' })).toHaveCount(0);
+  const unsafeL4 = page.locator('.finding').filter({ hasText: 'unicode-bare' }).filter({ hasText: '[L4]' });
+  await expect(unsafeL4).toHaveCount(2);
+  await expect(unsafeL4.filter({ hasText: '$rogue' })).toHaveCount(1);
+  await expect(unsafeL4.filter({ hasText: '裸变量' })).toHaveCount(1);
+});
+
+test('same filenames do not collapse distinct entries for L6', async ({ page }) => {
+  await loadBooks(page, [
+    { name: 'worldbook.json', entries: { 1: { uid: 1, comment: 'same-file-a', content: '<% const sameFileCollision = 1; %>' } } },
+    { name: 'worldbook.json', entries: { 1: { uid: 1, comment: 'same-file-b', content: '<% const sameFileCollision = 2; %>' } } },
+  ]);
+  const l6 = page.locator('.finding').filter({ hasText: '[L6]' }).filter({ hasText: 'sameFileCollision' });
+  await expect(l6).toHaveCount(1);
+  await expect(l6).toContainText('same-file-a');
+  await expect(l6).toContainText('same-file-b');
+});
+
+test('M3 catches API-key names and broad storage enumeration without substring noise', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'api-key', content: '<% { const k = localStorage.getItem("openai_api_key"); void k; } %>' },
+    2: { uid: 2, comment: 'storage-enum', content: '<% { const all = Object.entries(localStorage); void all; } %>' },
+    3: { uid: 3, comment: 'ordinary-key', content: '<% { const x = localStorage.getItem("keyboard_layout"); void x; } %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'api-key' }).filter({ hasText: '[M3]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'storage-enum' }).filter({ hasText: '[M3]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'ordinary-key' }).filter({ hasText: '[M3]' })).toHaveCount(0);
+});
+
+test('L4 catches for-of, destructuring, chained and bitwise bare writes', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'for-of-leak', content: '<% for (leakedItem of [1,2]) { void leakedItem; } %>' },
+    2: { uid: 2, comment: 'destructure-leak', content: '<% ({ leakedA, x: leakedB } = source); %>' },
+    3: { uid: 3, comment: 'chain-leak', content: '<% firstLeak = secondLeak = 1; %>' },
+    4: { uid: 4, comment: 'bitwise-leak', content: '<% flags |= 1; %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'for-of-leak' }).filter({ hasText: '[L4]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'destructure-leak' }).filter({ hasText: '[L4]' })).toHaveCount(2);
+  await expect(page.locator('.finding').filter({ hasText: 'chain-leak' }).filter({ hasText: '[L4]' })).toHaveCount(2);
+  await expect(page.locator('.finding').filter({ hasText: 'bitwise-leak' }).filter({ hasText: '[L4]' })).toHaveCount(1);
+});
+
+test('unquoted javascript URLs, protocol-relative dynamic targets and fetch.call stay visible', async ({ page }) => {
+  await loadRegex(page, [
+    { id: 'unquoted-js', scriptName: 'unquoted-js', findRegex: '/x/g', replaceString: '<a href=javascript:eval(1)>x</a>' },
+    { id: 'protocol-dynamic', scriptName: 'protocol-dynamic', findRegex: '/x/g', replaceString: '<img src="//cdn.example.net/avatar/$1.png">' },
+    { id: 'fetch-call', scriptName: 'fetch-call', findRegex: '/x/g', replaceString: '<script>fetch.call(window, endpoint)</script>' },
+  ]);
+  await expect(page.locator('.finding').filter({ hasText: 'unquoted-js' }).filter({ hasText: '[M1]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'protocol-dynamic' }).filter({ hasText: '[U5]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'fetch-call' }).filter({ hasText: '[M4]' })).toHaveCount(1);
+});
+
+test('L findings expose precise position and a copyable LLM repair prompt', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'creator-help', content: '<%\nconst creatorState = 1;\n%>' },
+  });
+  const finding = page.locator('.finding').filter({ hasText: 'creator-help' }).filter({ hasText: '[L2]' });
+  await expect(finding).toContainText('第 2 行');
+  await expect(finding).toContainText('L2');
+  await expect(finding.locator('button[data-llm-fix]')).toHaveCount(1);
+  const prompt = await page.evaluate(() => {
+    const f = window.EjsPreflight.getReport().findings.find(x => x.ruleId === 'L2');
+    return window.EjsPreflight.buildLlmFixPrompt(f);
+  });
+  expect(prompt).toContain('[L2]');
+  expect(prompt).toContain('creator-help');
+  expect(prompt).toContain('不要改变原本功能');
+  expect(prompt).toContain('const creatorState = 1;');
+});
+
+test('object methods merely named eval or Function are not treated as the forbidden globals', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'method-names', content: '<% { const sandbox = { eval(){ return 1; }, Function(){ return 2; } }; sandbox.eval(); sandbox.Function(); } %>' },
+  });
+  const card = page.locator('.finding').filter({ hasText: 'method-names' });
+  await expect(card.filter({ hasText: '[M1]' })).toHaveCount(0);
+  await expect(card.filter({ hasText: '[M2]' })).toHaveCount(0);
+});
+
+test('direct aliases of eval and Function are blocked without trying to become a full data-flow engine', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'eval-alias', content: '<% { const runner = eval; void runner; } %>' },
+    2: { uid: 2, comment: 'function-alias', content: '<% { const maker = Function; void maker; } %>' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'eval-alias' }).filter({ hasText: '[M1]' })).toHaveCount(1);
+  await expect(page.locator('.finding').filter({ hasText: 'function-alias' }).filter({ hasText: '[M2]' })).toHaveCount(1);
+});
+
+test('markdown-style trailing punctuation does not make a real URL disappear', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'markdown-url', content: 'Reference: [https://third-party.example.net/file.js]' },
+  });
+  await expect(page.locator('.finding').filter({ hasText: 'markdown-url' }).filter({ hasText: '[U2]' })).toHaveCount(1);
+});
+
+test('uploader view hides reviewer-only findings while report keeps their visibility metadata', async ({ page }) => {
+  await page.goto(toolUrl + '?audience=uploader');
+  await expect(page.locator('#uploaderModeBtn')).toHaveClass(/active/);
+  await expect(page.locator('#modeHint')).toContainText('当前：上传者模式');
+  await page.locator('#fileInput').setInputFiles({
+    name: 'uploader-view.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ entries: {
+      1: { uid: 1, comment: 'visible-l', content: '<% const topLevel = 1; %>' },
+      2: { uid: 2, comment: 'hidden-review', content: '<% { const all = Object.entries(localStorage); void all; } %>' },
+    } })),
+  });
+
+  await expect(page.locator('#findings')).toContainText('[L2]');
+  await expect(page.locator('#findings')).not.toContainText('[M3]');
+  await expect(page.locator('#mStatus')).toHaveText('需修改');
+  await expect(page.locator('#exportBtn')).toHaveClass(/hidden/);
+  const report = await page.evaluate(() => window.EjsPreflight.getReport());
+  expect(report.findings.find(x => x.ruleId === 'L2').visibility).toBe('uploader_detailed');
+  expect(report.findings.find(x => x.ruleId === 'M3').visibility).toBe('reviewer_only');
+});
+
+test('demo UI switches uploader and reviewer views without editing the URL', async ({ page }) => {
+  await loadEntries(page, {
+    1: { uid: 1, comment: 'visible-l', content: '<% const topLevel = 1; %>' },
+    2: { uid: 2, comment: 'review-only', content: '<% { const all = Object.entries(localStorage); void all; } %>' },
+  }, 'mode-switch.json');
+
+  await expect(page.locator('#auditModeBtn')).toHaveClass(/active/);
+  await expect(page.locator('#modeHint')).toContainText('当前：审核员模式');
+  await expect(page.locator('#findings')).toContainText('[M3]');
+  await expect(page.locator('#exportBtn')).not.toHaveClass(/hidden/);
+
+  await page.locator('#uploaderModeBtn').click();
+  await expect(page.locator('#uploaderModeBtn')).toHaveClass(/active/);
+  await expect(page.locator('#modeHint')).toContainText('当前：上传者模式');
+  await expect(page.locator('#findings')).toContainText('[L2]');
+  await expect(page.locator('#findings')).not.toContainText('[M3]');
+  await expect(page.locator('#exportBtn')).toHaveClass(/hidden/);
+  expect(await page.evaluate(() => window.EjsPreflight.getAudienceMode())).toBe('uploader');
+
+  await page.locator('#auditModeBtn').click();
+  await expect(page.locator('#auditModeBtn')).toHaveClass(/active/);
+  await expect(page.locator('#findings')).toContainText('[M3]');
+  expect(await page.evaluate(() => window.EjsPreflight.getAudienceMode())).toBe('audit');
 });

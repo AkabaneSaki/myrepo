@@ -29,7 +29,7 @@
 
 世界书 EJS 应用：
 
-- L1–L6：Workshop EJS 组合兼容规则；
+- L1–L7：Workshop EJS 组合兼容规则；
 - M1–M5：共用 JavaScript 风险规则；
 - U2–U5：共用外部资源规则；
 - EJS-PARSE：EJS / JavaScript 编译检查；
@@ -43,7 +43,7 @@
 - U2–U5；
 - AH。
 
-**正则脚本不应用 L1–L6。**
+**正则脚本不应用 L1–L7。**
 
 L 系列是针对 EJS compilation unit / scope / 跨条目组合设计的规则，不能拿 EJS 的 scope 公约去限制普通 Regex HTML/JS。
 
@@ -59,6 +59,51 @@ M 系列只看实际可执行代码区域：
 - `javascript:` URL 中的可执行代码。
 
 EJS comment、JavaScript comment、普通字符串里出现危险关键词，不应仅因关键词本身被判错。
+
+### 2.4 一个检测引擎，两种产品输出
+
+Workshop 不维护两套互相漂移的 checker。底层 analyzer 只保留一套规则，但输出两个不同用途的状态：
+
+#### Upload Gate
+
+Upload Gate 的目标是先挡掉不值得消耗人工审核时间的内容。
+
+- `gate: reject`：存在明确阻断，例如 L 系列的 high 兼容错误、EJS parse / compile error、M1 / M2 / M5 等 Workshop 明确禁用能力；
+- `gate: accept`：没有自动阻断，可以进入人工审核；
+- M3 / M4 / U2–U5 / AH 这类“需要人判断”的 finding 本身不应因为机器不确定就自动把上传拒绝。
+
+Upload Gate 不是免费 JavaScript debugger。对于安全/风险 detector，只需要告诉作者“脚本未通过 Workshop 自动规则”或“可以进入人工审核”，不公开完整 detector 细节、绕过条件或逐步调试方法。
+
+L 系列例外。L1–L7 是公开的 Workshop EJS 组合兼容规范，不代表作者恶意，因此 uploader 应看到：
+
+- L 错误码；
+- 文件、条目；
+- 行号和列号；
+- 为什么不符合 Workshop 兼容规范；
+- 正确修复方向；
+- 可复制给 LLM 的修复提示。
+
+LLM 修复提示必须要求：只修 L 系列兼容问题，保持原功能 / 输出 / UI / 变量含义，不通过隐藏或混淆来绕过检查，并返回修正后的完整条目。
+
+#### Audit Center
+
+只有通过 Upload Gate 的内容才进入正常人工审核。
+
+- `audit: green`：没有需要 reviewer 特别留意的 warn / hint；
+- `audit: yellow`：存在 M3 / M4 / U2–U5 / AH 等需要人工确认的位置；
+- 若 `gate: reject`，`audit` 为 `not_applicable`，应先让作者修阻断项，不把明显不合格内容继续丢给 coworker。
+
+Audit Center 可以显示完整 evidence：规则 ID、精确位置、代码片段、原因与审核建议，方便 coworker 或 LLM 只检查黄色位置。
+
+### 2.5 Finding 可见性
+
+每条 finding 同时带可见性：
+
+- `uploader_detailed`：L1–L7、EJS-PARSE、文件读取错误；
+- `uploader_generic`：M1 / M2 / M5 等明确阻断，但不把安全 detector 的完整实现细节当成作者调试教程；
+- `reviewer_only`：M3 / M4 / U2–U5 / AH 等需要人工判断的详细 evidence。
+
+这个边界服务的是审核流程，不是“安全靠隐藏”。真正的硬规则必须在 analyzer 本身成立；可见性只是避免把 Workshop 审核工具变成面向上传者的免费对抗式 debug 服务。
 
 ## 3. L 系列：EJS Workshop 组合公约
 
@@ -130,9 +175,28 @@ L6 是第二道保险，不是项目绿色通过的唯一基础。
 
 离线 HTML 可以一次选择多个世界书进行 L6 比较。它不会在每次聊天生成时重新扫描所有世界书。
 
-### 不再使用 L7
+### L7 — Decorator 位置 / 结构错误
 
-原 checklist 的“可以 `const` 却用了 `let`”属于代码风格，不是 Workshop 需要 babysit 的兼容机制，因此删除。
+Decorator 的有效性必须先于 L1–L6 判断。
+
+ST-Prompt-Template 只从 entry 的第一个字符开始连续解析 decorator，因此：
+
+- `@@private` / 其他 `@@...` decorator 必须从 entry 真实第一行开始；
+- decorator 前不能有前导空行、EJS、Workshop metadata、HTML 或普通文本；
+- 多个 decorator 必须连续排列，中间不能插入空行或正文；
+- 如果 `@@private` 位于无效位置，该 entry **不得**获得 private scope 豁免，后续 L1–L6 必须按普通公开 entry 检查。
+
+例如：
+
+```ejs
+<%# metadata %>
+@@private
+<% const data = 1; %>
+```
+
+必须至少得到 L7；因为 `@@private` 实际不生效，顶层 `const` 还应继续得到 L2。
+
+L7 是结构兼容规则，不是代码风格 lint。
 
 ## 4. M 系列：EJS / Regex 共用 JavaScript 规则
 
@@ -290,7 +354,7 @@ AH 不属于 L / M / U violation。
 
 > **? 人工留意**
 
-它不会把 PASS 改成 REVIEW，也不会把 REVIEW 改成 FAIL。
+它不会改变兼容字段 `certification`；但在实际审核路由里，AH 会让 `audit` 变成 `yellow`，提醒 coworker / LLM 查看该位置。
 
 当前提示包括：
 
@@ -314,8 +378,9 @@ AH 不属于 L / M / U violation。
 - severity；
 - 文件；
 - 条目 / 正则脚本；
-- 行号；
+- 行号与列号；
 - rule ID；
+- 可见性；
 - 处理建议。
 
 ### O2 — 输出顺序稳定
@@ -332,51 +397,74 @@ AH 可以存在，因为它不影响认证状态。
 
 无法解析 / 编译的 EJS 必须明确 FAIL。
 
-### O5 — 必须有机器可读最终状态
+### O5 — 必须有机器可读的 Gate / Audit 状态
 
-报告必须输出唯一的：
+报告至少输出：
 
 ```json
 {
   "standard": "PW-CODE-CHECK-v1",
+  "gate": "accept",
+  "audit": "yellow",
   "certification": "pass"
 }
 ```
 
-`certification` 只有：
+运营流程以 `gate` / `audit` 为准：
 
-- `pass`
-- `review`
-- `fail`
+- `gate`：`accept` / `reject`；
+- `audit`：`green` / `yellow` / `not_applicable`。
 
-三种。
+`certification` 暂时保留为兼容字段：
 
-## 8. 状态定义
+- high finding → `fail`；
+- 没有 high、但有 warn → `review`；
+- 只有 info / AH 或完全没有 finding → `pass`。
 
-### PASS
+因此 AH-only 可以同时是：
 
-没有 blocker，没有需要确认项目。
+```json
+{
+  "gate": "accept",
+  "audit": "yellow",
+  "certification": "pass"
+}
+```
 
-可以仍然有 AH，因为 AH 不是违规。
+这不是矛盾：`certification` 表示旧的规则严重度兼容语义；`audit` 表示实际要不要把内容送到 reviewer / LLM 的黄色重点检查。
 
-### REVIEW
+## 8. 运营状态定义
 
-没有 blocker，但存在需要作者 / reviewer 确认的行为，例如：
+### Gate REJECT
+
+存在自动阻断项，例如：
+
+- L 系列的 high 阻断；
+- M1 / M2 / M5 等明确禁止能力；
+- EJS parse / compile error；
+- 文件无法读取；
+- 其他明确违反当前公约的 high 问题。
+
+这类内容先退回作者，不消耗 coworker 的正常人工审核时间。
+
+### Gate ACCEPT + Audit GREEN
+
+没有自动阻断，也没有 warn / AH。项目可以进入普通人工审核流程。
+
+GREEN 仍不表示“绝对安全”或“无 bug”。
+
+### Gate ACCEPT + Audit YELLOW
+
+没有自动阻断，但存在需要 reviewer / LLM 特别查看的位置，例如：
 
 - 显式共享全局；
-- 敏感数据访问；
+- 敏感或大范围浏览器数据访问；
 - 主动联网；
 - 未确认第三方域名；
-- 动态远程目标。
+- 动态远程目标；
+- AH 人工留意形状。
 
-### FAIL
-
-存在：
-
-- L 系列阻断；
-- M1 / M2 / M5 等明确阻断；
-- EJS parse / compile error；
-- 其他明确违反当前公约的高风险问题。
+这些 finding 的意义是**缩小 coworker 的阅读范围**，不是自动定罪。
 
 ## 9. 性能与扫描时机
 
@@ -399,7 +487,7 @@ L6 不需要每次聊天生成都扫描全部世界书。
 3. 真正可执行 `eval` / `Function` 被阻断；
 4. 项目自己的 localStorage 设置不误报 M3；
 5. Regex `<script>` 与 EJS 共用 M / U；
-6. Regex 不应用 L1–L6；
+6. Regex 不应用 L1–L7；
 7. Dalian-style 动态远程路径触发 U5；
 8. Qianyao / Ellia-style 有限固定 URL 集合不触发 U5；
 9. W3C SVG namespace 不触发 U3；
