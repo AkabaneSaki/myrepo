@@ -484,6 +484,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-signal--ejs { color:#E9D5FF; border-color:rgba(192,132,252,.42); background:rgba(147,51,234,.15); }
 .admin-review-signal--good { color:#BBF7D0; border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.1); }
 .admin-review-signal--warning { color:#FDE68A; border-color:rgba(245,158,11,.34); background:rgba(245,158,11,.1); }
+.admin-code-check { display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:14px; border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.6); }
+.admin-code-check--green { border-color:rgba(34,197,94,.28); }
+.admin-code-check--yellow { border-color:rgba(245,158,11,.34); }
+.admin-code-check--reject { border-color:rgba(248,113,113,.42); background:rgba(127,29,29,.1); }
+.admin-code-check-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.admin-code-check-head > div:first-child { display:flex; flex-direction:column; gap:3px; }
+.admin-code-check-head strong { color:#F8FAFC; }
+.admin-code-check-head > div:first-child > span,.admin-code-check-note { color:rgba(226,232,240,.65); font-size:.78rem; }
+.admin-code-check-counts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+.admin-code-check-counts span { padding:4px 7px; border-radius:999px; border:1px solid rgba(148,163,184,.18); color:#CBD5E1; font-size:.7rem; }
+.admin-code-check-note { margin:0; line-height:1.5; }
+.admin-code-check-list { display:flex; flex-direction:column; gap:7px; }
+.admin-code-check-item { overflow:hidden; border:1px solid rgba(148,163,184,.14); border-radius:10px; background:rgba(2,6,23,.3); }
+.admin-code-check-item--high { border-color:rgba(248,113,113,.32); }
+.admin-code-check-item--warn { border-color:rgba(245,158,11,.28); }
+.admin-code-check-item--hint { border-color:rgba(99,102,241,.26); }
+.admin-code-check-item summary { display:flex; justify-content:space-between; gap:10px; padding:9px 10px; cursor:pointer; color:#E2E8F0; font-size:.78rem; }
+.admin-code-check-item summary::-webkit-details-marker { display:none; }
+.admin-code-check-item summary > span:last-child { color:rgba(226,232,240,.48); text-align:right; font-size:.7rem; }
+.admin-code-check-item-body { padding:0 10px 10px; color:rgba(226,232,240,.78); font-size:.76rem; line-height:1.5; overflow-wrap:anywhere; }
+.admin-code-check-item-body p { margin:6px 0 0; white-space:pre-wrap; }
+.admin-code-check-empty { color:#BBF7D0; font-size:.8rem; }
 .admin-review-description { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.58); overflow:hidden; }
 .admin-review-description summary { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:11px 13px; cursor:pointer; font-weight:650; color:#E2E8F0; }
 .admin-review-description summary::-webkit-details-marker { display:none; }

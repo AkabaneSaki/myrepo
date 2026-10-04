@@ -10,6 +10,7 @@ import {
   type ProjectEntryKind,
 } from '../../utils/project-content';
 import { r2Storage } from '../../utils/r2';
+import { analyzeProjectCode, formatUploaderCodeCheckError, toUploaderCodeCheck } from '../../utils/ejs-preflight.mjs';
 import { bumpProjectVersionWithLegacyFallback } from '../../utils/version.js';
 import { computeProjectInspectionSummary, readProjectContentForEdit } from './content';
 
@@ -128,6 +129,15 @@ export class ProjectUpload extends OpenAPIRoute {
 
     const worldbookText = new TextDecoder().decode(arrayBuffer);
     const validation = validateProjectContentText(worldbookText, 'worldbook');
+    const codeCheck = validation.valid === false
+      ? null
+      : analyzeProjectCode([{ fileName: `project-${projectId}.json`, type: 'worldbook', text: worldbookText }]);
+    if (codeCheck?.gate === 'reject') {
+      return c.json(
+        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
+        422,
+      );
+    }
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
     }
@@ -376,6 +386,15 @@ export class ProjectRegexUpload extends OpenAPIRoute {
 
     const regexText = new TextDecoder().decode(arrayBuffer);
     const validation = validateProjectContentText(regexText, 'regex');
+    const codeCheck = validation.valid === false
+      ? null
+      : analyzeProjectCode([{ fileName: `regex-${projectId}.json`, type: 'regex', text: regexText }]);
+    if (codeCheck?.gate === 'reject') {
+      return c.json(
+        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
+        422,
+      );
+    }
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
     }
