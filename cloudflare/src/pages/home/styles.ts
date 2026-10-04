@@ -221,9 +221,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .upload-preview-error { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; border:1px solid rgba(248,113,113,.32); background:rgba(127,29,29,.18); color:#FECACA; font-size:.84rem; }
 .upload-preflight-status { display:flex; align-items:flex-start; gap:8px; padding:9px 11px; border:1px solid rgba(255,255,255,.08); border-radius:9px; background:#151619; color:#aaa8a3; font-size:.78rem; line-height:1.5; }
 .upload-preflight-status > i { flex:none; margin-top:2px; }
-.upload-preflight-status-body { min-width:0; flex:1; display:flex; flex-direction:column; gap:8px; }
+.upload-preflight-status-body { min-width:0; flex:1; display:flex; flex-direction:column; gap:10px; }
 .upload-preflight-headline { color:inherit; font-weight:750; white-space:pre-wrap; overflow-wrap:anywhere; }
-.upload-preflight-findings { display:flex; flex-direction:column; gap:7px; }
+.upload-preflight-tools { display:flex; flex-wrap:wrap; gap:7px; }
+.upload-preflight-action { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:6px 9px; border:1px solid rgba(198,179,143,.3); border-radius:8px; background:rgba(198,179,143,.08); color:#e4d5b8; font:inherit; font-weight:700; cursor:pointer; }
+.upload-preflight-action:hover { border-color:rgba(216,194,153,.5); background:rgba(198,179,143,.14); }
+.upload-preflight-action--entry { margin-top:2px; align-self:flex-start; }
+.upload-preflight-groups { display:flex; flex-direction:column; gap:8px; }
+.upload-preflight-group { border:1px solid rgba(255,255,255,.09); border-radius:9px; background:rgba(0,0,0,.1); overflow:hidden; }
+.upload-preflight-group > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; cursor:pointer; list-style:none; }
+.upload-preflight-group > summary::-webkit-details-marker { display:none; }
+.upload-preflight-group > summary::before { content:'›'; flex:none; color:#9d988f; font-size:1rem; transform:rotate(0deg); transition:transform .15s ease; }
+.upload-preflight-group[open] > summary::before { transform:rotate(90deg); }
+.upload-preflight-group-name { min-width:0; flex:1; color:#ece8e1; font-weight:750; overflow-wrap:anywhere; }
+.upload-preflight-group-count { flex:none; padding:2px 6px; border-radius:999px; background:rgba(225,120,112,.12); color:#e7aaa5; font-size:.7rem; font-weight:750; }
+.upload-preflight-group-body { display:flex; flex-direction:column; gap:7px; padding:0 9px 9px 28px; }
 .upload-preflight-finding { padding:8px 9px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:rgba(0,0,0,.12); color:#c9c6c0; }
 .upload-preflight-finding--high { border-color:rgba(225,120,112,.28); background:rgba(125,60,55,.12); }
 .upload-preflight-finding--warn { border-color:rgba(202,163,77,.25); background:rgba(125,100,45,.08); }
@@ -234,6 +246,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .upload-preflight-status--checking { color:#c6b38f; border-color:rgba(190,164,125,.2); background:rgba(190,164,125,.055); }
 .upload-preflight-status--ok { color:#b8d0b8; border-color:rgba(126,161,125,.26); background:rgba(91,126,90,.11); }
 .upload-preflight-status--error { color:#e1aaa5; border-color:rgba(190,105,98,.28); background:rgba(125,60,55,.13); }
+@media (max-width:640px) { .upload-preflight-status { padding:9px; } .upload-preflight-tools { display:grid; grid-template-columns:1fr; } .upload-preflight-action { width:100%; justify-content:center; } .upload-preflight-group > summary { align-items:flex-start; } .upload-preflight-group-body { padding:0 8px 8px; } }
 .upload-cover-image { display:block; width:100%; height:220px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid rgba(255,255,255,.08); background:#151619; }
 .edit-current-content { margin:18px 0 20px; display:flex; flex-direction:column; gap:12px; }
 .edit-current-content .detail-section { margin:0; }

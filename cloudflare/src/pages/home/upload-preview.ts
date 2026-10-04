@@ -138,33 +138,147 @@ function renderUploadPreviewError(container, error) {
   container.innerHTML = '<div class="upload-preview-error"><i class="fas fa-triangle-exclamation"></i><span>' + escapeHtml(message) + '</span></div>';
 }
 
-function renderUploadPreflightStatus(container, status, message, codeCheck = null) {
+function getUploadPreparedEntryName(entry, kind, index) {
+  if (kind === 'regex') return String(entry?.scriptName || entry?.name || entry?.id || ('Regex ' + (index + 1)));
+  return String(entry?.comment || entry?.name || ('Entry ' + index));
+}
+
+function getUploadPreparedEntrySource(entry, kind) {
+  if (kind === 'regex') return String(entry?.replaceString || '');
+  return String(entry?.content || entry?.text || '');
+}
+
+function groupUploadPreflightFindings(findings) {
+  const groups = [];
+  const byKey = new Map();
+  (findings || []).forEach(item => {
+    const entry = String(item?.entry || '').trim();
+    const book = String(item?.book || '').trim();
+    const key = entry ? 'entry:' + book + ':' + entry : 'file:' + book;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, entry, book, findings: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.findings.push(item);
+  });
+  return groups;
+}
+
+function getUploadPromptSources(findings, prepared, kind) {
+  const entries = Array.isArray(prepared?.entries) ? prepared.entries : [];
+  if (!entries.length) return [];
+  const wantedNames = new Set();
+  const wantedUids = new Set();
+  (findings || []).forEach(item => {
+    String(item?.entry || '').split(/\s*↔\s*/).filter(Boolean).forEach(name => wantedNames.add(name));
+    String(item?.uid ?? '').split(/\s*↔\s*/).filter(Boolean).forEach(uid => wantedUids.add(uid));
+  });
+  const matched = entries.map((entry, index) => ({
+    entry,
+    index,
+    name: getUploadPreparedEntryName(entry, kind, index),
+    uid: String(kind === 'regex' ? (entry?.id ?? index) : (entry?.uid ?? index)),
+  })).filter(item => wantedNames.has(item.name) || wantedUids.has(item.uid));
+  if (!matched.length && entries.length === 1) {
+    return [{ entry: entries[0], index: 0, name: getUploadPreparedEntryName(entries[0], kind, 0), uid: String(entries[0]?.uid ?? entries[0]?.id ?? 0) }];
+  }
+  return matched;
+}
+
+function buildUploadLlmFixPrompt(findings, prepared, kind) {
+  const visible = Array.isArray(findings) ? findings : [];
+  const issues = visible.map(item => {
+    const location = (item?.entry ? String(item.entry) : (item?.book ? String(item.book) : '文件'))
+      + ' · 第 ' + Number(item?.line || 1) + ' 行，第 ' + Number(item?.column || 1) + ' 列';
+    return '- [' + String(item?.ruleId || 'CHECK') + '] ' + String(item?.title || '需要处理')
+      + '\n  位置：' + location
+      + (item?.detail ? '\n  问题：' + String(item.detail) : '')
+      + (item?.suggestion ? '\n  Workshop 要求：' + String(item.suggestion) : '');
+  }).join('\n');
+  const sources = getUploadPromptSources(visible, prepared, kind);
+  const sourceText = sources.map(item => {
+    const language = kind === 'regex' ? 'javascript' : 'ejs';
+    return '### ' + item.name + '\n\n\`\`\`' + language + '\n' + getUploadPreparedEntrySource(item.entry, kind) + '\n\`\`\`';
+  }).join('\n\n');
+  return '你正在修复 SillyTavern / Poem Workshop 上传内容。请只修复下面列出的 Workshop 自动检查问题，不要改变原本功能、输出内容、变量含义、角色设定、YAML/文本内容或业务逻辑，也不要通过删除功能、隐藏代码、混淆代码来绕过检查。\n\n'
+    + '修复要求：\n'
+    + '1. 保持现有行为；只做解决这些检查项所需的最小修改。\n'
+    + '2. L1-L7 属于 Workshop EJS 组合兼容公约：临时状态应放在正确局部作用域；不要依赖 placement、depth、role 或 message 隔离顶层名称。\n'
+    + '3. 如果必须跨条目共享，只使用项目专属、明确的 globalThis 命名空间，并说明 Owner / Lifecycle / Cleanup；不要制造裸全局。\n'
+    + '4. @@private / 其他 decorator 必须保持在 entry 真正开头的连续 decorator 区；不要移动或删除 poem-workshop-meta。\n'
+    + '5. 不要把 let 机械替换成 const；只有不会重新赋值时才改 const。\n'
+    + '6. 若报告含 EJS-PARSE，先判断是否真是 JavaScript/EJS 语法错误；不要为了消警告破坏合法代码。\n'
+    + '7. 返回每个受影响条目的完整修正版，并在最后按 [规则ID] 简短说明如何修复；不要省略原有正文。\n\n'
+    + '需要处理的问题：\n' + (issues || '- 无') + '\n\n'
+    + (sourceText ? '原始受影响内容：\n\n' + sourceText : '原始内容未能自动定位，请根据上面的条目名和行列位置在上传文件中查找。');
+}
+
+function buildUploadCheckReport(codeCheck, prepared, kind) {
+  const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
+  const blockers = findings.filter(item => item?.severity === 'high').length;
+  const groups = groupUploadPreflightFindings(findings);
+  return '# Poem Workshop 上传检查报告\n\n'
+    + '- 状态：' + (codeCheck?.gate === 'reject' ? '未通过' : '通过自动门禁') + '\n'
+    + '- 阻断项：' + blockers + '\n'
+    + '- 受影响内容：' + groups.length + '\n'
+    + '- 导出时间：' + new Date().toISOString() + '\n\n'
+    + '## 给 LLM 的修复提示\n\n'
+    + buildUploadLlmFixPrompt(findings, prepared, kind) + '\n';
+}
+
+function downloadUploadCheckReport(codeCheck, prepared, kind) {
+  const text = buildUploadCheckReport(codeCheck, prepared, kind);
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'workshop-upload-check-' + new Date().toISOString().replace(/[:.]/g, '-') + '.md';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderUploadPreflightStatus(container, status, message, codeCheck = null, prepared = null, kind = 'worldbook') {
   if (!container) return;
   container.querySelector('[data-upload-preflight-status]')?.remove();
   const normalized = ['checking', 'ok', 'error'].includes(status) ? status : 'checking';
   const icon = normalized === 'ok' ? 'fa-circle-check' : (normalized === 'error' ? 'fa-circle-xmark' : 'fa-spinner fa-spin');
   const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
   const blockerCount = findings.filter(item => item?.severity === 'high').length;
+  const groups = groupUploadPreflightFindings(findings);
   const headline = normalized === 'error' && blockerCount
-    ? '自动检查未通过：发现 ' + blockerCount + ' 个阻断项，请逐条修复后重新上传。'
+    ? '自动检查未通过：发现 ' + blockerCount + ' 个阻断项，涉及 ' + groups.length + ' 个内容。'
     : String(message || '');
-  const findingsHtml = findings.length
-    ? '<div class="upload-preflight-findings">' + findings.map(item => {
-      const ruleId = escapeHtml(item?.ruleId || 'CHECK');
-      const title = escapeHtml(item?.title || '需要处理');
-      const locationParts = [];
-      if (item?.entry) locationParts.push('条目：' + item.entry);
-      else if (item?.book) locationParts.push('文件：' + item.book);
-      if (Number.isFinite(Number(item?.line))) {
-        locationParts.push('第 ' + Number(item.line) + ' 行' + (Number.isFinite(Number(item?.column)) ? '，第 ' + Number(item.column) + ' 列' : ''));
-      }
-      const severityClass = item?.severity === 'high' ? 'high' : (item?.severity === 'warn' ? 'warn' : 'info');
-      return '<div class="upload-preflight-finding upload-preflight-finding--' + severityClass + '">'
-        + '<div class="upload-preflight-finding-title"><strong>[' + ruleId + '] ' + title + '</strong></div>'
-        + (locationParts.length ? '<div class="upload-preflight-finding-meta">' + escapeHtml(locationParts.join(' · ')) + '</div>' : '')
-        + (item?.detail ? '<div class="upload-preflight-finding-detail">' + escapeHtml(item.detail) + '</div>' : '')
-        + (item?.suggestion ? '<div class="upload-preflight-finding-fix"><strong>建议：</strong>' + escapeHtml(item.suggestion) + '</div>' : '')
-        + '</div>';
+  const toolsHtml = findings.length
+    ? '<div class="upload-preflight-tools"><button type="button" class="upload-preflight-action" data-upload-copy-all><i class="fas fa-wand-magic-sparkles"></i> 复制全部给 LLM</button><button type="button" class="upload-preflight-action" data-upload-export-report><i class="fas fa-file-arrow-down"></i> 导出检查报告</button></div>'
+    : '';
+  const findingsHtml = groups.length
+    ? '<div class="upload-preflight-groups">' + groups.map((group, groupIndex) => {
+      const groupBlockers = group.findings.filter(item => item?.severity === 'high').length;
+      const groupLabel = group.entry ? (group.entry.includes('↔') ? '跨条目：' + group.entry : group.entry) : (group.book || '文件检查');
+      const itemsHtml = group.findings.map(item => {
+        const ruleId = escapeHtml(item?.ruleId || 'CHECK');
+        const title = escapeHtml(item?.title || '需要处理');
+        const locationParts = [];
+        if (Number.isFinite(Number(item?.line))) {
+          locationParts.push('第 ' + Number(item.line) + ' 行' + (Number.isFinite(Number(item?.column)) ? '，第 ' + Number(item.column) + ' 列' : ''));
+        }
+        const severityClass = item?.severity === 'high' ? 'high' : (item?.severity === 'warn' ? 'warn' : 'info');
+        return '<div class="upload-preflight-finding upload-preflight-finding--' + severityClass + '">'
+          + '<div class="upload-preflight-finding-title"><strong>[' + ruleId + '] ' + title + '</strong></div>'
+          + (locationParts.length ? '<div class="upload-preflight-finding-meta">' + escapeHtml(locationParts.join(' · ')) + '</div>' : '')
+          + (item?.detail ? '<div class="upload-preflight-finding-detail">' + escapeHtml(item.detail) + '</div>' : '')
+          + (item?.suggestion ? '<div class="upload-preflight-finding-fix"><strong>建议：</strong>' + escapeHtml(item.suggestion) + '</div>' : '')
+          + '</div>';
+      }).join('');
+      return '<details class="upload-preflight-group"' + (groupIndex === 0 ? ' open' : '') + '>'
+        + '<summary><span class="upload-preflight-group-name">' + escapeHtml(groupLabel) + '</span><span class="upload-preflight-group-count">' + (groupBlockers ? '阻断 ' + groupBlockers : '提示 ' + group.findings.length) + '</span></summary>'
+        + '<div class="upload-preflight-group-body">' + itemsHtml
+        + '<button type="button" class="upload-preflight-action upload-preflight-action--entry" data-upload-copy-group="' + groupIndex + '"><i class="fas fa-wand-magic-sparkles"></i> 复制此内容给 LLM 修复</button>'
+        + '</div></details>';
     }).join('') + '</div>'
     : '';
   const node = document.createElement('div');
@@ -172,10 +286,27 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
   node.dataset.uploadPreflightStatus = normalized;
   node.setAttribute('role', normalized === 'error' ? 'alert' : 'status');
   node.setAttribute('aria-live', normalized === 'error' ? 'assertive' : 'polite');
-  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + findingsHtml + '</div>';
+  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + toolsHtml + findingsHtml + '</div>';
   const summary = container.querySelector('.upload-preview-summary');
   if (summary?.nextSibling) container.insertBefore(node, summary.nextSibling);
   else container.appendChild(node);
+
+  node.querySelectorAll('[data-upload-copy-group]').forEach(button => button.addEventListener('click', async () => {
+    const group = groups[Number(button.dataset.uploadCopyGroup)];
+    if (!group) return;
+    const copied = await copyTextToClipboard(buildUploadLlmFixPrompt(group.findings, prepared, kind));
+    showToast(copied ? '修复提示已复制，可以直接贴给 LLM。' : '浏览器禁止自动复制，请导出报告。', copied ? 'info' : 'warning');
+  }));
+  const copyAll = node.querySelector('[data-upload-copy-all]');
+  if (copyAll) copyAll.addEventListener('click', async () => {
+    const copied = await copyTextToClipboard(buildUploadLlmFixPrompt(findings, prepared, kind));
+    showToast(copied ? '全部修复提示已复制，可以直接贴给 LLM。' : '浏览器禁止自动复制，请导出报告。', copied ? 'info' : 'warning');
+  });
+  const exportButton = node.querySelector('[data-upload-export-report]');
+  if (exportButton) exportButton.addEventListener('click', () => {
+    downloadUploadCheckReport(codeCheck, prepared, kind);
+    showToast('检查报告已导出为 Markdown，可直接交给 LLM。', 'info');
+  });
 }
 
 function renderWorldbookUploadPreview(container, prepared) {

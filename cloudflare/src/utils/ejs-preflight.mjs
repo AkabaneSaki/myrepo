@@ -493,7 +493,8 @@ function compileOnly(code){
     }
   }
   if(stack.length)return 'JavaScript 括号结构未闭合';
-  if(/\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:;|$)/m.test(clean))return 'JavaScript 变量赋值缺少右侧表达式';
+  const declarationAssignmentRe=/\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=(?!=|>)/g;let declarationMatch;
+  while((declarationMatch=declarationAssignmentRe.exec(clean))){let at=declarationAssignmentRe.lastIndex;while(at<clean.length&&/\s/.test(clean[at]))at++;if(at>=clean.length||clean[at]===';')return 'JavaScript 变量赋值缺少右侧表达式'}
   if(/(?:^|[;{}]\s*)return\s*;\s*[^}\s]/m.test(clean))return null;
   return null;
 }

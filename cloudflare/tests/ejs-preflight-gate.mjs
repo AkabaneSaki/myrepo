@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { analyzeProjectCode, formatUploaderCodeCheckError, toUploaderCodeCheck } from '../src/utils/ejs-preflight.mjs';
 
 function worldbook(entries) {
@@ -38,6 +39,13 @@ const syntax = analyzeProjectCode([{
 }]);
 assert.equal(syntax.gate, 'reject');
 assert.ok(rules(syntax).includes('EJS-PARSE'));
+
+const multilineAssignment = analyzeProjectCode([{
+  fileName: 'multiline-assignment.json',
+  type: 'worldbook',
+  text: worldbook([{ comment: 'valid-multiline', content: '<% { let skillCount =\n  Object.keys({ a: 1 }).length;\nvoid skillCount; } %>' }]),
+}]);
+assert.ok(!rules(multilineAssignment).includes('EJS-PARSE'));
 
 const collision = analyzeProjectCode([{
   fileName: 'collision.json',
@@ -125,10 +133,48 @@ const uploadPreviewSource = fs.readFileSync(new URL('../src/pages/home/upload-pr
 assert.match(uploadPreviewSource, /function renderUploadPreflightStatus/);
 assert.match(uploadPreviewSource, /upload-preflight-status/);
 assert.match(uploadPreviewSource, /codeCheck\.findings/);
-assert.match(uploadPreviewSource, /findings\.map/);
+assert.match(uploadPreviewSource, /function groupUploadPreflightFindings/);
+assert.match(uploadPreviewSource, /function buildUploadLlmFixPrompt/);
+assert.match(uploadPreviewSource, /function downloadUploadCheckReport/);
+assert.match(uploadPreviewSource, /data-upload-copy-group/);
+assert.match(uploadPreviewSource, /data-upload-copy-all/);
+assert.match(uploadPreviewSource, /data-upload-export-report/);
 assert.match(uploadPreviewSource, /自动检查未通过：发现/);
-assert.match(uploadPreviewSource, /upload-preflight-finding-title/);
-assert.match(editorSource, /prepared\.codeCheck\);/);
+assert.match(uploadPreviewSource, /upload-preflight-group-name/);
+assert.match(editorSource, /prepared\.codeCheck, prepared, kind/);
+
+const uploadPreviewModule = await import('data:text/javascript;base64,' + Buffer.from(uploadPreviewSource).toString('base64'));
+const uploadPreviewContext = {};
+vm.runInNewContext(
+  uploadPreviewModule.homeUploadPreviewScript
+    + '\n;globalThis.__uploadPreviewTest={groupUploadPreflightFindings,buildUploadLlmFixPrompt,buildUploadCheckReport};',
+  uploadPreviewContext,
+);
+const uploadPreviewTest = uploadPreviewContext.__uploadPreviewTest;
+const groupedFindings = [
+  { ruleId: 'L2', severity: 'high', title: '顶层 let', detail: 'A', suggestion: '局部化', entry: 'Entry A', uid: 1, line: 5, column: 1, book: 'demo.json' },
+  { ruleId: 'L4', severity: 'high', title: '裸赋值', detail: 'B', suggestion: '声明变量', entry: 'Entry A', uid: 1, line: 9, column: 1, book: 'demo.json' },
+  { ruleId: 'L2', severity: 'high', title: '顶层 let', detail: 'C', suggestion: '局部化', entry: 'Entry B', uid: 2, line: 3, column: 1, book: 'demo.json' },
+];
+const groupedPrepared = { entries: [
+  { uid: 1, comment: 'Entry A', content: '<% let a = 1; %>' },
+  { uid: 2, comment: 'Entry B', content: '<% let b = 2; %>' },
+  { uid: 3, comment: 'Healthy', content: 'no issue' },
+] };
+const groupedCards = uploadPreviewTest.groupUploadPreflightFindings(groupedFindings);
+assert.equal(groupedCards.length, 2);
+assert.equal(groupedCards[0].findings.length, 2);
+const entryPrompt = uploadPreviewTest.buildUploadLlmFixPrompt(groupedCards[0].findings, groupedPrepared, 'worldbook');
+assert.match(entryPrompt, /\[L2\]/);
+assert.match(entryPrompt, /\[L4\]/);
+assert.match(entryPrompt, /<% let a = 1; %>/);
+assert.doesNotMatch(entryPrompt, /<% let b = 2; %>/);
+assert.doesNotMatch(entryPrompt, /no issue/);
+const exportedReport = uploadPreviewTest.buildUploadCheckReport({ gate: 'reject', findings: groupedFindings }, groupedPrepared, 'worldbook');
+assert.match(exportedReport, /Poem Workshop 上传检查报告/);
+assert.match(exportedReport, /给 LLM 的修复提示/);
+assert.match(exportedReport, /Entry A/);
+assert.match(exportedReport, /Entry B/);
 
 const stylesSource = fs.readFileSync(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8');
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-check-head strong/);
