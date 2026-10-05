@@ -204,6 +204,14 @@ assert.match(exportedReport, /Entry B/);
 assert.match(exportedReport, /检查版本：v2/);
 assert.match(exportedReport, /语法检查依据：test parser/);
 assert.match(uploadPreviewTest.buildUploadLlmFixPrompt([{ruleId:'CHECKER-INTERNAL'}], groupedPrepared, 'worldbook'), /无需因此修改源码/);
+const parseOnlyPrompt = uploadPreviewTest.buildUploadLlmFixPrompt([{
+  ruleId:'EJS-PARSE', severity:'high', title:'EJS 无法解析', detail:'语法错误', suggestion:'修复语法',
+  entry:'Entry A', uid:1, line:1, column:1, book:'demo.json',
+}], groupedPrepared, 'worldbook');
+assert.match(parseOnlyPrompt, /优先简单、局部、保守/);
+assert.match(parseOnlyPrompt, /不确定时不要猜测命定创意工坊或 SillyTavern 的隐藏实现/);
+assert.doesNotMatch(parseOnlyPrompt, /Owner \/ Lifecycle \/ Cleanup/);
+assert.doesNotMatch(parseOnlyPrompt, /项目专属、明确的 globalThis 命名空间/);
 
 const offlineSource = fs.readFileSync(new URL('../../util/ejs-preflight.html', import.meta.url), 'utf8');
 assert.match(offlineSource, /命定创意工坊 · EJS \/ 正则检查/);

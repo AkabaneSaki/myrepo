@@ -250,15 +250,13 @@ function buildUploadLlmFixPrompt(findings, prepared, kind) {
   }).join('\n\n');
   return '你正在修复 SillyTavern / 命定创意工坊 上传内容。请只修复下面列出的自动检查问题，不要改变原本功能、输出内容、变量含义、角色设定、YAML / 正文内容或业务逻辑，也不要通过删除功能、隐藏代码、混淆代码来绕过检查。\n\n'
     + '修复要求：\n'
-    + '1. 保持现有行为；只做解决这些检查项所需的最小修改。\n'
-    + '2. L1-L7 属于 Workshop EJS 组合兼容公约：临时状态应放在正确局部作用域；不要依赖 placement、depth、role 或 message 隔离顶层名称。\n'
-    + '3. 如果必须跨条目共享，只使用项目专属、明确的 globalThis 命名空间，并说明 Owner / Lifecycle / Cleanup；不要制造裸全局。\n'
-    + '4. @@private / 其他 decorator 必须保持在 entry 真正开头的连续 decorator 区；不要移动或删除 poem-workshop-meta。\n'
-    + '5. 不要把 let 机械替换成 const；只有不会重新赋值时才改 const。\n'
-    + '6. 若报告含 EJS-PARSE，先判断是否真是 JavaScript/EJS 语法错误；不要为了消警告破坏合法代码。\n'
-    + '7. 返回每个受影响条目的完整修正版，并在最后按 [规则ID] 简短说明如何修复；不要省略原有正文。\n\n'
+    + '1. 优先简单、局部、保守；只做解决当前报告所需的最小修改。\n'
+    + '2. 保持最终行为，不要求保留旧代码结构；不确定时不要猜测命定创意工坊或 SillyTavern 的隐藏实现。\n'
+    + '3. 若报告含 EJS-PARSE，只修复能够确认的 JavaScript / EJS 语法问题，不要为了消警告破坏合法代码。\n'
+    + '4. 不要主动引入 globalThis、window、self、动态执行、字符串拼接代码等复杂机制绕过普通问题。\n'
+    + '5. 返回每个受影响内容的完整修正版，并在最后按 [规则ID] 简短说明实际改了什么；不要省略原有正文。\n\n'
     + '需要处理的问题：\n' + (issues || '- 无') + '\n\n'
-    + (sourceText ? '原始受影响内容：\n\n' + sourceText : '原始内容未能自动定位，请根据上面的条目名和行列位置在上传文件中查找。');
+    + (sourceText ? '原始受影响内容：\n\n' + sourceText : '原始内容未能自动定位，请根据上面的名称和行列位置在上传文件中查找。');
 }
 
 function buildUploadCheckReport(codeCheck, prepared, kind) {
