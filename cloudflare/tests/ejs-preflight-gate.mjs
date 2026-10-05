@@ -241,6 +241,9 @@ assert.match(adminUiSource, /function renderAdminAuditReadableEvidence\(detail, 
 assert.match(adminUiSource, /条目中可见 URL/);
 assert.match(adminUiSource, /data-admin-code-jump/);
 assert.match(adminUiSource, /function bindAdminCodeCheckNavigation\(overlay, detail\)/);
+assert.match(adminUiSource, /data-admin-audit-recheck/);
+assert.match(adminUiSource, /prefetchedDetail \|\| await fetchAdminReviewDetail\(project\.id\)/);
+assert.match(adminUiSource, /已按当前 Checker 规则重新检查/);
 assert.match(adminUiSource, /codeCheck\?\.gate === \"reject\" \? \"disabled\"/);
 
 console.log('EJS upload gate + audit report smoke: ok');

@@ -518,6 +518,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-code-check--reject { border-color:rgba(248,113,113,.42); background:rgba(127,29,29,.1); }
 .admin-code-check-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
 .admin-code-check-head > div:first-child { display:flex; flex-direction:column; gap:3px; }
+.admin-code-check-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 .admin-code-check-head strong { color:#F8FAFC; }
 .admin-code-check-head > div:first-child > span,.admin-code-check-note { color:rgba(226,232,240,.65); font-size:.78rem; }
 .admin-code-check-counts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
@@ -2037,7 +2038,8 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
   .admin-review-detail-signals .admin-review-signals { justify-content:flex-start; }
   .admin-review-detail-scroll { padding:12px 2px 14px 0; }
   .admin-code-check-head { flex-direction:column; }
-  .admin-code-check-export { width:100%; justify-content:center; }
+  .admin-code-check-actions { width:100%; flex-direction:column; align-items:stretch; }
+  .admin-code-check-actions .btn { width:100%; justify-content:center; }
   .admin-code-check-counts { justify-content:flex-start; }
   .admin-audit-evidence-row { grid-template-columns:1fr; gap:4px; }
   .admin-code-location { width:100%; justify-content:space-between; }

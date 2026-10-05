@@ -141,6 +141,66 @@ test('audit Markdown uses loaded full sources and safe fences without requests',
   expect(requests).toEqual([]);
 });
 
+test('refresh and recheck reloads the current review detail and redraws the audit result', async ({ page }) => {
+  await install(page);
+  await page.evaluate(() => {
+    let callCount = 0;
+    const yellow = {
+      reviewToken: 'a'.repeat(64),
+      project: { id: 'test', name: 'Refresh project', draftRevision: 3 },
+      worldbookEntriesPreview: [],
+      regexEntriesPreview: [],
+      codeCheck: {
+        engine: 'v2',
+        parserCompatibility: 'Acorn',
+        gate: 'accept',
+        audit: 'yellow',
+        files: [],
+        findings: [{ ruleId: 'AH2', severity: 'hint', reviewState: 'new', entry: 'Gallery', entryId: '0:project-test.json:1', book: 'project-test.json', uid: 1, title: '媒体来源需要人工确认', detail: 'dynamic', suggestion: 'review', line: 1, column: 1 }],
+        removedFindings: [],
+        auditSummary: { new: 1, changed: 0, accepted: 0, removed: 0, pending: 1 },
+      },
+    };
+    const green = {
+      ...yellow,
+      reviewToken: 'b'.repeat(64),
+      codeCheck: { ...yellow.codeCheck, audit: 'green', findings: [], auditSummary: { new: 0, changed: 0, accepted: 0, removed: 0, pending: 0 } },
+    };
+    window.fetchAdminReviewDetail = async () => {
+      callCount += 1;
+      window.__reviewDetailFetchCount = callCount;
+      return callCount === 1 ? yellow : green;
+    };
+    window.openModal = body => {
+      const overlay = document.createElement('div');
+      overlay.innerHTML = '<div class="modal-content">' + body + '</div>';
+      document.body.append(overlay);
+      return overlay;
+    };
+    window.getAuthorName = () => 'Author';
+    window.getBaseTag = () => '扩展';
+    window.collectProjectExternalLinks = () => [];
+    window.loadProjectOriginalConflictItems = async () => ({ requestedNames: [] });
+    window.renderExternalLinksPanel = () => '';
+    window.renderDetailSection = () => '';
+    window.renderDetailEntry = () => '';
+    window.renderRegexEntry = () => '';
+    window.setButtonLoading = button => {
+      button.disabled = true;
+      return () => { button.disabled = false; };
+    };
+    window.showToast = message => { window.__lastToast = message; };
+  });
+  await page.evaluate(() => openAdminReviewDetail({ id: 'test', name: 'Refresh project', draftRevision: 3 }, null, []));
+  await expect(page.locator('.admin-code-check--yellow')).toBeVisible();
+  await expect(page.getByRole('button', { name: '刷新并重新检查' })).toBeVisible();
+  await page.getByRole('button', { name: '刷新并重新检查' }).click();
+  await expect.poll(() => page.evaluate(() => window.__reviewDetailFetchCount)).toBe(2);
+  await expect(page.locator('.admin-code-check--green')).toBeVisible();
+  await expect(page.locator('.admin-code-check--yellow')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__lastToast)).toContain('已按当前 Checker 规则重新检查');
+});
+
 test('approval submits the token from the loaded review detail', async ({ page }) => {
   await install(page);
   await page.evaluate(() => {
