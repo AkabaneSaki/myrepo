@@ -1,4 +1,4 @@
-export const CHECK_POLICY_VERSION = 'PW-CODE-POLICY-2026-10-05.1';
+export const CHECK_POLICY_VERSION = 'PW-CODE-POLICY-2026-10-05.2';
 export const trustedAssetHosts = Object.freeze(['files.catbox.moe', 'i.ibb.co']);
 const MEDIA_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|apng|bmp|ico|mp4|webm|mov|m4v|ogv)$/i;
 

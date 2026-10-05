@@ -64,6 +64,50 @@ test('audit displays old reports as pending and never renders source or evidence
   expect(await page.evaluate(() => window.__uploadedRan)).toBe(false);
 });
 
+test('dynamic media evidence shows readable URLs and jumps straight to the matching source line', async ({ page }) => {
+  await install(page);
+  const finding = risk('AH2', 'new', 'Gallery', {
+    severity: 'hint',
+    entryId: '0:project-test.json:a',
+    uid: 7,
+    title: '媒体来源需要人工确认',
+    detail: 'image.sources',
+    suggestion: '请向审核员说明图片或视频来源',
+    line: 4,
+    column: 7,
+    riskEvidence: { action: 'resource', usage: 'media', target: 'dynamic' },
+  });
+  const detail = {
+    codeCheck: {
+      ...report,
+      findings: [finding],
+      removedFindings: [],
+      auditSummary: { new: 1, changed: 0, accepted: 0, removed: 0, pending: 1 },
+    },
+    worldbookEntriesPreview: [{
+      entryKey: 'object:a',
+      uid: '7',
+      comment: 'Gallery',
+      content: 'const fallback = "https://img.example.test/fallback.webp";\nconst profile = {};\nconst image = profile.image;\nimage.sources\nconst done = true;',
+    }],
+    regexEntriesPreview: [],
+  };
+  await page.evaluate(detail => {
+    const root = document.querySelector('#root');
+    root.innerHTML = renderAdminCodeCheck(detail.codeCheck, detail);
+    bindAdminCodeCheckNavigation(root, detail);
+  }, detail);
+  await expect(page.locator('.admin-audit-dynamic-target')).toHaveText('运行时动态生成，自动检查无法确定最终 URL');
+  await expect(page.locator('.admin-audit-url-list')).toContainText('https://img.example.test/fallback.webp');
+  const jump = page.locator('[data-admin-code-jump]');
+  await expect(jump).toContainText('第 4 行，第 7 列');
+  await expect(jump).toContainText('查看代码');
+  await jump.click();
+  await expect(page.locator('.admin-code-source-viewer')).toBeVisible();
+  await expect(page.locator('.admin-code-source-line.is-target')).toContainText('image.sources');
+  await expect(page.locator('.admin-code-source-head')).toContainText('已定位到第 4 行，第 7 列');
+});
+
 test('audit Markdown uses loaded full sources and safe fences without requests', async ({ page }) => {
   const requests = [];
   page.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()); });

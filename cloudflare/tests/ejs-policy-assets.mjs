@@ -45,9 +45,12 @@ assert.ok(ejs('window.open(runtimeTarget);').findings.some(finding=>finding.rule
 noAssetReview(ejs('const urls = {one:"https://files.catbox.moe/a.png",two:"https://files.catbox.moe/b.png"}; image.src = urls[mood];'));
 for(const source of ['const img=document.createElement("img"); img.src=runtimeTarget;','const profile={avatarUrl:runtimeTarget};']) {
   const report=ejs(source),hint=report.findings.find(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media');
-  assert.ok(hint);assert.equal(hint.detail,'runtimeTarget');assert.equal(hint.line,2);
-  assert.equal(report.gate,'accept');assert.equal(report.audit,'yellow');assert.equal(rules(report).includes('M4'),false);count+=6;
+  assert.ok(hint);assert.match(hint.detail,/最终图片或视频地址由运行时内容决定/);assert.match(hint.riskEvidence?.expression || '',/runtimeTarget/);assert.deepEqual(hint.riskEvidence?.candidates,[]);assert.equal(hint.line,2);
+  assert.equal(report.gate,'accept');assert.equal(report.audit,'yellow');assert.equal(rules(report).includes('M4'),false);count+=8;
 }
+const mediaCandidate=ejs('const fallback="https://files.catbox.moe/fallback.png"; const profile={avatarUrl:runtimeTarget};');
+const mediaCandidateHint=mediaCandidate.findings.find(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media');
+assert.ok(mediaCandidateHint);assert.deepEqual(mediaCandidateHint.riskEvidence?.candidates,['https://files.catbox.moe/fallback.png']);count+=2;
 for(const source of ['const img=document.createElement("img"); img.src="https://files.catbox.moe/a.png";','const profile={avatarUrl:"https://i.ibb.co/a.png"};','const urls = {one:"https://files.catbox.moe/a.png",two:"https://files.catbox.moe/b.png"}; image.src = urls[mood];','const runtimeUrl=runtimeTarget;']) {
   const report=ejs(source);assert.equal(report.findings.some(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media'),false);count++;
 }

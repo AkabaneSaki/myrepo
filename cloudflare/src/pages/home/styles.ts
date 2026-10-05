@@ -544,6 +544,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-code-check-history > summary { cursor:pointer; padding:8px 0; }
 .admin-code-check-entry > summary { flex-wrap:wrap; overflow-wrap:anywhere; }
 .admin-code-check-empty { color:#BBF7D0; font-size:.8rem; }
+.admin-code-check-export { flex:none; min-height:34px; padding:0 10px; font-size:.72rem; white-space:nowrap; }
+.admin-audit-evidence { display:flex; flex-direction:column; gap:8px; }
+.admin-audit-review-focus { display:grid; grid-template-columns:22px minmax(0,1fr); gap:9px; align-items:start; padding:10px 11px; border:1px solid rgba(245,158,11,.16); border-radius:8px; background:rgba(245,158,11,.055); }
+.admin-audit-review-focus > i { margin-top:2px; color:#FBBF24; text-align:center; }
+.admin-audit-review-focus strong { color:#F8FAFC; font-size:.74rem; }
+.admin-audit-review-focus p { margin:2px 0 0; color:#CBD5E1; font-size:.74rem; line-height:1.55; }
+.admin-audit-evidence-row { display:grid; grid-template-columns:132px minmax(0,1fr); gap:10px; align-items:start; padding:7px 0; border-top:1px solid rgba(148,163,184,.1); }
+.admin-audit-evidence-row > span { color:rgba(226,232,240,.58); font-size:.69rem; font-weight:700; line-height:1.4; }
+.admin-audit-evidence-row > span small { color:rgba(226,232,240,.4); font-size:.62rem; font-weight:500; }
+.admin-audit-evidence-row code { min-width:0; padding:0; border:0; background:transparent; color:#E2E8F0; font:600 .72rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; overflow-wrap:anywhere; white-space:pre-wrap; }
+.admin-audit-dynamic-target { color:#FCD34D; font-size:.73rem; font-weight:680; }
+.admin-audit-url-list { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.admin-audit-url-list code { padding:5px 7px; border:1px solid rgba(148,163,184,.12); border-radius:6px; background:rgba(2,6,23,.24); }
+.admin-audit-code-expression { max-height:7.5em; overflow:auto; }
+.admin-code-location { width:max-content; max-width:100%; display:inline-flex; align-items:center; gap:7px; margin-top:2px; padding:7px 9px; border:1px solid rgba(190,164,125,.25); border-radius:7px; background:rgba(190,164,125,.07); color:#D8C19F; font:inherit; font-size:.7rem; cursor:pointer; }
+.admin-code-location:hover { border-color:rgba(190,164,125,.42); background:rgba(190,164,125,.12); }
+.admin-code-location:disabled { opacity:.48; cursor:not-allowed; }
+.admin-code-location b { color:#F1E2C9; font-size:.68rem; }
+.admin-code-source-slot[hidden] { display:none; }
+.admin-code-source-viewer { overflow:hidden; border:1px solid rgba(190,164,125,.22); border-radius:9px; background:#101114; box-shadow:0 8px 22px rgba(0,0,0,.18); }
+.admin-code-source-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border-bottom:1px solid rgba(255,255,255,.07); background:#17181b; }
+.admin-code-source-head > div { min-width:0; display:flex; flex-direction:column; gap:2px; }
+.admin-code-source-head strong { color:#ECECEA; font-size:.75rem; overflow-wrap:anywhere; }
+.admin-code-source-head span { color:#8F8D88; font-size:.66rem; }
+.admin-code-source-close { width:30px; height:30px; flex:none; display:grid; place-items:center; border:1px solid rgba(255,255,255,.08); border-radius:7px; background:transparent; color:#A9A7A2; cursor:pointer; }
+.admin-code-source-code { max-height:360px; overflow:auto; padding:6px 0; scrollbar-width:thin; }
+.admin-code-source-line { display:grid; grid-template-columns:48px minmax(0,1fr); min-width:max-content; }
+.admin-code-source-line > span { padding:2px 10px 2px 6px; color:#66645F; border-right:1px solid rgba(255,255,255,.055); text-align:right; user-select:none; font:600 .68rem/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.admin-code-source-line code { display:block; min-width:0; padding:2px 12px; color:#B8B6B0; white-space:pre; font:500 .72rem/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.admin-code-source-line.is-target { background:rgba(245,158,11,.12); box-shadow:inset 3px 0 0 #FBBF24; }
+.admin-code-source-line.is-target > span,.admin-code-source-line.is-target code { color:#FDE7B0; }
 .admin-review-description { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.58); overflow:hidden; }
 .admin-review-description summary { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:11px 13px; cursor:pointer; font-weight:650; color:#E2E8F0; }
 .admin-review-description summary::-webkit-details-marker { display:none; }
@@ -832,6 +863,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-check-item summary > span:last-child { color:var(--ar-light-subtle); }
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-check-item-body { color:var(--ar-light-muted); }
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-check-empty { color:var(--ar-light-good); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-review-focus { border-color:rgba(111,87,26,.2); background:rgba(111,87,26,.055); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-review-focus > i { color:var(--ar-light-warning); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-review-focus strong { color:var(--ar-light-text); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-review-focus p { color:var(--ar-light-muted); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-evidence-row { border-top-color:rgba(135,131,120,.18); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-evidence-row > span { color:var(--ar-light-muted); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-evidence-row > span small { color:var(--ar-light-subtle); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-evidence-row code { color:#50524F; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-dynamic-target { color:var(--ar-light-warning); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-audit-url-list code { border-color:rgba(135,131,120,.2); background:rgba(255,255,255,.42); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-location { border-color:rgba(105,125,123,.28); background:rgba(105,125,123,.08); color:#536966; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-location b { color:#405D59; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-viewer { border-color:rgba(135,131,120,.26); background:#F6F4EE; box-shadow:0 8px 22px rgba(75,73,79,.08); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-head { border-bottom-color:rgba(135,131,120,.2); background:#ECEAE3; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-head strong { color:var(--ar-light-text); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-head span { color:var(--ar-light-subtle); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-close { border-color:rgba(135,131,120,.22); color:var(--ar-light-muted); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-line > span { color:#9A968C; border-right-color:rgba(135,131,120,.16); }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-line code { color:#5A595B; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-line.is-target { background:rgba(111,87,26,.09); box-shadow:inset 3px 0 0 #9A7B2F; }
+.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-line.is-target > span,.admin-review-detail-overlay[data-admin-review-theme="light"] .admin-code-source-line.is-target code { color:#6F571A; }
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-review-description { border-color:rgba(135,131,120,.22); }
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-review-description summary { color:var(--ar-light-text); }
 .admin-review-detail-overlay[data-admin-review-theme="light"] .admin-review-description-hint { color:var(--ar-light-subtle); }
@@ -1984,6 +2036,13 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
   .admin-review-detail-signals { max-width:none; width:100%; }
   .admin-review-detail-signals .admin-review-signals { justify-content:flex-start; }
   .admin-review-detail-scroll { padding:12px 2px 14px 0; }
+  .admin-code-check-head { flex-direction:column; }
+  .admin-code-check-export { width:100%; justify-content:center; }
+  .admin-code-check-counts { justify-content:flex-start; }
+  .admin-audit-evidence-row { grid-template-columns:1fr; gap:4px; }
+  .admin-code-location { width:100%; justify-content:space-between; }
+  .admin-code-source-code { max-height:44vh; }
+  .admin-code-source-line { grid-template-columns:42px minmax(0,1fr); }
   .admin-review-workflow-bar { gap:6px; min-height:54px; margin:0 -12px; padding:7px 10px calc(7px + env(safe-area-inset-bottom)); }
   .admin-review-workflow-progress { min-width:42px; }
   .admin-review-workflow-progress span { display:none; }

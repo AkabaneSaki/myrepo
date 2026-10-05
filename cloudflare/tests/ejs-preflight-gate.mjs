@@ -144,7 +144,7 @@ assert.match(apiSource, /\/api\/projects\/preflight\//);
 const editorSource = fs.readFileSync(new URL('../src/pages/home/modal/project-editor.ts', import.meta.url), 'utf8');
 assert.match(editorSource, /runPreparedPreflight/);
 assert.match(editorSource, /preflightState !== "ok"/);
-assert.match(editorSource, /自动检查通过，可以继续/);
+assert.match(editorSource, /本地检查通过，提交时还会再次检查/);
 
 const uploadPreviewSource = fs.readFileSync(new URL('../src/pages/home/upload-preview.ts', import.meta.url), 'utf8');
 assert.match(uploadPreviewSource, /function renderUploadPreflightStatus/);
@@ -199,6 +199,8 @@ assert.match(uploadPreviewTest.buildUploadLlmFixPrompt([{ruleId:'CHECKER-INTERNA
 const stylesSource = fs.readFileSync(new URL('../src/pages/home/styles.ts', import.meta.url), 'utf8');
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-check-head strong/);
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.external-links-note/);
+assert.match(stylesSource, /\.admin-code-source-line\.is-target/);
+assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-source-line\.is-target/);
 
 const adminSource = fs.readFileSync(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');
 assert.match(adminSource, /codeCheckInputs/);
@@ -206,8 +208,12 @@ assert.match(adminSource, /codeCheck\.gate === 'reject'/);
 assert.match(adminSource, /codeCheck,/);
 
 const adminUiSource = fs.readFileSync(new URL('../src/pages/home/modal/admin-review.ts', import.meta.url), 'utf8');
-assert.match(adminUiSource, /function renderAdminCodeCheck\(report\)/);
-assert.match(adminUiSource, /renderAdminCodeCheck\(codeCheck\)/);
+assert.match(adminUiSource, /function renderAdminCodeCheck\(report, detail = null\)/);
+assert.match(adminUiSource, /renderAdminCodeCheck\(codeCheck, detail\)/);
+assert.match(adminUiSource, /function renderAdminAuditReadableEvidence\(detail, item\)/);
+assert.match(adminUiSource, /条目中可见 URL/);
+assert.match(adminUiSource, /data-admin-code-jump/);
+assert.match(adminUiSource, /function bindAdminCodeCheckNavigation\(overlay, detail\)/);
 assert.match(adminUiSource, /codeCheck\?\.gate === \"reject\" \? \"disabled\"/);
 
 console.log('EJS upload gate + audit report smoke: ok');

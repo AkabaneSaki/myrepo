@@ -1,6 +1,12 @@
 import { fromHono } from 'chanfana';
 import { Hono } from 'hono';
+import { DurableObject } from 'cloudflare:workers';
 import workshopConfig from '../../config/workshop.json';
+import uploadCheckerBase64 from './generated/upload-checker.txt';
+import uploadCheckerRevision from './generated/upload-checker-revision.json';
+import checkerNotices from '../../util/ejs-checker-v2.NOTICES.txt';
+
+const uploadCheckerSource = new TextDecoder().decode(Uint8Array.from(atob(uploadCheckerBase64), char => char.charCodeAt(0)));
 
 // 类型定义
 import type { Env } from './env';
@@ -185,6 +191,16 @@ app.get('/assets/home.js', c => {
   });
 });
 
+app.get('/assets/upload-checker.js', c => new Response(uploadCheckerSource, {
+  headers: {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': c.req.query('v') === uploadCheckerRevision.revision ? 'public, max-age=31536000, immutable' : 'no-store',
+  },
+}));
+app.get('/assets/upload-checker-notices.txt', () => new Response(checkerNotices, {
+  headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+}));
+
 // 主页只返回静态壳；登录态、项目列表和审核状态由前端 API 按需加载。
 app.get('/', c => {
   return new Response(homePage(), {
@@ -327,9 +343,39 @@ app.post('/api/internal/staging/rankings/rebuild', async c => {
 // You may also register routes for non OpenAPI directly on Hono
 // app.get('/test', (c) => c.text('Hono!'))
 
+// Keep large bodies, JSON parsing, previews, and the entire authoritative check
+// in the object. Returning its response stream avoids spending the gateway's
+// 10 ms CPU budget decoding or serializing the content a second time.
+function contentServiceKey(request: Request): string | null {
+  const path = new URL(request.url).pathname;
+  if (request.method === 'POST' && /^\/api\/projects\/preflight\/(worldbook|regex)$/.test(path)) return 'preflight:' + crypto.randomUUID();
+  const review = path.match(/^\/api\/admin\/review\/([^/]+)$/);
+  if (review && ['GET', 'HEAD', 'POST'].includes(request.method)) return 'project:' + review[1];
+  const upload = path.match(/^\/api\/projects\/([^/]+)\/(upload|upload-regex|entries\/remove)$/);
+  if (upload && request.method === 'POST') return 'project:' + upload[1];
+  const detail = path.match(/^\/api\/projects\/([^/]+)$/);
+  if (detail && ['GET', 'HEAD'].includes(request.method)) return 'project:' + detail[1];
+  return null;
+}
+
+export class CodeCheckService extends DurableObject<Env> {
+  async fetch(request: Request) {
+    // The same endpoint handlers still enforce authentication, permissions,
+    // revision checks and R2 publication. No client check result is trusted.
+    const response = await app.fetch(request, this.env);
+    // Early 401/413 responses must finish the forwarded request stream before
+    // sending a body-bearing response (workerd issue #918). Discard chunks;
+    // do not buffer an oversized or unauthorized body in memory.
+    if (request.body && !request.bodyUsed) await request.body.pipeTo(new WritableStream());
+    return response;
+  }
+}
+
 // Export the Hono app
 const worker: ExportedHandler<Env> = {
   fetch(request, env, ctx) {
+    const key = contentServiceKey(request);
+    if (key) return env.CODE_CHECK_SERVICE.getByName(key).fetch(request);
     return app.fetch(request, env, ctx);
   },
   async scheduled(_controller, env) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { CHECKER_LIMITS } from '../src/utils/ejs-checker/limits.mjs';
 
 async function readExportExpression(relativePath, exportName) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -947,12 +948,14 @@ const taxonomyLabelUi = Function(
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: '规则' }), '扩展 · 规则');
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: null }), '扩展');
 
-const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', 'workshopLimitsJson', `return (${appExpression});`)(
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', 'workshopLimitsJson', 'uploadChecker', 'CHECKER_LIMITS', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
   JSON.stringify(testProjectTaxonomy),
   JSON.stringify(workshopConfig),
   JSON.stringify(testWorkshopLimits),
+  JSON.parse(await readFile(resolve('src/generated/upload-checker-revision.json'), 'utf8')),
+  CHECKER_LIMITS,
 );
 assert.equal(typeof homeScript, 'string');
 new Function(homeScript);

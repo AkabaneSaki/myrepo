@@ -810,7 +810,41 @@ async function deleteProject(projectId) {
   return result;
 }
 
+const activeUploadChecks = new Map();
+
+function cancelUploadPreflight(kind) {
+  activeUploadChecks.get(kind)?.();
+}
+
 async function preflightProjectUpload(file, kind) {
+  assertUploadSize(file);
+  const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
+  cancelUploadPreflight(normalizedKind);
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(UPLOAD_CHECKER_URL);
+    const finish = (error, result) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      if (activeUploadChecks.get(normalizedKind) === cancel) activeUploadChecks.delete(normalizedKind);
+      if (error) reject(error); else resolve(result);
+    };
+    const cancel = () => finish(new DOMException('已取消旧文件的检查', 'AbortError'));
+    const timeout = setTimeout(() => finish(new Error('浏览器检查用时过长，尚未完成。请减少本次提交的脚本数量，或拆分过大的条目后再检查。')), UPLOAD_CHECKER_TIMEOUT_MS);
+    activeUploadChecks.set(normalizedKind, cancel);
+    worker.onmessage = event => {
+      const result = event.data;
+      if (!result?.success || !result.codeCheck || result.codeCheck.gate !== 'accept') {
+        const error = new Error(result?.error || '本地检查未完成，暂时不能提交。');
+        error.codeCheck = result?.codeCheck || null;
+        finish(error);
+      } else finish(null, result);
+    };
+    worker.onerror = () => finish(new Error('浏览器未能启动文件检查。请刷新页面；若仍然失败，请联系管理员并附上页面截图。'));
+    worker.postMessage({ file, kind: normalizedKind });
+  });
+}
+
+async function preflightProjectSubmission(file, kind) {
   assertUploadSize(file);
   const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
   try {
@@ -828,7 +862,8 @@ async function preflightProjectUpload(file, kind) {
       error.codeCheck = data?.codeCheck || null;
       throw error;
     }
-    return data || { success: true };
+    if (!data?.success || data.codeCheck?.gate !== 'accept') throw new Error('提交检查未完成，暂时不能提交。请联系管理员并附上页面截图。');
+    return data;
   } catch (error) {
     const normalized = normalizeThrownError(error, '自动检查失败');
     normalized.codeCheck = error?.codeCheck || null;

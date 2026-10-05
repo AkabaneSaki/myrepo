@@ -135,6 +135,7 @@ function directUrls(content) {
   while((match=pattern.exec(content)))items.push({url:match[0].replace(/[;,\]}]+$/,''),index:match.index,end:pattern.lastIndex});
   return items;
 }
+function sourceUrlCandidates(content,limit=12) { return [...new Set(directUrls(content).map(item=>item.url))].slice(0,limit); }
 function parsedUrl(value) { try { return new URL(value.startsWith('//')?'https:'+value:value); } catch { return null; } }
 function external(value) { const url=parsedUrl(value);return url&&['http:','https:'].includes(url.protocol); }
 function ipHost(host) {return host.includes(':')||/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);}
@@ -158,7 +159,8 @@ export function inspectExternalLinks(entry,parsed) {
           && !(node.type==='CallExpression'&&propertyName(node.callee)==='createElement')
           && !(node.type==='NewExpression'&&node.callee.type==='Identifier'&&node.callee.name==='Image'&&!resolveBinding(scope,'Image'))) {
         const index=unit.sourceMap.map(node.start);
-        hints.push({ruleId:'AH2',severity:'hint',title:'媒体来源需要人工确认',index,detail:source.slice(index,unit.sourceMap.map(node.end)),suggestion:'请向审核员说明图片或视频来源，以及运行时如何决定要加载的内容；这条提示本身不代表违规。',extra:{riskEvidence:{action:'resource',usage:'media',target:'dynamic',expression:expressionEvidence(node)}}});
+        const candidates=sourceUrlCandidates(source);
+        hints.push({ruleId:'AH2',severity:'hint',title:'媒体来源需要人工确认',index,detail:'最终图片或视频地址由运行时内容决定，自动检查无法确定实际会加载哪个地址。',suggestion:candidates.length?'请核对下方 URL 候选与这段媒体逻辑的实际用途；如果候选与实际地址不同，请 Creator 说明最终来源。':'当前条目没有可直接读出的 URL。请 Creator 提供实际图片/视频地址或来源规则后再确认。',extra:{riskEvidence:{action:'resource',usage:'media',target:'dynamic',expression:expressionEvidence(node),candidates}}});
       }
     }
     for(const {node,scope} of analysis.nodes) {

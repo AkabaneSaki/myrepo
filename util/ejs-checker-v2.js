@@ -5724,9 +5724,6 @@ var PoemEjsChecker = (() => {
     lineBreakG,
     nonASCIIwhitespace
   };
-  function parse3(input, options) {
-    return Parser.parse(input, options);
-  }
   function tokenizer2(input, options) {
     return Parser.tokenizer(input, options);
   }
@@ -14332,21 +14329,66 @@ var PoemEjsChecker = (() => {
     return units;
   }
 
+  // src/utils/ejs-checker/limits.mjs
+  var CHECKER_LIMITS = Object.freeze({
+    entries: 2e3,
+    entryCharacters: 3e5,
+    totalCharacters: 2e6,
+    codeUnits: 500,
+    javaScriptCharacters: 2e5,
+    astNodesPerUnit: 4e4,
+    astNodes: 1e5,
+    browserTimeoutMs: 3e4
+  });
+  var CheckerLimitError = class extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "CheckerLimitError";
+    }
+  };
+  function createParseBudget() {
+    return { nodes: 0, units: 0 };
+  }
+
   // src/utils/ejs-checker/syntax.mjs
   var ACORN_OPTIONS = Object.freeze({ ecmaVersion: "latest", locations: true, ranges: true });
   function internalError(error) {
+    if (error instanceof CheckerLimitError || error instanceof RangeError) {
+      return { kind: "limit", message: error instanceof CheckerLimitError ? error.message : "\u4EE3\u7801\u5D4C\u5957\u8FC7\u6DF1\uFF0C\u68C0\u67E5\u65E0\u6CD5\u5B8C\u6210\u3002\u8BF7\u51CF\u5C11\u5D4C\u5957\u5C42\u6570\u6216\u62C6\u5206\u8FD9\u6BB5\u4EE3\u7801\u3002" };
+    }
     return { kind: "internal", message: "\u4EE3\u7801\u68C0\u67E5\u6682\u65F6\u65E0\u6CD5\u5B8C\u6210\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002", cause: String(error?.message ?? error) };
   }
-  function parseUnit(unit) {
+  function parseUnit(unit, budget) {
     const options = { ...ACORN_OPTIONS, sourceType: unit.sourceType };
     unit.ast = null;
     unit.wrapperFunction = null;
     unit.tokens = [];
     try {
-      unit.ast = parse3(unit.code, { ...options, onToken: unit.tokens });
+      if (unit.code.length > CHECKER_LIMITS.javaScriptCharacters) throw new CheckerLimitError("\u5355\u6BB5\u811A\u672C\u8D85\u8FC7 20 \u4E07\u4E2A\u5B57\u7B26\uFF0C\u65E0\u6CD5\u5B8C\u6210\u68C0\u67E5\u3002\u8BF7\u628A\u8FD9\u6BB5\u811A\u672C\u62C6\u6210\u8F83\u5C0F\u7684\u90E8\u5206\u3002");
+      if (++budget.units > CHECKER_LIMITS.codeUnits) throw new CheckerLimitError("\u4E00\u6B21\u68C0\u67E5\u6700\u591A\u5904\u7406 500 \u6BB5\u811A\u672C\u3002\u8BF7\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u811A\u672C\u6570\u91CF\u3002");
+      let nodes = 0;
+      const countNode = () => {
+        if (++nodes > CHECKER_LIMITS.astNodesPerUnit || ++budget.nodes > CHECKER_LIMITS.astNodes) {
+          throw new CheckerLimitError("\u811A\u672C\u5305\u542B\u8FC7\u591A\u4EE3\u7801\u6B65\u9AA4\uFF0C\u65E0\u6CD5\u5B8C\u6210\u68C0\u67E5\u3002\u8BF7\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u811A\u672C\uFF0C\u6216\u7B80\u5316\u8FD9\u6BB5\u4EE3\u7801\u3002");
+        }
+      };
+      const BoundedParser = Parser.extend((Base) => class extends Base {
+        finishNode(...args) {
+          countNode();
+          return super.finishNode(...args);
+        }
+        finishNodeAt(...args) {
+          countNode();
+          return super.finishNodeAt(...args);
+        }
+      });
+      unit.ast = BoundedParser.parse(unit.code, { ...options, onToken: unit.tokens });
       if (unit.wrapped) unit.wrapperFunction = unit.ast.body[0].expression;
       return null;
     } catch (error) {
+      if (error instanceof SyntaxError && error.message.startsWith("Not enough stack space to parse input")) {
+        return internalError(new CheckerLimitError("\u4EE3\u7801\u5D4C\u5957\u8FC7\u6DF1\uFF0C\u68C0\u67E5\u65E0\u6CD5\u5B8C\u6210\u3002\u8BF7\u51CF\u5C11\u5D4C\u5957\u5C42\u6570\u6216\u62C6\u5206\u8FD9\u6BB5\u4EE3\u7801\u3002"));
+      }
       if (!(error instanceof SyntaxError) || !Number.isInteger(error.pos)) return internalError(error);
       const mapped = unit.sourceMap.location(error.pos);
       unit.mappedError = { kind: "syntax", ...mapped, message: error.message.replace(/ \(\d+:\d+\)$/, ""), generatedIndex: error.pos, unitKind: unit.kind };
@@ -14364,26 +14406,29 @@ var PoemEjsChecker = (() => {
       return unit.mappedError;
     }
   }
-  function parseUnits(units) {
+  function parseUnits(units, budget = createParseBudget()) {
     const result = { units, errors: [], internalErrors: [] };
     for (const unit of units) {
-      const error = parseUnit(unit);
+      const error = parseUnit(unit, budget);
       if (error?.kind === "syntax") result.errors.push(error);
-      else if (error) result.internalErrors.push(error);
+      else if (error) {
+        result.internalErrors.push(error);
+        if (error.kind === "limit") break;
+      }
     }
     return result;
   }
   function parseEjs(rawContent, options = {}) {
     try {
-      return parseUnits([buildEjsUnit(rawContent, options)]);
+      return parseUnits([buildEjsUnit(rawContent, options)], options.budget);
     } catch (error) {
       if (error instanceof TemplateSyntaxError) return { units: [], errors: [{ kind: "syntax", ...sourceLocation(rawContent, error.index), message: error.message, unitKind: "ejs" }], internalErrors: [] };
       return { units: [], errors: [], internalErrors: [internalError(error)] };
     }
   }
-  function parseRegex(rawContent) {
+  function parseRegex(rawContent, budget) {
     try {
-      return parseUnits(buildRegexUnits(rawContent));
+      return parseUnits(buildRegexUnits(rawContent), budget);
     } catch (error) {
       return { units: [], errors: [], internalErrors: [internalError(error)] };
     }
@@ -14722,7 +14767,7 @@ var PoemEjsChecker = (() => {
   }
 
   // src/utils/ejs-checker/policy-config.mjs
-  var CHECK_POLICY_VERSION = "PW-CODE-POLICY-2026-10-05.1";
+  var CHECK_POLICY_VERSION = "PW-CODE-POLICY-2026-10-05.2";
   var trustedAssetHosts = Object.freeze(["files.catbox.moe", "i.ibb.co"]);
   var MEDIA_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|apng|bmp|ico|mp4|webm|mov|m4v|ogv)$/i;
   function trustedStaticMediaUrl(value, usage) {
@@ -14868,6 +14913,9 @@ var PoemEjsChecker = (() => {
     while (match = pattern.exec(content)) items.push({ url: match[0].replace(/[;,\]}]+$/, ""), index: match.index, end: pattern.lastIndex });
     return items;
   }
+  function sourceUrlCandidates(content, limit = 12) {
+    return [...new Set(directUrls(content).map((item) => item.url))].slice(0, limit);
+  }
   function parsedUrl(value) {
     try {
       return new URL(value.startsWith("//") ? "https:" + value : value);
@@ -14904,7 +14952,8 @@ var PoemEjsChecker = (() => {
         }
         else if (!["ObjectExpression", "ArrayExpression", "Literal", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type) && !(node.type === "CallExpression" && propertyName2(node.callee) === "createElement") && !(node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "Image" && !resolveBinding(scope, "Image"))) {
           const index = unit.sourceMap.map(node.start);
-          hints.push({ ruleId: "AH2", severity: "hint", title: "\u5A92\u4F53\u6765\u6E90\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4", index, detail: source.slice(index, unit.sourceMap.map(node.end)), suggestion: "\u8BF7\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u56FE\u7247\u6216\u89C6\u9891\u6765\u6E90\uFF0C\u4EE5\u53CA\u8FD0\u884C\u65F6\u5982\u4F55\u51B3\u5B9A\u8981\u52A0\u8F7D\u7684\u5185\u5BB9\uFF1B\u8FD9\u6761\u63D0\u793A\u672C\u8EAB\u4E0D\u4EE3\u8868\u8FDD\u89C4\u3002", extra: { riskEvidence: { action: "resource", usage: "media", target: "dynamic", expression: expressionEvidence(node) } } });
+          const candidates = sourceUrlCandidates(source);
+          hints.push({ ruleId: "AH2", severity: "hint", title: "\u5A92\u4F53\u6765\u6E90\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4", index, detail: "\u6700\u7EC8\u56FE\u7247\u6216\u89C6\u9891\u5730\u5740\u7531\u8FD0\u884C\u65F6\u5185\u5BB9\u51B3\u5B9A\uFF0C\u81EA\u52A8\u68C0\u67E5\u65E0\u6CD5\u786E\u5B9A\u5B9E\u9645\u4F1A\u52A0\u8F7D\u54EA\u4E2A\u5730\u5740\u3002", suggestion: candidates.length ? "\u8BF7\u6838\u5BF9\u4E0B\u65B9 URL \u5019\u9009\u4E0E\u8FD9\u6BB5\u5A92\u4F53\u903B\u8F91\u7684\u5B9E\u9645\u7528\u9014\uFF1B\u5982\u679C\u5019\u9009\u4E0E\u5B9E\u9645\u5730\u5740\u4E0D\u540C\uFF0C\u8BF7 Creator \u8BF4\u660E\u6700\u7EC8\u6765\u6E90\u3002" : "\u5F53\u524D\u6761\u76EE\u6CA1\u6709\u53EF\u76F4\u63A5\u8BFB\u51FA\u7684 URL\u3002\u8BF7 Creator \u63D0\u4F9B\u5B9E\u9645\u56FE\u7247/\u89C6\u9891\u5730\u5740\u6216\u6765\u6E90\u89C4\u5219\u540E\u518D\u786E\u8BA4\u3002", extra: { riskEvidence: { action: "resource", usage: "media", target: "dynamic", expression: expressionEvidence(node), candidates } } });
         }
       }
       for (const { node, scope } of analysis.nodes) {
@@ -15380,13 +15429,13 @@ var PoemEjsChecker = (() => {
         detail: error.message,
         suggestion: "\u6839\u636E\u6807\u51FA\u7684\u884C\u5217\u68C0\u67E5\u811A\u672C\u8BED\u6CD5\uFF1B\u4FEE\u590D\u540E\u91CD\u65B0\u9009\u62E9\u6587\u4EF6\u68C0\u67E5\u3002"
       })),
-      ...parsed.internalErrors.map(() => ({
-        ruleId: "CHECKER-INTERNAL",
+      ...parsed.internalErrors.map((error) => ({
+        ruleId: error.kind === "limit" ? "CHECKER-LIMIT" : "CHECKER-INTERNAL",
         severity: "high",
         index: 0,
-        title: "\u4EE3\u7801\u68C0\u67E5\u6682\u65F6\u65E0\u6CD5\u5B8C\u6210",
-        detail: "\u68C0\u67E5\u670D\u52A1\u672A\u80FD\u5B8C\u6210\u672C\u6B21\u68C0\u67E5\uFF0C\u8FD9\u4E0D\u4EE3\u8868\u60A8\u7684\u4EE3\u7801\u6709\u8BED\u6CD5\u9519\u8BEF\u3002",
-        suggestion: "\u8BF7\u7A0D\u540E\u91CD\u65B0\u9009\u62E9\u6587\u4EF6\u68C0\u67E5\uFF1B\u5982\u679C\u4ECD\u7136\u5931\u8D25\uFF0C\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458\u3002"
+        title: error.kind === "limit" ? "\u5185\u5BB9\u8D85\u8FC7\u672C\u6B21\u68C0\u67E5\u7684\u5904\u7406\u4E0A\u9650" : "\u4EE3\u7801\u68C0\u67E5\u6682\u65F6\u65E0\u6CD5\u5B8C\u6210",
+        detail: error.kind === "limit" ? error.message : "\u68C0\u67E5\u670D\u52A1\u672A\u80FD\u5B8C\u6210\u672C\u6B21\u68C0\u67E5\uFF0C\u8FD9\u4E0D\u4EE3\u8868\u60A8\u7684\u4EE3\u7801\u6709\u8BED\u6CD5\u9519\u8BEF\u3002",
+        suggestion: error.kind === "limit" ? "\u8BF7\u6309\u63D0\u793A\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u5185\u5BB9\uFF0C\u6216\u62C6\u5206\u8FC7\u5927\u7684\u811A\u672C\uFF1B\u91CD\u590D\u63D0\u4EA4\u76F8\u540C\u5185\u5BB9\u4ECD\u65E0\u6CD5\u901A\u8FC7\u3002" : "\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458\uFF0C\u5E76\u9644\u4E0A\u5F53\u524D\u9875\u9762\u622A\u56FE\u3002"
       }))
     ];
   }
@@ -15467,7 +15516,7 @@ var PoemEjsChecker = (() => {
     }));
   }
   function findingVisibility(ruleId) {
-    if (/^L[1-7]$/.test(ruleId) || ruleId === "EJS-PARSE" || ruleId === "FILE" || ruleId === "JS-PARSE" || ruleId === "CHECKER-INTERNAL") return "uploader_detailed";
+    if (/^L[1-7]$/.test(ruleId) || ruleId === "EJS-PARSE" || ruleId === "FILE" || ruleId === "JS-PARSE" || ruleId === "CHECKER-INTERNAL" || ruleId === "CHECKER-LIMIT") return "uploader_detailed";
     if (["M1", "M2", "M5"].includes(ruleId)) return "uploader_generic";
     return "reviewer_only";
   }
@@ -15524,7 +15573,7 @@ var PoemEjsChecker = (() => {
     policyVersion: CHECK_POLICY_VERSION,
     parserCompatibility: "EJS 3.1.9 / ST nested tags; Acorn 8.18.0; HTML parse5 8.0.1"
   });
-  function worldbookHtml(entry, parsed) {
+  function worldbookHtml(entry, parsed, budget) {
     const ranges = parsed.units.find((unit) => unit.kind === "ejs")?.templateRanges;
     if (!ranges) return { units: [], errors: [], internalErrors: [] };
     const chars = entry.content.split("");
@@ -15532,11 +15581,11 @@ var PoemEjsChecker = (() => {
       for (let i2 = range.start; i2 < range.end; i2++) if (chars[i2] !== "\n" && chars[i2] !== "\r") chars[i2] = " ";
       if (range.mode === "=" || range.mode === "-") chars[range.start] = "0";
     }
-    const html = parseRegex(chars.join(""));
+    const html = parseRegex(chars.join(""), budget);
     const staticUnits = html.units.filter((unit) => !unit.codeRanges.some((codeRange) => ranges.some((range) => range.mode !== "#" && range.start < codeRange.originalEnd && range.end > codeRange.originalStart)));
     return { units: staticUnits, errors: staticUnits.flatMap((unit) => unit.mappedError ? [unit.mappedError] : []), internalErrors: html.internalErrors };
   }
-  function analyzeProjectCodeV2(inputs) {
+  function analyze(inputs, server) {
     const books = [], findings = [];
     const add = (entry, record) => findings.push(finding(record.ruleId, record.severity, record.title, entry, record.index, record.detail, record.suggestion, record.extra));
     for (const [bookOrder, input] of (Array.isArray(inputs) ? inputs : []).entries()) {
@@ -15547,19 +15596,29 @@ var PoemEjsChecker = (() => {
       }
     }
     const entries = books.flatMap((book) => book.entries);
-    for (const entry of entries) {
+    const budget = createParseBudget();
+    const limitFinding = (entry, detail) => findings.push(finding("CHECKER-LIMIT", "high", "\u5185\u5BB9\u8D85\u8FC7\u672C\u6B21\u68C0\u67E5\u7684\u5904\u7406\u4E0A\u9650", entry, 0, detail, "\u8BF7\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u5185\u5BB9\uFF0C\u6216\u62C6\u5206\u8FC7\u5927\u7684\u6761\u76EE\uFF1B\u91CD\u590D\u63D0\u4EA4\u76F8\u540C\u5185\u5BB9\u4ECD\u65E0\u6CD5\u901A\u8FC7\u3002"));
+    if (entries.length > CHECKER_LIMITS.entries) limitFinding(entries[0], "\u4E00\u6B21\u68C0\u67E5\u6700\u591A\u5904\u7406 2000 \u6761\u5185\u5BB9\u3002\u8BF7\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u6761\u76EE\u3002");
+    if (entries.reduce((sum, entry) => sum + entry.content.length, 0) > CHECKER_LIMITS.totalCharacters) limitFinding(entries[0], "\u4E00\u6B21\u68C0\u67E5\u7684\u6B63\u6587\u603B\u8BA1\u6700\u591A 200 \u4E07\u4E2A\u5B57\u7B26\u3002\u8BF7\u51CF\u5C11\u672C\u6B21\u63D0\u4EA4\u7684\u5185\u5BB9\u3002");
+    const oversized = entries.find((entry) => entry.content.length > CHECKER_LIMITS.entryCharacters);
+    if (oversized) limitFinding(oversized, "\u5355\u6761\u5185\u5BB9\u6700\u591A 30 \u4E07\u4E2A\u5B57\u7B26\u3002\u8BF7\u62C6\u5206\u8FD9\u4E2A\u8FC7\u5927\u7684\u6761\u76EE\u3002");
+    const admitted = !findings.some((item) => item.ruleId === "CHECKER-LIMIT");
+    for (const entry of admitted ? entries : []) {
       inspectDecorators(entry, findings);
-      const ejs = entry.sourceType === "worldbook" && entry.hasEjs ? parseEjs(entry.content, { privateScope: entry.isPrivate }) : { units: [], errors: [], internalErrors: [] };
-      const html = entry.sourceType === "regex" || !entry.hasEjs ? parseRegex(entry.content) : worldbookHtml(entry, ejs);
+      const ejs = entry.sourceType === "worldbook" && entry.hasEjs ? parseEjs(entry.content, { privateScope: entry.isPrivate, budget }) : { units: [], errors: [], internalErrors: [] };
+      const html = ejs.internalErrors.length ? { units: [], errors: [], internalErrors: [] } : entry.sourceType === "regex" || !entry.hasEjs ? parseRegex(entry.content, budget) : worldbookHtml(entry, ejs, budget);
       for (const record of syntaxFindings(entry, ejs)) add(entry, record);
       for (const record of syntaxFindings({ ...entry, sourceType: "regex" }, html)) add(entry, record);
+      if ([...ejs.internalErrors, ...html.internalErrors].some((error) => error.kind === "limit")) break;
       const parsed = { units: [...ejs.units, ...html.units], errors: [...ejs.errors, ...html.errors], internalErrors: [...ejs.internalErrors, ...html.internalErrors] };
       const policy = inspectAstPolicy(entry, parsed);
       entry.symbols = policy.symbols;
       for (const record of policy.findings) add(entry, record);
-      for (const record of inspectCapabilities(entry, parsed)) add(entry, record);
-      for (const record of inspectApiUsage(entry, parsed)) add(entry, record);
-      inspectLinks(entry, findings, parsed);
+      if (server) {
+        for (const record of inspectCapabilities(entry, parsed)) add(entry, record);
+        for (const record of inspectApiUsage(entry, parsed)) add(entry, record);
+        inspectLinks(entry, findings, parsed);
+      }
     }
     for (const record of inspectSymbolCollisions(entries)) add(record.entry, record);
     findings.sort(compareFindings);
@@ -15568,13 +15627,17 @@ var PoemEjsChecker = (() => {
       tool: "Poem Workshop EJS / Regex Check",
       standard: "PW-CODE-CHECK-v1",
       ...CHECKER_VERSION,
+      phase: server ? "server" : "local",
       gate: gateStatus(findings),
       audit: auditStatus(findings),
       certification: certificationStatus(findings),
-      rules: "EJS:L1-L7; COMMON:M1-M5,U2-U5; API:API1-API2; HINTS:AH1-AH4; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL",
+      rules: server ? "EJS:L1-L7; COMMON:M1-M5,U2-U5; API:API1-API2; HINTS:AH1-AH4; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL,CHECKER-LIMIT" : "EJS:L1-L7; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL,CHECKER-LIMIT",
       files: books.map((book) => ({ fileName: book.fileName, size: book.size, type: book.type, items: book.entries.length, ejsEntries: book.entries.filter((entry) => entry.hasEjs).length })),
       findings
     };
+  }
+  function analyzeProjectCodeV2(inputs) {
+    return analyze(inputs, true);
   }
   return __toCommonJS(browser_exports);
 })();

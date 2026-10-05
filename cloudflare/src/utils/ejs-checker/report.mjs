@@ -56,7 +56,7 @@ function extractRegexScripts(json,fileName,bookOrder){
   }));
 }
 function findingVisibility(ruleId){
-  if(/^L[1-7]$/.test(ruleId)||ruleId==='EJS-PARSE'||ruleId==='FILE'||ruleId==='JS-PARSE'||ruleId==='CHECKER-INTERNAL')return'uploader_detailed';
+  if(/^L[1-7]$/.test(ruleId)||ruleId==='EJS-PARSE'||ruleId==='FILE'||ruleId==='JS-PARSE'||ruleId==='CHECKER-INTERNAL'||ruleId==='CHECKER-LIMIT')return'uploader_detailed';
   if(['M1','M2','M5'].includes(ruleId))return'uploader_generic';
   return'reviewer_only';
 }

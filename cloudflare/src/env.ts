@@ -10,6 +10,9 @@ export interface Env {
   // KV 命名空间 (用于会话存储)
   SESSION_KV: KVNamespace;
 
+  // Server-owned content processing, with the Durable Object CPU budget.
+  CODE_CHECK_SERVICE: DurableObjectNamespace;
+
   // 管理员日志
   ADMIN_LOG_KV?: KVNamespace;
 

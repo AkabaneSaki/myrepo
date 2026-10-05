@@ -5,6 +5,10 @@
   "name": "poemofdestinycreativeworkshop-local-test",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-12",
+  "durable_objects": {
+    "bindings": [{ "name": "CODE_CHECK_SERVICE", "class_name": "CodeCheckService" }]
+  },
+  "migrations": [{ "tag": "code-check-service-v1", "new_sqlite_classes": ["CodeCheckService"] }],
   "dev": {
     "port": 8790
   },
