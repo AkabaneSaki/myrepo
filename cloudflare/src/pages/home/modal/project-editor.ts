@@ -532,7 +532,7 @@ export const homeProjectEditorModalScript = [
   '      showToast("正则仍在检查或未通过，请先处理文件下方的提示。", "error");',
   '      return;',
   '    }',
-  '    payload.worldbookEjsLengthEstimates = collectWorldbookEjsLengthEstimates(worldbookPreview);',
+
   '    const publishCheck = await openCreatorPublishCheck(characterReferences);',
   '    if (!publishCheck) return;',
   '    Object.assign(payload, publishCheck);',
@@ -632,7 +632,7 @@ export const homeProjectEditorModalScript = [
   '      showToast("新的正则仍在检查或未通过，请先处理文件下方的提示。", "error");',
   '      return;',
   '    }',
-  '    if (hasNewFile) payload.worldbookEjsLengthEstimates = collectWorldbookEjsLengthEstimates(worldbookPreview);',
+
   '    if (hasNewFile || hasNewRegex) {',
   '      const publishCheck = await openCreatorPublishCheck(characterReferences, project);',
   '      if (!publishCheck) return;',

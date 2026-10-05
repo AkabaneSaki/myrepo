@@ -128,7 +128,8 @@ const formSource = await readFile(new URL('../src/pages/home/modal/project-edito
 const detailSource = await readFile(new URL('../src/pages/home/render/detail-modal.ts', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');
 
-assert.match(formSource, /collectWorldbookEjsLengthEstimates/);
+assert.match(formSource, /const worldbookEjsLengthEstimates = collectWorldbookEjsLengthEstimates\(form\)/);
+assert.doesNotMatch(formSource, /collectWorldbookEjsLengthEstimates\(worldbookPreview\)/, 'submit handlers must not reference prepareProjectForm-local worldbookPreview');
 assert.match(formSource, /estimateEditable: true/);
 assert.match(detailSource, /作者预估输出长度/);
 assert.match(detailSource, /作者估算 · 非系统测量/);
