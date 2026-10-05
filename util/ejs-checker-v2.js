@@ -15465,7 +15465,7 @@ var PoemEjsChecker = (() => {
     return { decorators, isPrivate: names.includes("@@private"), invalidDecorators };
   }
   function worldbookEntries(json) {
-    const candidates = [json && json.entries, json && json.data && json.data.entries, json && json.world_info && json.world_info.entries];
+    const candidates = [json && json.entries, json && json.data && json.data.entries, json && json.world_info && json.world_info.entries, json && json.character_book && json.character_book.entries, json && json.data && json.data.character_book && json.data.character_book.entries, json && json.characterBook && json.characterBook.entries, json && json.data && json.data.characterBook && json.data.characterBook.entries];
     return candidates.find((x) => x && (typeof x === "object" || Array.isArray(x)));
   }
   function extractEntries(json, fileName, bookOrder) {

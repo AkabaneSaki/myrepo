@@ -47,6 +47,42 @@ test('offline coworker fixture selftest passes', async ({ page }) => {
   await expect(page.locator('#selftest')).toHaveText('SELFTEST PASS');
 });
 
+test('offline TXT and paste modes each treat the input as one worldbook entry', async ({ page }) => {
+  await page.goto(toolUrl);
+  await page.locator('#txtInputModeBtn').click();
+  await expect(page.locator('#inputModeHint')).toContainText('1 个世界书条目');
+  await page.locator('#txtFileInput').setInputFiles({
+    name: 'single-entry.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('<% let found = false; %>\n正文\n<% if (!found) { %>内容<% } %>'),
+  });
+  let report = await page.evaluate(() => window.EjsPreflight.getReport());
+  expect(report.files[0].items).toBe(1);
+  expect(report.findings.some(item => item.ruleId === 'L2')).toBe(true);
+
+  await page.locator('#pasteInputModeBtn').click();
+  await page.locator('#pasteEntryName').fill('paste-one');
+  await page.locator('#pasteText').fill('<% { const ok = 1; void ok; } %>');
+  await page.locator('#pasteCheckBtn').click();
+  report = await page.evaluate(() => window.EjsPreflight.getReport());
+  expect(report.files[0].items).toBe(1);
+  expect(report.findings.some(item => /^L[1-7]$/.test(item.ruleId) && item.severity === 'high')).toBe(false);
+});
+
+test('offline JSON mode recognizes character-card character_book entries', async ({ page }) => {
+  await page.goto(toolUrl);
+  await page.locator('#fileInput').setInputFiles({
+    name: 'character-card.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ data: { character_book: { entries: [
+      { uid: 1, comment: 'Card lore', content: '<% let cardFlag = false; %>' },
+    ] } } })),
+  });
+  const report = await page.evaluate(() => window.EjsPreflight.getReport());
+  expect(report.files[0].items).toBe(1);
+  expect(report.findings.some(item => item.ruleId === 'L2')).toBe(true);
+});
+
 test('v2 reports preserve uploader controls, exports and admin findings', async ({ page }, testInfo) => {
   const errors=[];
   page.on('pageerror', error=>errors.push(error.message));
@@ -277,7 +313,7 @@ test('block scope and valid @@private isolate declarations while invalid decorat
     return window.EjsPreflight.buildLlmFixPrompt(f);
   });
   expect(l7Prompt).toContain('[L7]');
-  expect(l7Prompt).toContain('先修 L7');
+  expect(l7Prompt).toContain('错误位置的 @@private 不能作为豁免');
   expect(l7Prompt).toContain('poem-workshop-meta:v1-start');
 });
 
@@ -783,7 +819,7 @@ test('L findings expose precise position and a copyable LLM repair prompt', asyn
   });
   expect(prompt).toContain('[L2]');
   expect(prompt).toContain('creator-help');
-  expect(prompt).toContain('不要改变原本功能');
+  expect(prompt).toContain('保持最终行为');
   expect(prompt).toContain('const creatorState = 1;');
 });
 

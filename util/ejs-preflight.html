@@ -4,33 +4,51 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Poem Workshop · EJS / 正则检查</title>
+<title>命定创意工坊 · EJS / 正则检查</title>
 <style>
 :root{color-scheme:light dark;--bg:#f4f5f7;--panel:#fff;--panel2:#f8f9fb;--text:#1d2028;--muted:#687080;--line:#d9dde5;--accent:#5965d8;--danger:#b92f41;--dangerbg:#fff0f2;--warn:#9a6700;--warnbg:#fff7df;--ok:#18794e;--okbg:#ebf9f1;--info:#315a9c;--infobg:#eef5ff;--shadow:0 12px 40px rgba(28,35,52,.08);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#111318;--panel:#191c23;--panel2:#20242c;--text:#edf0f7;--muted:#9ba3b4;--line:#323846;--accent:#929aff;--danger:#ff8794;--dangerbg:#3a2025;--warn:#f3c45f;--warnbg:#3a321e;--ok:#66d79d;--okbg:#18382a;--info:#8eb8ff;--infobg:#1c2d49;--shadow:none}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input{font:inherit}.shell{width:min(1080px,calc(100% - 28px));margin:auto;padding:32px 0 64px}.hero{margin-bottom:20px}.mode-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 10px}.mode-btn{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);cursor:pointer;text-align:left}.mode-btn strong{font-size:14px}.mode-btn span{font-size:12px;color:var(--muted);line-height:1.45}.mode-btn.active{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 22%,transparent);background:var(--panel2)}.mode-btn.active strong{color:var(--accent)}.mode-hint{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:var(--panel2);color:var(--muted);font-size:13px;line-height:1.55}.mode-hint strong{color:var(--text)}h1{margin:0 0 8px;font-size:clamp(26px,5vw,40px);letter-spacing:-.03em}.sub{margin:0;color:var(--muted);line-height:1.65;max-width:850px}.privacy{display:inline-flex;gap:8px;align-items:center;margin-top:12px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ok);background:var(--okbg);font-size:13px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.drop{display:block;padding:26px;text-align:center;border:2px dashed var(--line);border-radius:16px;margin:18px;transition:.15s ease;cursor:pointer;background:var(--panel2)}.drop.drag{border-color:var(--accent)}.drop strong{display:block;font-size:18px;margin-bottom:7px}.drop small{display:block;color:var(--muted);line-height:1.6}.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}.btn{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:9px 14px;cursor:pointer;font-weight:650}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}#fileInput{display:none}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:18px 0}.metric{padding:16px}.metric b{display:block;font-size:26px;margin-bottom:3px}.metric span{color:var(--muted);font-size:13px}.metric.status.pass b{color:var(--ok)}.metric.status.review b{color:var(--warn)}.metric.status.fail b{color:var(--danger)}.standard-note{margin-top:14px;padding:14px 16px;border-left:4px solid var(--accent);background:var(--panel2);border-radius:10px;line-height:1.65;color:var(--muted)}.standard-note strong{color:var(--text)}.section{margin-top:18px;padding:18px}.section h2{margin:0 0 14px;font-size:19px}.finding{border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:10px 0;background:var(--panel2)}.finding-head{display:flex;align-items:flex-start;gap:10px}.badge{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 8px}.badge.high{color:var(--danger);background:var(--dangerbg)}.badge.warn{color:var(--warn);background:var(--warnbg)}.badge.info,.badge.hint{color:var(--info);background:var(--infobg)}.finding-title{font-weight:750;line-height:1.4}.finding p{margin:7px 0 0;color:var(--muted);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.fix{color:var(--text)!important}.llm-help{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}.llm-help .btn{margin-top:8px;padding:7px 10px;font-size:13px}.position{font-weight:700;color:var(--text)}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}.books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book{padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}.book h3{margin:0 0 8px;font-size:15px;overflow-wrap:anywhere}.book-meta{color:var(--muted);font-size:13px;line-height:1.55}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.65}.hidden{display:none!important}
 @media(max-width:760px){.shell{width:min(100% - 18px,1080px);padding-top:18px}.mode-switch{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.books{grid-template-columns:1fr}.drop{margin:10px;padding:22px 14px}.section{padding:14px}}
+.input-mode-switch{margin:0;padding:18px 18px 10px}.input-pane{padding:0 18px 18px}.input-hint{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--warnbg);color:var(--text);line-height:1.55}.text-input,.text-area{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);padding:10px 12px;font:inherit}.text-area{min-height:260px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.field-stack{display:grid;gap:10px}.input-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
 </style>
 </head>
 <body>
 <main class="shell">
 <header class="hero">
-<h1>Workshop EJS / 正则检查</h1>
+<h1>命定创意工坊 EJS / 正则检查</h1>
 <div class="mode-switch" role="group" aria-label="检查视图">
 <button class="mode-btn" type="button" id="uploaderModeBtn" data-mode="uploader" aria-pressed="false"><strong>👤 上传者模式</strong><span>只显示作者需要处理的问题</span></button>
 <button class="mode-btn" type="button" id="auditModeBtn" data-mode="audit" aria-pressed="false"><strong>🛡️ 审核员模式</strong><span>显示完整 Yellow / 风险证据</span></button>
 </div>
 <p class="mode-hint" id="modeHint"></p>
-<p class="sub">同一套离线检测引擎同时服务上传门禁与审核中心：上传门禁先挡住明确错误、EJS 组合兼容问题和 Workshop 禁用能力；进入审核后，再把需要人工判断的位置标成黄色。EJS 额外检查 L1–L7；EJS 与正则里的 JavaScript 共用 M1–M5、U2–U5。检查过程不会执行上传内容。</p><div class="standard-note"><strong>自动通过 ≠ “绝对安全”或“无 bug”。</strong> L 系列是公开的 Workshop EJS 兼容规范，作者可以看到错误码、行列位置和修复建议；M / U / AH 中需要判断的内容主要提供给审核员或 LLM，不确定项进入黄色审核，而不是一律拒绝。性能、DOM 复杂度、动画数量等仍由作者负责。</div>
+<p class="sub">同一套离线检测引擎同时服务上传门禁与审核中心：上传门禁先挡住明确错误、EJS 组合兼容问题和命定创意工坊禁用能力；进入审核后，再把需要人工判断的位置标成黄色。EJS 额外检查 L1–L7；EJS 与正则里的 JavaScript 共用 M1–M5、U2–U5。检查过程不会执行上传内容。</p><div class="standard-note"><strong>自动通过 ≠ “绝对安全”或“无 bug”。</strong> L 系列是公开的命定创意工坊 EJS 兼容规范，作者可以看到错误码、行列位置和修复建议；M / U / AH 中需要判断的内容主要提供给审核员或 LLM，不确定项进入黄色审核，而不是一律拒绝。性能、DOM 复杂度、动画数量等仍由作者负责。</div>
 <div class="privacy">● 文件只在当前浏览器本地读取，不上传</div>
 </header>
 <section class="panel">
+<div class="mode-switch input-mode-switch" role="group" aria-label="输入方式">
+<button class="mode-btn active" type="button" id="jsonInputModeBtn" data-input-mode="json" aria-pressed="true"><strong>JSON</strong><span>角色卡 / 世界书 / 正则，可检查多个世界书条目</span></button>
+<button class="mode-btn" type="button" id="txtInputModeBtn" data-input-mode="txt" aria-pressed="false"><strong>TXT</strong><span>一次视为 1 个完整世界书条目</span></button>
+<button class="mode-btn" type="button" id="pasteInputModeBtn" data-input-mode="paste" aria-pressed="false"><strong>粘贴纯文本</strong><span>一次视为 1 个完整世界书条目</span></button>
+</div>
+<p class="mode-hint" id="inputModeHint"><strong>JSON 模式</strong> · 可同时检查多个世界书条目，因此可以进行真正的跨条目 L6 对比。</p>
+<div class="input-pane" id="jsonInputPane">
 <label class="drop" id="dropZone" for="fileInput">
 <strong>拖入世界书 / 正则 JSON，或点这里选择</strong>
 <small>可一次选择多个文件；会自动识别类型，并标明规则 ID、条目/脚本、行列位置与处理建议。L 系列错误可一键复制修复提示给 LLM。</small>
 <div class="actions"><span class="btn primary">选择 JSON</span><button class="btn" type="button" id="clearBtn">清空</button><button class="btn" type="button" id="exportBtn" disabled>导出报告</button></div>
 </label>
 <input id="fileInput" type="file" accept=".json,application/json" multiple>
+</div>
+<div class="input-pane hidden" id="txtInputPane">
+<div class="input-hint"><strong>TXT 模式一次只检查 1 个世界书条目。</strong> 如果需要同时检查多个世界书条目，请使用 JSON。不会根据多个 &lt;% ... %&gt; 自动拆分条目。</div>
+<div class="field-stack"><input class="text-input" id="txtEntryName" type="text" placeholder="世界书条目名称（可选）"><input class="text-input" id="txtFileInput" type="file" accept=".txt,text/plain"></div>
+</div>
+<div class="input-pane hidden" id="pasteInputPane">
+<div class="input-hint"><strong>粘贴纯文本一次只检查 1 个世界书条目。</strong> 如果需要同时检查多个世界书条目，请使用 JSON。一个条目内可以包含多个 &lt;% ... %&gt; EJS 代码块。</div>
+<div class="field-stack"><input class="text-input" id="pasteEntryName" type="text" placeholder="世界书条目名称（可选）"><textarea class="text-area" id="pasteText" placeholder="把完整的世界书条目内容粘贴到这里。"></textarea></div>
+<div class="input-actions"><button class="btn primary" type="button" id="pasteCheckBtn">检查粘贴内容</button></div>
+</div>
 </section>
 <section id="resultRoot" class="hidden">
 <div class="summary">
@@ -56,7 +74,8 @@ const {analyzeProjectCode,parseCodeCheckInput,finding,compareFindings,certificat
 const q=id=>document.getElementById(id);
 const state={books:[],findings:[],report:null};
 let AUDIENCE_MODE=new URLSearchParams(location.search).get('audience')==='uploader'?'uploader':'audit';
-function buildLlmFixPrompt(findingItem){
+let INPUT_MODE='json';
+function buildLegacyLlmFixPrompt(findingItem){
   if(!findingItem||!/^L[1-7]$/.test(findingItem.ruleId))return'';
   const ids=findingItem.relatedEntryIds&&findingItem.relatedEntryIds.length?findingItem.relatedEntryIds:[findingItem.entryId];
   const entries=state.books.flatMap(b=>b.entries).filter(e=>ids.includes(e.id));
@@ -69,6 +88,33 @@ function buildLlmFixPrompt(findingItem){
     '需要修复的问题：\n'+issueText+'\n\n原始条目：\n'+sourceText;
 }
 
+function buildLlmFixPrompt(findingItem){
+  if(!findingItem||!/^L[1-7]$/.test(findingItem.ruleId))return'';
+  const ids=findingItem.relatedEntryIds&&findingItem.relatedEntryIds.length?findingItem.relatedEntryIds:[findingItem.entryId];
+  const entries=state.books.flatMap(b=>b.entries).filter(e=>ids.includes(e.id));
+  const related=state.findings.filter(x=>/^L[1-7]$/.test(x.ruleId)&&x.severity!=='info'&&ids.includes(x.entryId));
+  const issues=related.length?related:[findingItem];
+  const blocks=entries.map((e,i)=>{
+    const mine=issues.filter(x=>x.entryId===e.id||x.relatedEntryIds?.includes(e.id));
+    const issueText=(mine.length?mine:issues).map(x=>'- ['+x.ruleId+'] 第 '+x.line+' 行，第 '+x.column+' 列：'+x.detail).join('\n');
+    return '## 世界书条目 '+(i+1)+'\n名称：'+e.name+'\n\n以下“内容开始”到“内容结束”全部属于同一个世界书条目。中间即使出现多个 <% ... %> EJS 代码块，也不要拆成多个世界书条目。\n\n### 内容开始\n\n```text\n'+(e.rawContent??e.content)+'\n```\n\n### 内容结束\n\n检查问题：\n'+issueText;
+  }).join('\n\n---\n\n');
+  return '你正在修复 SillyTavern / 命定创意工坊 的世界书条目。\n\n'+
+    '目标：只修复检查报告指出的问题，保持最终行为、输出内容、变量含义、角色设定、YAML / 正文内容不变。不要删除功能，不要隐藏、混淆或绕过检查。\n\n'+
+    '## 先确认输入边界\n\n本次提供的世界书条目总数：'+entries.length+'\n\n一个世界书条目内部可以包含多个 <% ... %> EJS 代码块；这些代码块仍属于同一个世界书条目，不要把每个 EJS 代码块误认为独立条目。\n\n'+
+    '## 命定创意工坊 L1-L7 最低规则\n\n'+
+    '[L1] 顶层 var：普通世界书条目中，不允许 EJS 顶层 var。即使写在普通 { ... } 中，var 仍不能用来修复 L1。\n'+
+    '[L2] 顶层 let / const：普通世界书条目中，不允许用 EJS 顶层 let / const 保存当前条目的临时状态。当前条目的临时状态应进入真正的局部作用域。\n'+
+    '[L3] 顶层 function / class：普通世界书条目中，不允许向 EJS 顶层暴露命名 function / class。\n'+
+    '[L4] 裸全局 / 临时全局状态：不允许 foo = ... 这类未声明直接赋值；也不要为了绕过 L1-L3 把临时状态改成 globalThis.foo / window.foo / self.foo。\n'+
+    '[L5] 通用共享名称：真实跨世界书条目共享也不要使用 data / state / config / cache / result 等通用名称；当前条目的临时状态不要提升成共享状态。\n'+
+    '[L6] 跨世界书条目名称冲突：只有 1 个世界书条目时，L1-L5 通过且没有公开/共享名称即可 PASS；多个世界书条目只比较本次提供条目实际留下的公开/共享名称，无真实冲突即可 PASS。不要写“无法完整验证”。\n'+
+    '[L7] decorator：@@private 等 decorator 必须保持在世界书条目真正开头的连续 decorator 区。不要为了修 L1-L6 新增、移动或删除 decorator，也不要移动、删除或改写 poem-workshop-meta。原本合法的 @@private 按现有 Checker scope 规则处理；错误位置的 @@private 不能作为豁免。\n\n'+
+    '## 修复原则\n\n1. 优先简单、局部、保守，不确定时不要猜或创造例外。\n2. 保持最终行为，不要求保留旧代码结构。\n3. 后续 EJS block 仍需相同状态，也不能因此保留违规顶层 flag；使用合法局部作用域，或重新计算无副作用、结果等价的简单判断。\n4. 不要主动引入 globalThis、window、self、动态执行、字符串拼接代码等复杂机制修普通作用域问题。\n5. 不要把顶层 let 机械改成顶层 const。\n6. 无法安全修复时明确说明冲突，不要自行创造例外。\n\n'+
+    '## 输出要求\n\n按「世界书条目 1」「世界书条目 2」分别返回受影响条目的完整修正版，不要省略正文。修复说明保持简短。最后输出：\n\n自检结果：\nL1: PASS / FAIL\nL2: PASS / FAIL\nL3: PASS / FAIL\nL4: PASS / FAIL\nL5: PASS / FAIL\nL6: PASS / FAIL\nL7: PASS / FAIL\n\n如果修复正确，不要保留“无法完整验证”之类会让用户误以为仍未修好的状态。\n\n'+
+    blocks;
+}
+
 async function analyzeFiles(files){
   const inputs=[],books=[],fileErrors=[];
   for(const file of files){
@@ -76,7 +122,7 @@ async function analyzeFiles(files){
       if(file.size>MAX_FILE_BYTES)throw new Error('文件超过 12 MB 上限');
       const text=await file.text();
       const json=JSON.parse(text);
-      const entries=json?.entries??json?.data?.entries??json?.world_info?.entries;
+      const entries=json?.entries??json?.data?.entries??json?.world_info?.entries??json?.character_book?.entries??json?.data?.character_book?.entries??json?.characterBook?.entries??json?.data?.characterBook?.entries;
       const type=entries&&typeof entries==='object'?'worldbook':'regex';
       const input={fileName:file.name,type,text};
       books.push(parseCodeCheckInput(input,inputs.length));
@@ -95,6 +141,17 @@ async function analyzeFiles(files){
   render();
   return {books,entries:books.flatMap(book=>book.entries),findings:report.findings};
 }
+function makeSingleWorldbookInput(entryName,content,fileName='worldbook-entry.txt'){
+  const name=String(entryName||'世界书条目 1').trim()||'世界书条目 1';
+  return{fileName,type:'worldbook',text:JSON.stringify({entries:{0:{uid:0,comment:name,content:String(content??'')}}})};
+}
+function analyzeSingleWorldbookText(entryName,content,fileName='worldbook-entry.txt'){
+  if(!String(content??'').trim())throw new Error('请先提供世界书条目内容');
+  const input=makeSingleWorldbookInput(entryName,content,fileName),book=parseCodeCheckInput(input,0),report=analyzeProjectCode([input]);
+  report.gate=gateStatus(report.findings);report.audit=auditStatus(report.findings);report.certification=certificationStatus(report.findings);
+  state.books=[book];state.findings=report.findings;state.report=report;render();
+  return{books:[book],entries:book.entries,findings:report.findings};
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function updateAudienceUI(){
   const uploader=AUDIENCE_MODE==='uploader';
@@ -112,6 +169,18 @@ function setAudienceMode(mode){
   updateAudienceUI();
   if(state.report)render();
 }
+function updateInputModeUI(){
+  for(const mode of ['json','txt','paste']){
+    const button=q(mode+'InputModeBtn'),pane=q(mode+'InputPane'),active=INPUT_MODE===mode;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));pane.classList.toggle('hidden',!active);
+  }
+  q('inputModeHint').innerHTML=INPUT_MODE==='json'
+    ?'<strong>JSON 模式</strong> · 可同时检查多个世界书条目，因此可以进行真正的跨条目 L6 对比。'
+    :INPUT_MODE==='txt'
+      ?'<strong>TXT 模式</strong> · 整个 TXT 会视为 1 个世界书条目；多个 EJS 代码块仍属于同一条目。需要检查多个条目时请改用 JSON。'
+      :'<strong>粘贴纯文本</strong> · 本次粘贴内容会视为 1 个世界书条目；需要检查多个条目时请改用 JSON。';
+}
+function setInputMode(mode){INPUT_MODE=['json','txt','paste'].includes(mode)?mode:'json';updateInputModeUI();}
 function render(){
   const entries=state.books.flatMap(b=>b.entries),visible=AUDIENCE_MODE==='uploader'?state.findings.filter(f=>f.visibility!=='reviewer_only'):state.findings;
   const high=visible.filter(f=>f.severity==='high').length,warn=visible.filter(f=>f.severity==='warn').length,hints=visible.filter(f=>f.severity==='hint').length,status=certificationStatus(state.findings),gate=gateStatus(state.findings),audit=auditStatus(state.findings),statusMetric=q('statusMetric');
@@ -150,7 +219,7 @@ async function copyLlmFixPrompt(index,button){
   }
   const original=button.textContent;button.textContent=copied?'已复制，可以贴给 LLM':'复制失败，请导出/手动复制';setTimeout(()=>button.textContent=original,1800);
 }
-function clearAll(){state.books=[];state.findings=[];state.report=null;q('fileInput').value='';q('resultRoot').classList.add('hidden');q('exportBtn').disabled=true}
+function clearAll(){state.books=[];state.findings=[];state.report=null;q('fileInput').value='';q('txtFileInput').value='';q('txtEntryName').value='';q('pasteEntryName').value='';q('pasteText').value='';q('resultRoot').classList.add('hidden');q('exportBtn').disabled=true}
 function exportReport(){if(!state.report)return;const blob=new Blob([JSON.stringify(state.report,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='workshop-code-check-report-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function onFiles(fileList){const files=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.json'));if(files.length)await analyzeFiles(files)}
 
@@ -213,15 +282,20 @@ async function selfTest(){
 const drop=q('dropZone');
 q('uploaderModeBtn').addEventListener('click',()=>setAudienceMode('uploader'));
 q('auditModeBtn').addEventListener('click',()=>setAudienceMode('audit'));
+q('jsonInputModeBtn').addEventListener('click',()=>setInputMode('json'));
+q('txtInputModeBtn').addEventListener('click',()=>setInputMode('txt'));
+q('pasteInputModeBtn').addEventListener('click',()=>setInputMode('paste'));updateInputModeUI();
 updateAudienceUI();
 q('fileInput').addEventListener('change',e=>onFiles(e.target.files));
+q('txtFileInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>MAX_FILE_BYTES){alert('文件超过 12 MB 上限');return}try{analyzeSingleWorldbookText(q('txtEntryName').value||file.name.replace(/\\.txt$/i,''),await file.text(),file.name)}catch(error){alert(String(error.message||error))}});
+q('pasteCheckBtn').addEventListener('click',()=>{try{analyzeSingleWorldbookText(q('pasteEntryName').value||'粘贴的世界书条目',q('pasteText').value,'pasted-worldbook.txt')}catch(error){alert(String(error.message||error))}});
 q('clearBtn').addEventListener('click',e=>{e.preventDefault();clearAll()});
 q('exportBtn').addEventListener('click',e=>{e.preventDefault();exportReport()});
 ['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('drag')}));
 ['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));
 drop.addEventListener('drop',e=>onFiles(e.dataTransfer.files));
 if(new URLSearchParams(location.search).get('selftest')==='1')selfTest();
-window.EjsPreflight={analyzeFiles,compareFindings,certificationStatus,gateStatus,auditStatus,buildLlmFixPrompt,setAudienceMode,getAudienceMode:()=>AUDIENCE_MODE,getReport:()=>state.report};
+window.EjsPreflight={analyzeFiles,analyzeSingleWorldbookText,makeSingleWorldbookInput,compareFindings,certificationStatus,gateStatus,auditStatus,buildLlmFixPrompt,setAudienceMode,setInputMode,getAudienceMode:()=>AUDIENCE_MODE,getInputMode:()=>INPUT_MODE,getReport:()=>state.report};
 })();
 </script>
 </body>

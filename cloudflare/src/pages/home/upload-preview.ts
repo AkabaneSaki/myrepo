@@ -196,14 +196,59 @@ function buildUploadLlmFixPrompt(findings, prepared, kind) {
     return '- [' + String(item?.ruleId || 'CHECK') + '] ' + String(item?.title || '需要处理')
       + '\n  位置：' + location
       + (item?.detail ? '\n  问题：' + String(item.detail) : '')
-      + (item?.suggestion ? '\n  Workshop 要求：' + String(item.suggestion) : '');
+      + (item?.suggestion ? '\n  命定创意工坊要求：' + String(item.suggestion) : '');
   }).join('\n');
   const sources = getUploadPromptSources(visible, prepared, kind);
+  const hasLRule = kind === 'worldbook' && visible.some(item => /^L[1-7]$/.test(String(item?.ruleId || '')));
+  if (hasLRule && sources.length) {
+    const blocks = sources.map((item, index) => {
+      const related = visible.filter(issue => {
+        const names = String(issue?.entry || '').split(/\s*↔\s*/).filter(Boolean);
+        const uids = String(issue?.uid ?? '').split(/\s*↔\s*/).filter(Boolean);
+        return names.includes(item.name) || uids.includes(item.uid);
+      });
+      const relatedText = related.length ? related.map(issue => {
+        return '- [' + String(issue?.ruleId || 'CHECK') + '] 第 ' + Number(issue?.line || 1) + ' 行，第 ' + Number(issue?.column || 1) + ' 列：'
+          + String(issue?.title || '需要处理')
+          + (issue?.detail ? '；' + String(issue.detail) : '');
+      }).join('\n') : '- 当前没有额外定位信息，请按上方检查问题处理。';
+      return '## 世界书条目 ' + (index + 1)
+        + '\n名称：' + item.name
+        + '\n\n以下“内容开始”到“内容结束”全部属于同一个世界书条目。中间即使出现多个 <% ... %> EJS 代码块，也不要拆成多个世界书条目。'
+        + '\n\n### 内容开始\n\n\`\`\`text\n' + getUploadPreparedEntrySource(item.entry, kind) + '\n\`\`\`'
+        + '\n\n### 内容结束\n\n检查问题：\n' + relatedText;
+    }).join('\n\n---\n\n');
+    return '你正在修复 SillyTavern / 命定创意工坊 的世界书条目。\n\n'
+      + '目标：只修复检查报告指出的问题，保持最终行为、输出内容、变量含义、角色设定、YAML / 正文内容不变。不要删除功能，不要隐藏、混淆或绕过检查。\n\n'
+      + '## 先确认输入边界\n\n'
+      + '本次提供的世界书条目总数：' + sources.length + '\n\n'
+      + '下面会按「世界书条目 1」「世界书条目 2」分别提供完整内容。一个世界书条目内部可以包含多个 <% ... %> EJS 代码块；这些代码块仍属于同一个世界书条目，不要把每个 EJS 代码块误认为独立条目。\n\n'
+      + '## 命定创意工坊 L1-L7 最低规则\n\n'
+      + '[L1] 顶层 var：普通世界书条目中，不允许 EJS 顶层 var。即使写在普通 { ... } 中，var 仍不能用来修复 L1。\n'
+      + '[L2] 顶层 let / const：普通世界书条目中，不允许用 EJS 顶层 let / const 保存当前条目的临时状态。当前条目的临时状态应进入真正的局部作用域，例如 { const value = ... }。\n'
+      + '[L3] 顶层 function / class：普通世界书条目中，不允许向 EJS 顶层暴露命名 function / class。\n'
+      + '[L4] 裸全局 / 临时全局状态：不允许 foo = ... 这类未声明直接赋值；也不要为了绕过 L1-L3，把当前条目的临时状态改成 globalThis.foo / window.foo / self.foo。\n'
+      + '[L5] 通用共享名称：如果原本业务确实需要跨世界书条目共享状态，不要使用 data / state / config / cache / result 等极易冲突的通用名称。当前条目自己的临时状态不要提升成共享状态。\n'
+      + '[L6] 跨世界书条目名称冲突：只有 1 个世界书条目时，L1-L5 通过且没有留下公开/共享名称即可 PASS；有多个世界书条目时，只比较本次提供条目实际留下的公开/共享名称，没有重复、覆盖或冲突即可 PASS，只有真实冲突才 FAIL。不要写“无法完整验证”。\n'
+      + '[L7] decorator：@@private 等 decorator 必须保持在世界书条目真正开头的连续 decorator 区。不要为了修 L1-L6 新增、移动或删除 decorator，也不要移动、删除或改写 poem-workshop-meta。原本就合法的 @@private 继续按现有 Checker scope 规则处理；错误位置的 @@private 不能作为豁免。\n\n'
+      + '## 修复原则\n\n'
+      + '1. 优先简单、局部、保守；不确定时不要猜，也不要创造规则例外。\n'
+      + '2. 保持最终行为，而不是强行保持旧代码结构。\n'
+      + '3. 如果后续 EJS block 仍需要同一个临时状态，仍然不能因此保留违规顶层声明。可以让合法局部作用域覆盖相关代码，或重新计算无副作用、结果等价的简单判断。\n'
+      + '4. 不要为了普通作用域问题主动引入 globalThis、window、self、动态执行、字符串拼接代码或其他更复杂机制。\n'
+      + '5. 不要把顶层 let 机械改成顶层 const；这仍违反 L2。\n'
+      + '6. 如果无法在不改变功能的前提下安全修复，明确说明冲突，不要自行创造例外。\n\n'
+      + '## 输出要求\n\n'
+      + '按「世界书条目 1」「世界书条目 2」分别返回受影响条目的完整修正版，不要省略正文。修复说明保持简短。最后输出：\n\n'
+      + '自检结果：\nL1: PASS / FAIL\nL2: PASS / FAIL\nL3: PASS / FAIL\nL4: PASS / FAIL\nL5: PASS / FAIL\nL6: PASS / FAIL\nL7: PASS / FAIL\n\n'
+      + '如果修复正确，不要保留“无法完整验证”之类会让用户误以为仍未修好的状态。\n\n'
+      + blocks;
+  }
   const sourceText = sources.map(item => {
     const language = kind === 'regex' ? 'javascript' : 'ejs';
     return '### ' + item.name + '\n\n\`\`\`' + language + '\n' + getUploadPreparedEntrySource(item.entry, kind) + '\n\`\`\`';
   }).join('\n\n');
-  return '你正在修复 SillyTavern / Poem Workshop 上传内容。请只修复下面列出的 Workshop 自动检查问题，不要改变原本功能、输出内容、变量含义、角色设定、YAML/文本内容或业务逻辑，也不要通过删除功能、隐藏代码、混淆代码来绕过检查。\n\n'
+  return '你正在修复 SillyTavern / 命定创意工坊 上传内容。请只修复下面列出的自动检查问题，不要改变原本功能、输出内容、变量含义、角色设定、YAML / 正文内容或业务逻辑，也不要通过删除功能、隐藏代码、混淆代码来绕过检查。\n\n'
     + '修复要求：\n'
     + '1. 保持现有行为；只做解决这些检查项所需的最小修改。\n'
     + '2. L1-L7 属于 Workshop EJS 组合兼容公约：临时状态应放在正确局部作用域；不要依赖 placement、depth、role 或 message 隔离顶层名称。\n'
@@ -220,7 +265,7 @@ function buildUploadCheckReport(codeCheck, prepared, kind) {
   const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
   const blockers = findings.filter(item => item?.severity === 'high').length;
   const groups = groupUploadPreflightFindings(findings);
-  return '# Poem Workshop 上传检查报告\n\n'
+  return '# 命定创意工坊上传检查报告\n\n'
     + '- 状态：' + (codeCheck?.gate === 'reject' ? '未通过' : '通过自动门禁') + '\n'
     + '- 阻断项：' + blockers + '\n'
     + '- 受影响内容：' + groups.length + '\n'
