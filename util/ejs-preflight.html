@@ -45,7 +45,7 @@
 <section class="panel section"><h2>检查结果</h2><div id="findings"></div></section>
 <section class="panel section"><h2>已读取文件</h2><div id="books" class="books"></div></section>
 </section>
-<p class="foot">检查规则版本：PW-CODE-CHECK-v1。同一检查器提供上传检查与审核报告。L1–L7 与语法问题会向作者说明位置和处理方式；高风险能力只显示通用阻断提示，详细证据留给审核中心。通过自动检查后仍需人工审核。</p>
+<p class="foot">检查规则版本：PW-CODE-CHECK-v1。同一检查器提供上传检查与审核报告。L1–L7、语法问题及被禁止的脚本能力会向作者说明位置和处理方式；需要额外审核的脚本会给出提醒，详细证据留给审核中心。通过自动检查后仍需人工审核。</p>
 </main>
 <script src="ejs-checker-v2.js"></script>
 <script>
@@ -199,7 +199,8 @@ async function selfTest(){
     ['EJS-U02-非官方域名',['U2']],
     ['EJS-U03-不安全HTTP',['U3']],
     ['EJS-U04-IP直连',['U4']],
-    ['EJS-U05-动态远程目标',['U5']]
+    // This historical fixture has a fully static assembly, so review the resolved target.
+    ['EJS-U05-动态远程目标',['U2']]
   ];
   const exact=expected.every(([name,rules])=>JSON.stringify(rulesFor(name))===JSON.stringify(rules));
   const fields=result.findings.every(f=>f.severity&&f.entry!==undefined&&Number.isInteger(f.line)&&f.line>=1&&f.ruleId&&f.suggestion);

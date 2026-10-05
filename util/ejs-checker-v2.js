@@ -14529,7 +14529,7 @@ var PoemEjsChecker = (() => {
   }
 
   // src/utils/ejs-checker/policy.mjs
-  var GENERIC_GLOBAL_NAMES = /* @__PURE__ */ new Set(["data", "value", "result", "state", "temp", "tmp", "config", "ctx", "context", "output", "response", "item"]);
+  var GENERIC_GLOBAL_NAMES = /* @__PURE__ */ new Set(["data", "value", "result", "state", "temp", "tmp", "config", "ctx", "context", "output", "response", "item", "utils"]);
   var GLOBAL_BASES = /* @__PURE__ */ new Set(["globalThis", "window", "self"]);
   function hasLeakDocumentation(content, index) {
     const area = content.slice(Math.max(0, index - 700), Math.min(content.length, index + 700)).toLowerCase();
@@ -14721,8 +14721,284 @@ var PoemEjsChecker = (() => {
     return findings;
   }
 
-  // src/utils/ejs-checker/capabilities.mjs
+  // src/utils/ejs-checker/policy-config.mjs
+  var CHECK_POLICY_VERSION = "PW-CODE-POLICY-2026-10-05.1";
+  var trustedAssetHosts = Object.freeze(["files.catbox.moe", "i.ibb.co"]);
+  var MEDIA_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|apng|bmp|ico|mp4|webm|mov|m4v|ogv)$/i;
+  function trustedStaticMediaUrl(value, usage) {
+    if (usage !== "media" || typeof value !== "string" || /\$\d+|\$<[^>]+>|\$\{/.test(value)) return false;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password && trustedAssetHosts.includes(url.hostname.toLowerCase()) && MEDIA_EXTENSIONS.test(url.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  // src/utils/ejs-checker/links.mjs
+  var OFFICIAL_URL_RULES = [
+    { host: "testingcf.jsdelivr.net", path: /^\/gh\/StageDog\/tavern_resource(?:\/|$)/i },
+    { host: "cdn.jsdelivr.net", path: /^\/gh\/StageDog\/tavern_resource(?:\/|$)/i },
+    { host: "raw.githubusercontent.com", path: /^\/StageDog\/tavern_resource(?:\/|$)/i },
+    { host: "github.com", path: /^\/zonde306\/ST-Prompt-Template(?:\/|$)/i }
+  ];
   var GLOBALS = /* @__PURE__ */ new Set(["window", "globalThis", "self"]);
+  var NETWORK_NAMES = /* @__PURE__ */ new Set(["fetch", "XMLHttpRequest", "WebSocket", "EventSource"]);
+  var MEDIA_KEYS = /^(?:avatar(?:url)?|image(?:url)?|img(?:url)?|video(?:url)?|poster|portrait|thumbnail|cover|background(?:url)?|gallery)$/i;
+  var MEDIA_GROUPS = /^(?:gallery|images|videos|avatars|sources)$/i;
+  function propertyName2(node) {
+    if (node?.type !== "MemberExpression" && node?.type !== "Property") return null;
+    const property = node.type === "Property" ? node.key : node.property;
+    if (!node.computed && property.type === "Identifier") return property.name;
+    return property.type === "Literal" && typeof property.value === "string" ? property.value : null;
+  }
+  function expressionEvidence(node) {
+    return JSON.stringify(node, (key, value) => ["start", "end", "loc", "range", "raw"].includes(key) ? void 0 : typeof value === "bigint" ? String(value) : value);
+  }
+  function product(left, right, join) {
+    if (!left || !right || left.length * right.length > 64) return null;
+    return [...new Set(left.flatMap((a) => right.map((b) => join(a, b))))];
+  }
+  function staticStringValues(node, analysis, scope, visited = /* @__PURE__ */ new Set()) {
+    if (!node || visited.has(node)) return null;
+    visited = new Set(visited).add(node);
+    if (node.type === "ChainExpression") return staticStringValues(node.expression, analysis, scope, visited);
+    if (node.type === "Literal") return typeof node.value === "string" ? [node.value] : null;
+    if (node.type === "TemplateLiteral") {
+      let values = [node.quasis[0].value.cooked];
+      for (let i2 = 0; i2 < node.expressions.length; i2++) values = product(values, staticStringValues(node.expressions[i2], analysis, scope, visited), (a, b) => a + b + node.quasis[i2 + 1].value.cooked);
+      return values;
+    }
+    if (node.type === "BinaryExpression" && node.operator === "+") return product(staticStringValues(node.left, analysis, scope, visited), staticStringValues(node.right, analysis, scope, visited), (a, b) => a + b);
+    if (node.type === "ConditionalExpression") {
+      const left = staticStringValues(node.consequent, analysis, scope, visited), right = staticStringValues(node.alternate, analysis, scope, visited);
+      return left && right ? [.../* @__PURE__ */ new Set([...left, ...right])] : null;
+    }
+    if (node.type === "Identifier") {
+      const binding = resolveBinding(scope, node.name)?.[0];
+      if (binding?.kind !== "const") return null;
+      const declaration = analysis.nodes.find((item) => item.node.type === "VariableDeclarator" && item.node.id === binding.node);
+      return declaration ? staticStringValues(declaration.node.init, analysis, declaration.scope, visited) : null;
+    }
+    if (node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "URL" && !resolveBinding(scope, "URL")) {
+      const paths = staticStringValues(node.arguments[0], analysis, scope, visited), bases = node.arguments[1] ? staticStringValues(node.arguments[1], analysis, scope, visited) : [""];
+      if (!paths || !bases) return null;
+      try {
+        return product(paths, bases, (path, base) => base ? new URL(path, base).href : new URL(path).href);
+      } catch {
+        return null;
+      }
+    }
+    if (node.type === "MemberExpression" && node.object.type === "Identifier") {
+      const binding = resolveBinding(scope, node.object.name)?.[0];
+      if (binding?.kind !== "const") return null;
+      const declaration = analysis.nodes.find((item) => item.node.type === "VariableDeclarator" && item.node.id === binding.node);
+      if (!declaration) return null;
+      const mutated = analysis.nodes.some((item) => ["AssignmentExpression", "UpdateExpression"].includes(item.node.type) && (() => {
+        let target = item.node.left ?? item.node.argument;
+        while (target?.type === "MemberExpression") target = target.object;
+        return target?.type === "Identifier" && resolveBinding(item.scope, target.name)?.[0] === binding;
+      })());
+      if (mutated) return null;
+      const init = declaration.node.init, name = propertyName2(node);
+      const values = init?.type === "ObjectExpression" ? init.properties.filter((item) => item.type === "Property" && item.kind === "init" && (!name || propertyName2(item) === name)).map((item) => item.value) : init?.type === "ArrayExpression" ? init.elements : null;
+      if (!values?.length) return null;
+      const possible = values.map((value) => staticStringValues(value, analysis, declaration.scope, visited));
+      return possible.every(Boolean) ? [...new Set(possible.flat())] : null;
+    }
+    return null;
+  }
+  function globalObject(node, scope) {
+    if (node?.type === "Identifier") return GLOBALS.has(node.name) && !resolveBinding(scope, node.name);
+    return node?.type === "MemberExpression" && ["window", "self", "globalThis", "top", "parent"].includes(propertyName2(node)) && globalObject(node.object, scope);
+  }
+  function networkCapability(node, analysis, scope, visited = /* @__PURE__ */ new Set()) {
+    if (node?.type === "ChainExpression") node = node.expression;
+    if (node?.type === "Identifier" && NETWORK_NAMES.has(node.name) && !resolveBinding(scope, node.name)) return node.name;
+    if (node?.type === "MemberExpression" && NETWORK_NAMES.has(propertyName2(node)) && globalObject(node.object, scope)) return propertyName2(node);
+    if (node?.type !== "Identifier" || visited.has(node)) return null;
+    visited = new Set(visited).add(node);
+    const binding = resolveBinding(scope, node.name)?.[0];
+    const declaration = binding ? analysis.nodes.find((item) => item.node.type === "VariableDeclarator" && item.node.id === binding.node) : null;
+    return declaration ? networkCapability(declaration.node.init, analysis, declaration.scope, visited) : null;
+  }
+  function locationObject(node, scope) {
+    return node?.type === "Identifier" ? node.name === "location" && !resolveBinding(scope, "location") : node?.type === "MemberExpression" && propertyName2(node) === "location" && globalObject(node.object, scope);
+  }
+  function navigationTarget(node, scope) {
+    if (node.type === "CallExpression") {
+      const callee = node.callee.type === "ChainExpression" ? node.callee.expression : node.callee;
+      if (callee.type === "Identifier" && callee.name === "open" && !resolveBinding(scope, "open")) return { argument: node.arguments[0], action: "open" };
+      if (callee.type === "MemberExpression" && propertyName2(callee) === "open" && globalObject(callee.object, scope)) return { argument: node.arguments[0], action: "window.open" };
+      if (callee.type === "MemberExpression" && ["assign", "replace"].includes(propertyName2(callee)) && locationObject(callee.object, scope)) return { argument: node.arguments[0], action: "location." + propertyName2(callee) };
+    }
+    if (node.type === "AssignmentExpression" && (node.left.type === "MemberExpression" && propertyName2(node.left) === "href" && locationObject(node.left.object, scope) || locationObject(node.left, scope))) return { argument: node.right, action: "location.href" };
+    return null;
+  }
+  function mediaContext(node, scope, parentByNode, analysis) {
+    let current2 = node;
+    while (current2) {
+      const parent = parentByNode.get(current2);
+      if (!parent) break;
+      if (parent.type === "Property") {
+        const key = propertyName2(parent);
+        if (MEDIA_KEYS.test(key ?? "") || MEDIA_GROUPS.test(key ?? "")) return true;
+      }
+      if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier" && MEDIA_KEYS.test(parent.id.name)) return true;
+      if (parent.type === "AssignmentExpression" && parent.right === current2) {
+        const target = parent.left, key = propertyName2(target);
+        if (MEDIA_KEYS.test(key ?? "") || target.type === "Identifier" && MEDIA_KEYS.test(target.name)) return true;
+        if (key === "src") {
+          if (target.object.type === "Identifier" && /^(?:img|image|video|avatar|poster)$/i.test(target.object.name)) return true;
+          const binding = target.object.type === "Identifier" ? resolveBinding(scope, target.object.name)?.[0] : null;
+          const declaration = binding ? analysis.nodes.find((item) => item.node.type === "VariableDeclarator" && item.node.id === binding.node) : null;
+          const init = declaration?.node.init;
+          if (init?.type === "CallExpression" && propertyName2(init.callee) === "createElement" && ["img", "video", "source"].includes(init.arguments[0]?.value)) return true;
+        }
+      }
+      if (["CallExpression", "NewExpression", "FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration"].includes(parent.type)) break;
+      current2 = parent;
+    }
+    return false;
+  }
+  function directUrls(content) {
+    const items = [];
+    const pattern = /(?:https?:\/\/|\/\/)(?:\[[0-9a-f:]+\]|(?:[a-z0-9-]+\.)+[a-z0-9-]+)(?:[^\s"'<>\\)\]]*)/gi;
+    let match;
+    while (match = pattern.exec(content)) items.push({ url: match[0].replace(/[;,\]}]+$/, ""), index: match.index, end: pattern.lastIndex });
+    return items;
+  }
+  function parsedUrl(value) {
+    try {
+      return new URL(value.startsWith("//") ? "https:" + value : value);
+    } catch {
+      return null;
+    }
+  }
+  function external(value) {
+    const url = parsedUrl(value);
+    return url && ["http:", "https:"].includes(url.protocol);
+  }
+  function ipHost(host) {
+    return host.includes(":") || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);
+  }
+  function inspectExternalLinks(entry, parsed) {
+    const source = String(entry.rawContent ?? entry.content ?? ""), targets = [], hints = [], covered = [], seen = /* @__PURE__ */ new Set();
+    const addTarget = (value, index, usage, action, expression = "") => {
+      if (!external(value)) return;
+      const key = index + "|" + value + "|" + usage;
+      if (seen.has(key)) return;
+      seen.add(key);
+      targets.push({ value, index, usage, action, expression });
+    };
+    for (const unit of parsed.units ?? []) {
+      if (!unit.ast) continue;
+      const analysis = buildScopes(unit), parents = new WeakMap(analysis.nodes.map((item) => [item.node, item.parent]));
+      const navigation = /* @__PURE__ */ new Set(), networkCalls = /* @__PURE__ */ new Set(), mediaValues = /* @__PURE__ */ new Set();
+      for (const { node, scope, parent } of analysis.nodes) {
+        if (!unit.sourceMap.isOriginal(node.start) || !parent || !(parent.type === "AssignmentExpression" && parent.right === node || parent.type === "Property" && parent.value === node || parent.type === "VariableDeclarator" && parent.init === node) || !mediaContext(node, scope, parents, analysis)) continue;
+        const values = staticStringValues(node, analysis, scope);
+        if (values) for (const value of values) {
+          mediaValues.add(value);
+          addTarget(value, unit.sourceMap.map(node.start), "media", "resource", expressionEvidence(node));
+        }
+        else if (!["ObjectExpression", "ArrayExpression", "Literal", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type) && !(node.type === "CallExpression" && propertyName2(node.callee) === "createElement") && !(node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "Image" && !resolveBinding(scope, "Image"))) {
+          const index = unit.sourceMap.map(node.start);
+          hints.push({ ruleId: "AH2", severity: "hint", title: "\u5A92\u4F53\u6765\u6E90\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4", index, detail: source.slice(index, unit.sourceMap.map(node.end)), suggestion: "\u8BF7\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u56FE\u7247\u6216\u89C6\u9891\u6765\u6E90\uFF0C\u4EE5\u53CA\u8FD0\u884C\u65F6\u5982\u4F55\u51B3\u5B9A\u8981\u52A0\u8F7D\u7684\u5185\u5BB9\uFF1B\u8FD9\u6761\u63D0\u793A\u672C\u8EAB\u4E0D\u4EE3\u8868\u8FDD\u89C4\u3002", extra: { riskEvidence: { action: "resource", usage: "media", target: "dynamic", expression: expressionEvidence(node) } } });
+        }
+      }
+      for (const { node, scope } of analysis.nodes) {
+        if (!unit.sourceMap.isOriginal(node.start)) continue;
+        if (["CallExpression", "NewExpression"].includes(node.type)) {
+          const callee = node.callee.type === "ChainExpression" ? node.callee.expression : node.callee;
+          const method = propertyName2(callee), network = networkCapability(callee, analysis, scope) || (["call", "apply"].includes(method) ? networkCapability(callee.object, analysis, scope) : null);
+          if (["fetch", "WebSocket", "EventSource"].includes(network)) {
+            networkCalls.add(node);
+            const argument = method === "call" ? node.arguments[1] : method === "apply" ? node.arguments[1]?.elements?.[0] : node.arguments[0];
+            const values2 = staticStringValues(argument, analysis, scope);
+            if (values2) for (const value of values2) addTarget(value, unit.sourceMap.map(node.start), "network", network, expressionEvidence(node));
+            covered.push({ start: unit.sourceMap.map(node.start), end: unit.sourceMap.map(node.end) });
+          }
+        }
+        const target = navigationTarget(node, scope);
+        if (!target) continue;
+        navigation.add(node);
+        const values = staticStringValues(target.argument, analysis, scope), index = unit.sourceMap.map(node.start), expression = expressionEvidence(node);
+        covered.push({ start: unit.sourceMap.map(node.start), end: unit.sourceMap.map(node.end) });
+        if (values) for (const value of values) addTarget(value, index, "navigation", target.action, expression);
+        else hints.push({ ruleId: "AH2", severity: "hint", title: "\u5916\u90E8\u8DF3\u8F6C\u76EE\u6807\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4", index, detail: "\u4EE3\u7801\u4F1A\u5C1D\u8BD5\u6253\u5F00\u6216\u8DF3\u8F6C\u5230\u8FD0\u884C\u65F6\u51B3\u5B9A\u7684\u4F4D\u7F6E\u3002", suggestion: "\u8BF7\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u8DF3\u8F6C\u76EE\u6807\u53CA\u5176\u7528\u9014\uFF1B\u8FD9\u6761\u63D0\u793A\u672C\u8EAB\u4E0D\u4EE3\u8868\u8FDD\u89C4\u3002", extra: { riskEvidence: { action: target.action, usage: "navigation", target: "dynamic", expression } } });
+      }
+      for (const { node, scope } of analysis.nodes) {
+        if (!unit.sourceMap.isOriginal(node.start) || !["Literal", "TemplateLiteral", "BinaryExpression"].includes(node.type)) continue;
+        const parent = parents.get(node);
+        if (parent?.type === "BinaryExpression" && parent.operator === "+" || parent?.type === "TemplateLiteral") continue;
+        let ancestor = node, usage = mediaContext(node, scope, parents, analysis) ? "media" : "unknown";
+        while (ancestor = parents.get(ancestor)) {
+          if (navigation.has(ancestor)) {
+            usage = "navigation";
+            break;
+          }
+          if (networkCalls.has(ancestor)) {
+            usage = "network";
+            break;
+          }
+        }
+        if (usage === "navigation" || usage === "network") continue;
+        const values = staticStringValues(node, analysis, scope), index = unit.sourceMap.map(node.start);
+        covered.push({ start: index, end: unit.sourceMap.map(node.end) });
+        if (!values && ["TemplateLiteral", "BinaryExpression"].includes(node.type) && /(?:https?:)?\/\//.test(unit.code.slice(node.start, node.end))) hints.push({ ruleId: "U5", severity: "warn", title: "\u8FDC\u7A0B\u76EE\u6807\u7531\u8FD0\u884C\u65F6\u5185\u5BB9\u51B3\u5B9A", index, detail: source.slice(index, unit.sourceMap.map(node.end)), suggestion: "\u8BF7\u63D0\u4F9B\u6240\u6709\u53EF\u80FD\u8BBF\u95EE\u7684\u76EE\u6807\uFF0C\u6216\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u52A8\u6001\u76EE\u6807\u7684\u6765\u6E90\u548C\u7528\u9014\u3002", extra: { riskEvidence: { action: "resource", usage, target: "dynamic", expression: expressionEvidence(node) } } });
+        if (values) for (const value of values) {
+          if (external(value)) addTarget(value, index, usage === "unknown" && mediaValues.has(value) ? "media" : usage, "resource", expressionEvidence(node));
+          else for (const url of directUrls(value)) addTarget(url.url, index + url.index, usage, "resource", expressionEvidence(node));
+        }
+      }
+    }
+    const chars = source.split("");
+    for (const range of parsed.units.find((unit) => unit.kind === "ejs")?.templateRanges ?? []) for (let i2 = range.start; i2 < range.end; i2++) if (chars[i2] !== "\r" && chars[i2] !== "\n") chars[i2] = " ";
+    const html = parseFragment(chars.join(""), { sourceCodeLocationInfo: true }), pending = [...html.childNodes];
+    while (pending.length) {
+      const node = pending.shift();
+      if (!node.tagName) continue;
+      const locations = firstAttributeLocations(source, node.sourceCodeLocation?.startTag);
+      for (const attribute of node.attrs ?? []) {
+        const location = locations.get(attribute.prefix ? attribute.prefix + ":" + attribute.name : attribute.name);
+        if (!location) continue;
+        if (!["href", "src", "poster", "srcset", "action", "formaction"].includes(attribute.name)) continue;
+        const media = attribute.name === "src" && ["img", "video", "source", "audio"].includes(node.tagName) || attribute.name === "poster" || attribute.name === "srcset" && ["img", "source"].includes(node.tagName);
+        const usage = media ? "media" : ["href", "action", "formaction"].includes(attribute.name) ? "navigation" : "unknown";
+        covered.push({ start: location.startOffset, end: location.endOffset });
+        if (attribute.name !== "srcset" && external(attribute.value)) addTarget(attribute.value, location.startOffset, usage, node.tagName + "." + attribute.name);
+        else for (const item of directUrls(attribute.value)) addTarget(item.url, location.startOffset, usage, node.tagName + "." + attribute.name);
+      }
+      if (node.tagName !== "template") pending.push(...node.childNodes ?? []);
+    }
+    const markdown = /(!?)\[[^\]\r\n]*\]\((https?:\/\/[^\s)]+|\/\/[^\s)]+)(?:\s+"[^"]*")?\)/gi;
+    let match;
+    while (match = markdown.exec(source)) {
+      covered.push({ start: match.index, end: markdown.lastIndex });
+      addTarget(match[2], match.index, match[1] ? "media" : "navigation", match[1] ? "markdown.image" : "markdown.link");
+    }
+    const raw = source.replace(/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi, (value) => value.replace(/[^\r\n]/g, " "));
+    for (const item of directUrls(raw)) if (!covered.some((range) => item.index >= range.start && item.index < range.end) && !parsed.units.some((unit) => unit.codeRanges.some((range) => item.index >= range.originalStart && item.index < range.originalEnd))) {
+      const before = source.slice(Math.max(0, item.index - 12), item.index), usage = /url\(\s*['"]?$/.test(before) ? "media" : "unknown";
+      addTarget(item.url, item.index, usage, "resource");
+    }
+    const findings = [...hints];
+    for (const target of targets) {
+      const url = parsedUrl(target.value), dynamic = /\$\d+|\$<[^>]+>|\$\{/.test(target.value);
+      if (/^http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)$/i.test(target.value)) continue;
+      const extra = { riskEvidence: { action: target.action, usage: target.usage, target: target.value, expression: target.expression } };
+      if (dynamic) findings.push({ ruleId: "U5", severity: "warn", title: "\u8FDC\u7A0B\u76EE\u6807\u5305\u542B\u8FD0\u884C\u65F6\u66FF\u6362\u5185\u5BB9", index: target.index, detail: target.value, suggestion: "\u8BF7\u63D0\u4F9B\u6240\u6709\u53EF\u80FD\u8BBF\u95EE\u7684\u76EE\u6807\uFF0C\u6216\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u52A8\u6001\u76EE\u6807\u7684\u6765\u6E90\u548C\u7528\u9014\u3002", extra });
+      if (!dynamic && trustedStaticMediaUrl(target.value, target.usage)) continue;
+      const official = OFFICIAL_URL_RULES.some((rule) => url.hostname.toLowerCase() === rule.host && rule.path.test(url.pathname));
+      const ruleId = ipHost(url.hostname) ? "U4" : url.protocol === "http:" ? "U3" : official ? null : "U2";
+      if (ruleId) findings.push({ ruleId, severity: "warn", title: ruleId === "U4" ? "\u5916\u90E8\u76EE\u6807\u4F7F\u7528 IP \u5730\u5740" : ruleId === "U3" ? "\u5916\u90E8\u76EE\u6807\u4F7F\u7528 HTTP" : "\u5916\u90E8\u76EE\u6807\u9700\u8981\u786E\u8BA4\u6765\u6E90", index: target.index, detail: target.value, suggestion: target.usage === "navigation" ? "\u8BF7\u5411\u5BA1\u6838\u5458\u8BF4\u660E\u7528\u6237\u5C06\u88AB\u5E26\u5F80\u54EA\u91CC\uFF0C\u4EE5\u53CA\u4E3A\u4EC0\u4E48\u9700\u8981\u8FD9\u4E2A\u8DF3\u8F6C\u3002" : "\u8BF7\u786E\u8BA4\u8FD9\u4E2A\u76EE\u6807\u662F\u9879\u76EE\u9700\u8981\u7684\u8D44\u6E90\u6765\u6E90\uFF1B\u8FD9\u6761\u63D0\u793A\u672C\u8EAB\u4E0D\u4EE3\u8868\u8FDD\u89C4\u3002", extra });
+    }
+    return findings;
+  }
+
+  // src/utils/ejs-checker/capabilities.mjs
+  var GLOBALS2 = /* @__PURE__ */ new Set(["window", "globalThis", "self"]);
   var SENSITIVE_WORDS = /* @__PURE__ */ new Set(["token", "auth", "session", "password", "passwd", "secret", "cookie", "credential", "bearer"]);
   function memberName(node) {
     if (node?.type !== "MemberExpression") return null;
@@ -14737,15 +15013,15 @@ var PoemEjsChecker = (() => {
   function unwrap(node) {
     return node?.type === "ChainExpression" ? node.expression : node;
   }
-  function globalObject(node, scope) {
+  function globalObject2(node, scope) {
     node = unwrap(node);
-    if (node?.type === "Identifier") return GLOBALS.has(node.name) && !resolveBinding(scope, node.name);
-    return node?.type === "MemberExpression" && ["window", "globalThis", "self", "top", "parent", "frames"].includes(memberName(node)) && globalObject(node.object, scope);
+    if (node?.type === "Identifier") return GLOBALS2.has(node.name) && !resolveBinding(scope, node.name);
+    return node?.type === "MemberExpression" && ["window", "globalThis", "self", "top", "parent", "frames"].includes(memberName(node)) && globalObject2(node.object, scope);
   }
   function builtin(node, names, scope) {
     node = unwrap(node);
     if (node?.type === "Identifier") return names.has(node.name) && !resolveBinding(scope, node.name) ? node.name : null;
-    if (node?.type !== "MemberExpression" || !globalObject(node.object, scope)) return null;
+    if (node?.type !== "MemberExpression" || !globalObject2(node.object, scope)) return null;
     const name = memberName(node);
     return names.has(name) ? name : null;
   }
@@ -14762,10 +15038,19 @@ var PoemEjsChecker = (() => {
     return words.some((word) => SENSITIVE_WORDS.has(word)) || words.some((word, i2) => word === "api" && words[i2 + 1] === "key") || words.some((word, i2) => (word === "access" || word === "refresh") && words[i2 + 1] === "key");
   }
   var STORAGE = /* @__PURE__ */ new Set(["localStorage", "sessionStorage"]);
-  var NETWORK = /* @__PURE__ */ new Set(["fetch", "XMLHttpRequest", "WebSocket", "EventSource"]);
   var URL_NETWORK = /* @__PURE__ */ new Set(["fetch", "WebSocket", "EventSource"]);
   var EVAL = /* @__PURE__ */ new Set(["eval"]);
   var FUNCTION = /* @__PURE__ */ new Set(["Function"]);
+  function xhrRequest(node, analysis, scope) {
+    if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression" || memberName(node.callee) !== "send") return null;
+    const object = node.callee.object;
+    if (object.type !== "Identifier") return null;
+    const binding = resolveBinding(scope, object.name)?.[0];
+    const declaration = binding ? analysis.nodes.find((item) => item.node.type === "VariableDeclarator" && item.node.id === binding.node) : null;
+    if (declaration?.node.init?.type !== "NewExpression" || builtin(declaration.node.init.callee, /* @__PURE__ */ new Set(["XMLHttpRequest"]), declaration.scope) !== "XMLHttpRequest") return null;
+    const open = analysis.nodes.findLast((item) => item.node.type === "CallExpression" && memberName(item.node.callee) === "open" && item.node.callee.object?.type === "Identifier" && resolveBinding(item.scope, item.node.callee.object.name)?.[0] === binding && item.node.start < node.start);
+    return { method: literalString(open?.node.arguments[0]) ?? "dynamic", target: open ? staticStringValues(open.node.arguments[1], analysis, open.scope) : null };
+  }
   function infiniteHeaderTokens(unit) {
     const tokens = unit.tokens ?? [], found = [];
     for (let i2 = 0; i2 < tokens.length; i2++) {
@@ -14810,17 +15095,19 @@ var PoemEjsChecker = (() => {
     const findings = [], seen = /* @__PURE__ */ new Set();
     if (parsed.internalErrors?.length) return findings;
     const raw = String(entry.rawContent ?? entry.content ?? "");
-    const add = (unit, node, ruleId, severity, title, suggestion, detail) => {
-      if (ruleId !== "U5" && seen.has(ruleId)) return;
-      seen.add(ruleId);
+    const add = (unit, node, ruleId, severity, title, suggestion, detail, evidence = {}) => {
       const index = unit.sourceMap.map(node.start);
+      const key = ruleId + ":" + index;
+      if (seen.has(key)) return;
+      seen.add(key);
       findings.push({
         ruleId,
         severity,
         title,
         index,
         detail: detail ?? raw.slice(index, Math.max(index + 1, unit.sourceMap.map(node.end))).slice(0, 220),
-        suggestion
+        suggestion,
+        extra: { riskEvidence: { action: ruleId, expression: expressionEvidence(node), policyVersion: CHECK_POLICY_VERSION, ...evidence } }
       });
     };
     const reportInfinite = (unit, node) => add(
@@ -14836,12 +15123,12 @@ var PoemEjsChecker = (() => {
         for (const token of infiniteHeaderTokens(unit)) reportInfinite(unit, token);
         continue;
       }
-      const { nodes } = buildScopes(unit);
+      const analysis = buildScopes(unit), { nodes } = analysis;
       for (const { node, scope, parent } of nodes) {
         if (!unit.sourceMap.isOriginal(node.start)) continue;
         if (node.type === "ObjectPattern") {
           const source = parent?.type === "VariableDeclarator" && parent.id === node ? parent.init : parent?.type === "AssignmentExpression" && parent.left === node ? parent.right : null;
-          if (globalObject(source, scope)) for (const property of node.properties) {
+          if (globalObject2(source, scope)) for (const property of node.properties) {
             if (property.type !== "Property") continue;
             const key = property.computed ? literalString(property.key) : property.key.name ?? literalString(property.key);
             if (key === "eval") add(unit, property, "M1", "high", "\u4F7F\u7528 eval \u52A8\u6001\u6267\u884C\u4EE3\u7801\uFF08\u516C\u7EA6\u963B\u65AD\uFF09", "Workshop \u9879\u76EE\u7981\u6B62\u8C03\u7528\u3001\u8F6C\u5B58\u6216\u95F4\u63A5\u4F7F\u7528 eval\uFF1B\u8BF7\u6539\u6210\u56FA\u5B9A\u903B\u8F91\u3002");
@@ -14887,29 +15174,32 @@ var PoemEjsChecker = (() => {
           "\u8BBF\u95EE\u654F\u611F\u6216\u5927\u8303\u56F4\u6D4F\u89C8\u5668\u6570\u636E\uFF0C\u9700\u8981\u5BA1\u6838",
           "\u8FD9\u4E0D\u4F1A\u81EA\u52A8\u62D2\u7EDD\u4E0A\u4F20\uFF0C\u4F46\u5BA1\u6838\u5458\u9700\u8981\u786E\u8BA4\u7528\u9014\u3002\u9879\u76EE\u81EA\u5DF1\u7684\u4E3B\u9898\u3001\u5B57\u53F7\u7B49\u660E\u786E\u672C\u5730\u8BBE\u7F6E\u53EF\u4EE5\u4F7F\u7528 localStorage\uFF1BCookie\u3001token/API key \u7C7B\u6570\u636E\u6216\u679A\u4E3E\u6574\u4EFD\u5B58\u50A8\u9700\u8981\u91CD\u70B9\u68C0\u67E5\u3002"
         );
-        if (reference(node, parent) && builtin(node, /* @__PURE__ */ new Set(["XMLHttpRequest"]), scope)) add(
-          unit,
-          node,
-          "M4",
-          "warn",
-          "\u68C0\u6D4B\u5230\u4E3B\u52A8\u7F51\u7EDC\u8BF7\u6C42 / \u6570\u636E\u5916\u53D1\u80FD\u529B\uFF0C\u9700\u8981\u5BA1\u6838",
-          "\u8FD9\u4E0D\u4F1A\u81EA\u52A8\u62D2\u7EDD\u4E0A\u4F20\uFF1B\u5BA1\u6838\u4E2D\u5FC3\u5E94\u663E\u793A\u5B8C\u6574\u4F4D\u7F6E\uFF0C\u786E\u8BA4\u8BF7\u6C42\u76EE\u6807\u3001\u53D1\u9001\u5185\u5BB9\u4E0E\u5FC5\u8981\u6027\u3002\u9759\u6001\u56FE\u7247/CSS URL \u7531 U \u7CFB\u5217\u68C0\u67E5\u3002"
-        );
         if (node.type === "WhileStatement" && node.test.type === "Literal" && (node.test.value === true || node.test.value === 1)) reportInfinite(unit, node);
         if (node.type === "ForStatement" && node.test === null) reportInfinite(unit, node);
         if (!["CallExpression", "NewExpression"].includes(node.type)) continue;
         const callee = unwrap(node.callee), method = memberName(callee);
         const indirect = ["call", "apply"].includes(method);
-        const network = builtin(callee, NETWORK, scope) || (indirect ? builtin(callee.object, NETWORK, scope) : null);
+        const network = networkCapability(callee, analysis, scope) || (indirect ? networkCapability(callee.object, analysis, scope) : null);
         const beacon = builtin(callee, /* @__PURE__ */ new Set(["sendBeacon"]), scope) || method === "sendBeacon" && builtin(callee.object, /* @__PURE__ */ new Set(["navigator"]), scope);
-        if (network || beacon) add(
-          unit,
-          node,
-          "M4",
-          "warn",
-          "\u68C0\u6D4B\u5230\u4E3B\u52A8\u7F51\u7EDC\u8BF7\u6C42 / \u6570\u636E\u5916\u53D1\u80FD\u529B\uFF0C\u9700\u8981\u5BA1\u6838",
-          "\u8FD9\u4E0D\u4F1A\u81EA\u52A8\u62D2\u7EDD\u4E0A\u4F20\uFF1B\u5BA1\u6838\u4E2D\u5FC3\u5E94\u663E\u793A\u5B8C\u6574\u4F4D\u7F6E\uFF0C\u786E\u8BA4\u8BF7\u6C42\u76EE\u6807\u3001\u53D1\u9001\u5185\u5BB9\u4E0E\u5FC5\u8981\u6027\u3002\u9759\u6001\u56FE\u7247/CSS URL \u7531 U \u7CFB\u5217\u68C0\u67E5\u3002"
-        );
+        const xhr = xhrRequest(node, analysis, scope);
+        if (network && network !== "XMLHttpRequest" || beacon || xhr) {
+          let argument = node.arguments[0];
+          if (method === "call") argument = node.arguments[1];
+          else if (method === "apply") argument = node.arguments[1]?.elements?.[0];
+          const target = xhr?.target ?? staticStringValues(argument, analysis, scope);
+          const options = node.arguments[1]?.type === "ObjectExpression" ? node.arguments[1] : null;
+          const requestMethod = options?.properties.find((property) => propertyName2(property) === "method")?.value;
+          add(
+            unit,
+            node,
+            "M4",
+            "warn",
+            "\u68C0\u6D4B\u5230\u4E3B\u52A8\u7F51\u7EDC\u901A\u4FE1\uFF0C\u9700\u8981\u5BA1\u6838",
+            "\u8FD9\u4E0D\u4F1A\u81EA\u52A8\u62D2\u7EDD\u4E0A\u4F20\uFF1B\u8BF7\u7531\u5BA1\u6838\u5458\u786E\u8BA4\u8BF7\u6C42\u76EE\u6807\u3001\u53D1\u9001\u5185\u5BB9\u4E0E\u529F\u80FD\u9700\u8981\u3002\u53EF\u4FE1\u9759\u6001\u5A92\u4F53\u6765\u6E90\u4E5F\u4E0D\u8C41\u514D\u4E3B\u52A8\u7F51\u7EDC\u8C03\u7528\u3002",
+            void 0,
+            { action: xhr ? "XMLHttpRequest.send" : network ?? "sendBeacon", target: target ?? "dynamic", method: xhr?.method ?? (beacon ? "POST" : literalString(requestMethod) ?? "GET"), usage: "network" }
+          );
+        }
         if (URL_NETWORK.has(network)) {
           let argument = node.arguments[0], uncertainApply = false;
           if (method === "call") argument = node.arguments[1];
@@ -14921,13 +15211,15 @@ var PoemEjsChecker = (() => {
               uncertainApply = true;
             }
           }
-          if (argument?.type === "Identifier" || uncertainApply) add(
+          if (!staticStringValues(argument, analysis, scope) || uncertainApply) add(
             unit,
             node,
             "U5",
             "warn",
             "\u7F51\u7EDC\u76EE\u6807\u7531\u8FD0\u884C\u65F6\u53D8\u91CF\u51B3\u5B9A",
-            "\u5982\u679C\u8FD9\u662F\u56FA\u5B9A\u8D44\u6E90\uFF0C\u8BF7\u6539\u6210\u6709\u9650\u3001\u660E\u786E\u7684 URL \u6620\u5C04\uFF1B\u5982\u679C\u786E\u5B9E\u5FC5\u987B\u52A8\u6001\u8054\u7F51\uFF0C\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4\u5B9E\u9645\u76EE\u6807\u8303\u56F4\u3002"
+            "\u5982\u679C\u8FD9\u662F\u56FA\u5B9A\u8D44\u6E90\uFF0C\u8BF7\u6539\u6210\u6709\u9650\u3001\u660E\u786E\u7684 URL \u6620\u5C04\uFF1B\u5982\u679C\u786E\u5B9E\u5FC5\u987B\u52A8\u6001\u8054\u7F51\uFF0C\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4\u5B9E\u9645\u76EE\u6807\u8303\u56F4\u3002",
+            void 0,
+            { action: network, target: "dynamic", usage: "network" }
           );
         }
         if (builtin(callee, /* @__PURE__ */ new Set(["atob", "btoa"]), scope) || ["fromCharCode", "fromCodePoint"].includes(method) && builtin(callee.object, /* @__PURE__ */ new Set(["String"]), scope)) add(
@@ -14938,7 +15230,7 @@ var PoemEjsChecker = (() => {
           "\u53D1\u73B0\u7F16\u7801 / \u89E3\u7801\u5F0F\u5B57\u7B26\u4E32\u6784\u9020",
           "\u4E0D\u4EE3\u8868\u6709\u95EE\u9898\uFF1B\u4EBA\u5DE5\u5BA1\u6838\u65F6\u786E\u8BA4\u7ED3\u679C\u6CA1\u6709\u88AB\u7EE7\u7EED\u5F53\u4F5C\u4EE3\u7801\u6216\u9690\u85CF\u8FDC\u7A0B\u76EE\u6807\u3002"
         );
-        if (indirect || callee.type === "MemberExpression" && callee.computed && memberName(callee) === null && globalObject(callee.object, scope)) add(
+        if (indirect || callee.type === "MemberExpression" && callee.computed && memberName(callee) === null && globalObject2(callee.object, scope)) add(
           unit,
           node,
           "AH2",
@@ -15011,7 +15303,7 @@ var PoemEjsChecker = (() => {
     generateData: Object.freeze({ availability: "generate decorators" })
   });
   var PROMISE_MEMBERS = /* @__PURE__ */ new Set(["then", "catch", "finally"]);
-  function propertyName2(node) {
+  function propertyName3(node) {
     if (!node.computed && node.property.type === "Identifier") return node.property.name;
     if (node.computed && node.property.type === "Literal" && typeof node.property.value === "string") return node.property.value;
     return null;
@@ -15027,7 +15319,7 @@ var PoemEjsChecker = (() => {
       parent = parents.get(value);
     }
     if (parent?.type === "MemberExpression" && parent.object === value) {
-      const name = propertyName2(parent);
+      const name = propertyName3(parent);
       return name !== null && !PROMISE_MEMBERS.has(name);
     }
     if (parent?.type === "BinaryExpression" && parent.operator === "+") {
@@ -15100,12 +15392,6 @@ var PoemEjsChecker = (() => {
   }
 
   // src/utils/ejs-checker/report.mjs
-  var OFFICIAL_URL_RULES = [
-    { host: "testingcf.jsdelivr.net", path: /^\/gh\/StageDog\/tavern_resource(?:\/|$)/i },
-    { host: "cdn.jsdelivr.net", path: /^\/gh\/StageDog\/tavern_resource(?:\/|$)/i },
-    { host: "raw.githubusercontent.com", path: /^\/StageDog\/tavern_resource(?:\/|$)/i },
-    { host: "github.com", path: /^\/zonde306\/ST-Prompt-Template(?:\/|$)/i }
-  ];
   function parseDecorators(content) {
     const src = String(content || ""), decorators = [], validStarts = /* @__PURE__ */ new Set();
     let cursor = 0;
@@ -15150,18 +15436,21 @@ var PoemEjsChecker = (() => {
   }
   function extractRegexScripts(json, fileName, bookOrder) {
     let list2 = [];
-    if (isRegexScript(json)) list2 = [json];
-    else if (Array.isArray(json)) list2 = json.filter(isRegexScript);
-    else {
+    if (isRegexScript(json)) list2 = [[0, json]];
+    else if (Array.isArray(json)) {
+      if (!json.length) return [];
+      list2 = json.map((value, index) => [index, value]).filter(([, value]) => isRegexScript(value));
+    } else {
+      if (json && typeof json === "object" && json.entries && typeof json.entries === "object" && !Object.keys(json.entries).length) return [];
       for (const key of ["regex_scripts", "regexScripts", "scripts"]) {
         if (Array.isArray(json && json[key])) {
-          list2 = json[key].filter(isRegexScript);
+          list2 = json[key].map((value, index) => [index, value]).filter(([, value]) => isRegexScript(value));
           if (list2.length) break;
         }
       }
     }
     if (!list2.length) throw new Error("\u627E\u4E0D\u5230\u4E16\u754C\u4E66 entries \u6216\u6B63\u5219\u811A\u672C replaceString");
-    return list2.map((value, i2) => ({
+    return list2.map(([i2, value]) => ({
       id: bookOrder + ":" + fileName + ":regex:" + i2,
       fileName,
       bookOrder,
@@ -15185,81 +15474,10 @@ var PoemEjsChecker = (() => {
   function finding(ruleId, severity, title, entry, index, detail, suggestion, extra = {}) {
     const source = extra.sourceText || (entry ? entry.rawContent || entry.content : "");
     const pos = entry ? sourceLocation(source, index || 0) : { line: extra.line || 1, column: extra.column || 1 };
-    return { ruleId, severity, title, detail, suggestion, visibility: findingVisibility(ruleId), entryId: entry ? entry.id : extra.entryId || "", book: entry ? entry.fileName : extra.book || "", entry: extra.entry ?? (entry ? entry.name : ""), uid: extra.uid ?? (entry ? entry.uid : ""), line: pos.line, column: pos.column, index: index || 0, bookOrder: entry ? entry.bookOrder : extra.bookOrder ?? 999999, entryOrder: entry ? entry.entryOrder : extra.entryOrder ?? 999999, ...extra.relatedEntryIds ? { relatedEntryIds: extra.relatedEntryIds } : {} };
+    return { ruleId, severity, title, detail, suggestion, visibility: findingVisibility(ruleId), entryId: entry ? entry.id : extra.entryId || "", book: entry ? entry.fileName : extra.book || "", entry: extra.entry ?? (entry ? entry.name : ""), uid: extra.uid ?? (entry ? entry.uid : ""), line: pos.line, column: pos.column, index: index || 0, bookOrder: entry ? entry.bookOrder : extra.bookOrder ?? 999999, entryOrder: entry ? entry.entryOrder : extra.entryOrder ?? 999999, ...extra.relatedEntryIds ? { relatedEntryIds: extra.relatedEntryIds } : {}, ...extra.riskEvidence ? { riskEvidence: extra.riskEvidence } : {} };
   }
-  function collectDirectUrls(content) {
-    const out = [], absolute = /https?:\/\/[^\s"'<>\\)]+/gi, protocolRelative = /(^|[\s"'(=,])\/\/((?:\[[0-9A-Fa-f:]+\]|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?:[^\s"'<>\\)]*)?)/gm;
-    let m;
-    while (m = absolute.exec(content)) {
-      const url = m[0].replace(/[;,\]\}]+$/, "");
-      if (/^http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)$/i.test(url)) continue;
-      out.push({ url, index: m.index });
-    }
-    while (m = protocolRelative.exec(content)) {
-      const raw = "//" + m[2], url = raw.replace(/[;,\]\}]+$/, ""), index = m.index + m[1].length;
-      out.push({ url, index });
-    }
-    return out.sort((a, b) => a.index - b.index);
-  }
-  function isIpHost(host) {
-    const h = host.replace(/^\[|\]$/g, "");
-    if (h.includes(":")) return true;
-    const p = h.split(".");
-    return p.length === 4 && p.every((x) => /^\d{1,3}$/.test(x) && Number(x) >= 0 && Number(x) <= 255);
-  }
-  function parseDirectUrl(url) {
-    return new URL(String(url).startsWith("//") ? "https:" + url : url);
-  }
-  function isOfficialUrl(url) {
-    try {
-      const u = parseDirectUrl(url);
-      return OFFICIAL_URL_RULES.some((r) => u.hostname.toLowerCase() === r.host && r.path.test(u.pathname));
-    } catch {
-      return false;
-    }
-  }
-  function inspectLinks(entry, findings, u2SeenHosts) {
-    const seen = /* @__PURE__ */ new Set();
-    const linkContent = entry.sourceType === "worldbook" ? entry.content.replace(/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi, (value) => value.replace(/[^\r\n]/g, " ")) : entry.content;
-    for (const item of collectDirectUrls(linkContent)) {
-      let u;
-      try {
-        u = parseDirectUrl(item.url);
-      } catch {
-        continue;
-      }
-      const host = u.hostname.toLowerCase(), key = u.protocol + "//" + host;
-      if (isIpHost(host)) {
-        if (!seen.has("U4:" + key)) {
-          seen.add("U4:" + key);
-          findings.push(finding("U4", "warn", "\u5916\u94FE\u4F7F\u7528 IP \u76F4\u8FDE", entry, item.index, item.url, "\u6539\u7528\u53EF\u8BC6\u522B\u3001\u53EF\u5BA1\u6838\u7684 HTTPS \u57DF\u540D\uFF1B\u82E5\u786E\u6709\u5FC5\u8981\uFF0C\u8BF7\u660E\u786E\u8BF4\u660E\u7528\u9014\u3002"));
-        }
-      } else if (u.protocol === "http:") {
-        if (!seen.has("U3:" + key)) {
-          seen.add("U3:" + key);
-          findings.push(finding("U3", "warn", "\u5916\u94FE\u4F7F\u7528\u4E0D\u5B89\u5168 HTTP", entry, item.index, item.url, "\u6539\u6210 HTTPS\uFF1B\u82E5\u76EE\u6807\u4E0D\u652F\u6301 HTTPS\uFF0C\u4E0D\u5EFA\u8BAE\u628A\u5B83\u4F5C\u4E3A\u9879\u76EE\u4F9D\u8D56\u3002"));
-        }
-      } else if (!isOfficialUrl(item.url)) {
-        if (!u2SeenHosts.has(host)) {
-          u2SeenHosts.add(host);
-          findings.push(finding("U2", "warn", "\u5916\u94FE\u6765\u81EA\u672A\u786E\u8BA4\u7684\u7B2C\u4E09\u65B9\u57DF\u540D", entry, item.index, host, "\u786E\u8BA4\u8FD9\u4E2A\u57DF\u540D\u786E\u5B9E\u662F\u9879\u76EE\u9700\u8981\u7684\u8D44\u6E90\u6765\u6E90\u3002\u76F8\u540C\u57DF\u540D\u5728\u672C\u6B21\u626B\u63CF\u4E2D\u53EA\u63D0\u793A\u4E00\u6B21\uFF0C\u907F\u514D\u8DE8\u6761\u76EE/\u6587\u4EF6\u5237\u5C4F\u3002"));
-        }
-      }
-    }
-    const dynamicPatterns = [
-      /(?:https?:)?\/\/[^\s"'<>\\)]*(?:\x24\d+|\x24<[A-Za-z][\w]*>)[^\s"'<>\\)]*/gi,
-      /(['"])(?:https?:)?\/\/[^'"]*\1\s*\+\s*(?!\s*['"])/gi,
-      /`(?:https?:)?\/\/[^`]*\${[^}]+}[^`]*`/gi
-    ];
-    for (const re of dynamicPatterns) {
-      let m;
-      while (m = re.exec(entry.content)) {
-        const key = "U5:" + m.index;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        findings.push(finding("U5", "warn", "\u8FDC\u7A0B\u8D44\u6E90\u76EE\u6807\u4E0D\u662F\u56FA\u5B9A\u53EF\u5BA1\u9605\u96C6\u5408", entry, m.index, m[0].slice(0, 220), "\u628A\u53EF\u80FD\u8BBF\u95EE\u7684\u8FDC\u7A0B\u8D44\u6E90\u5199\u6210\u6709\u9650\u3001\u660E\u786E\u7684 URL \u6620\u5C04\u3002\u50CF mood \u2192 \u56FA\u5B9A URL \u53EF\u4EE5\uFF1B\u4E0D\u8981\u8BA9 $1/$2\u3001\u547D\u540D capture \u6216\u4EFB\u610F\u53D8\u91CF\u76F4\u63A5\u51B3\u5B9A\u8FDC\u7A0B\u6587\u4EF6\u8DEF\u5F84\u3002"));
-      }
-    }
+  function inspectLinks(entry, findings, parsed) {
+    for (const record of inspectExternalLinks(entry, parsed)) findings.push(finding(record.ruleId, record.severity, record.title, entry, record.index, record.detail, record.suggestion, record.extra));
   }
   function inspectDecorators(entry, findings) {
     if (entry.sourceType !== "worldbook" || !entry.decoratorIssues || !entry.decoratorIssues.length) return;
@@ -15303,6 +15521,7 @@ var PoemEjsChecker = (() => {
   // src/utils/ejs-checker/index.mjs
   var CHECKER_VERSION = Object.freeze({
     engine: "v2",
+    policyVersion: CHECK_POLICY_VERSION,
     parserCompatibility: "EJS 3.1.9 / ST nested tags; Acorn 8.18.0; HTML parse5 8.0.1"
   });
   function worldbookHtml(entry, parsed) {
@@ -15318,7 +15537,7 @@ var PoemEjsChecker = (() => {
     return { units: staticUnits, errors: staticUnits.flatMap((unit) => unit.mappedError ? [unit.mappedError] : []), internalErrors: html.internalErrors };
   }
   function analyzeProjectCodeV2(inputs) {
-    const books = [], findings = [], seenHosts = /* @__PURE__ */ new Set();
+    const books = [], findings = [];
     const add = (entry, record) => findings.push(finding(record.ruleId, record.severity, record.title, entry, record.index, record.detail, record.suggestion, record.extra));
     for (const [bookOrder, input] of (Array.isArray(inputs) ? inputs : []).entries()) {
       try {
@@ -15340,7 +15559,7 @@ var PoemEjsChecker = (() => {
       for (const record of policy.findings) add(entry, record);
       for (const record of inspectCapabilities(entry, parsed)) add(entry, record);
       for (const record of inspectApiUsage(entry, parsed)) add(entry, record);
-      inspectLinks(entry, findings, seenHosts);
+      inspectLinks(entry, findings, parsed);
     }
     for (const record of inspectSymbolCollisions(entries)) add(record.entry, record);
     findings.sort(compareFindings);

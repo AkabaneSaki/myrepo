@@ -10,13 +10,42 @@ import {
   type ProjectEntryKind,
 } from '../../utils/project-content';
 import { r2Storage } from '../../utils/r2';
-import { analyzeProjectCode, formatUploaderCodeCheckError, toUploaderCodeCheck } from '../../utils/ejs-preflight.mjs';
+import { formatUploaderCodeCheckError, toUploaderCodeCheck } from '../../utils/ejs-preflight.mjs';
+import { analyzeProjectCodeCached } from '../../utils/ejs-checker/cache.mjs';
 import { bumpProjectVersionWithLegacyFallback } from '../../utils/version.js';
 import { computeProjectInspectionSummary, readProjectContentForEdit } from './content';
 
 const MAX_UPLOAD_SIZE = WORKSHOP_LIMITS.projectUploadBytes;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + WORKSHOP_LIMITS.coverRequestOverheadBytes;
 const UPLOAD_SIZE_ERROR = `文件过大，最大 ${WORKSHOP_LIMITS.projectUploadLabel}`;
+const CONTENT_CHANGED_ERROR = '文件正在保存或项目已变化，请稍后刷新再试。';
+
+async function writeProjectContent(
+  c: AppContext,
+  project: { id: string; draftRevision: number; status: string; publishedProjectId?: string | null },
+  kind: ProjectEntryKind,
+  loadContent: () => Promise<{ text: string; body: ArrayBuffer; contentType: string }>,
+) {
+  const mutation = await projectDb.beginContentMutation(c, project);
+  if (!mutation) return null;
+  try {
+    const content = await loadContent();
+    const inspection = await computeProjectInspectionSummary(c, project.id, { [kind]: content.text });
+    const fileName = kind === 'worldbook' ? `project-${project.id}.json` : `regex-${project.id}.json`;
+    const result = await r2Storage.uploadProjectFile(c, project.id, content.body, fileName, content.contentType);
+    if (!result) throw new Error('文件保存失败，请稍后重新上传。');
+    const completed = await projectDb.finishContentMutation(c, project.id, mutation, {
+      ...(kind === 'worldbook' ? { downloadUrl: result.url, fileSize: result.size } : {}),
+      hasEjs: inspection.hasEjs,
+      hasCharacterArtwork: inspection.hasCharacterArtwork,
+    });
+    if (!completed) throw new Error(CONTENT_CHANGED_ERROR);
+    return result;
+  } catch (error) {
+    await projectDb.cancelContentMutation(c, project.id, mutation);
+    throw error;
+  }
+}
 
 export class ProjectUploadPreflight extends OpenAPIRoute {
   schema = {
@@ -70,7 +99,7 @@ export class ProjectUploadPreflight extends OpenAPIRoute {
     }
 
     const fileName = kind === 'worldbook' ? '上传的世界书.json' : '上传的正则.json';
-    const codeCheck = analyzeProjectCode([{ fileName, type: kind, text }]);
+    const codeCheck = await analyzeProjectCodeCached([{ fileName, type: kind, text }]);
     const uploaderCodeCheck = toUploaderCodeCheck(codeCheck);
     if (codeCheck.gate === 'reject') {
       return c.json(
@@ -200,7 +229,7 @@ export class ProjectUpload extends OpenAPIRoute {
     const validation = validateProjectContentText(worldbookText, 'worldbook');
     const codeCheck = validation.valid === false
       ? null
-      : analyzeProjectCode([{ fileName: `project-${projectId}.json`, type: 'worldbook', text: worldbookText }]);
+      : await analyzeProjectCodeCached([{ fileName: `project-${projectId}.json`, type: 'worldbook', text: worldbookText }]);
     if (codeCheck?.gate === 'reject') {
       return c.json(
         { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
@@ -211,66 +240,26 @@ export class ProjectUpload extends OpenAPIRoute {
       return c.json({ error: validation.error }, 400);
     }
 
+    let targetProject = project;
     if (project.isPublished && project.status === 'approved') {
       const draftId = await projectDb.createDraftFromPublished(c, projectId, {});
       if (!draftId) {
         return c.json({ error: 'Draft creation failed' }, 500);
       }
 
-      const inspectionSummary = await computeProjectInspectionSummary(c, draftId, { worldbook: worldbookText });
-      const draftFileName = `project-${draftId}.json`;
-      const draftResult = await r2Storage.uploadProjectFile(c, draftId, arrayBuffer, draftFileName, contentType);
-      if (!draftResult) {
-        return c.json({ error: 'Upload failed' }, 500);
-      }
-
-      await projectDb.update(c, draftId, {
-        downloadUrl: draftResult.url,
-        fileSize: draftResult.size,
-        hasEjs: inspectionSummary.hasEjs,
-        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
-        status: 'pending',
-      });
-
-      return {
-        success: true,
-        projectId: draftId,
-        downloadUrl: draftResult.url,
-        fileSize: draftResult.size,
-        message: '草稿版本已提交审核，主页仍显示旧版本。',
-      };
+      const draft = await projectDb.get(c, draftId);
+      if (!draft) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
+      targetProject = draft;
     }
 
-    const inspectionSummary = await computeProjectInspectionSummary(c, projectId, { worldbook: worldbookText });
-    const fileName = `project-${projectId}.json`;
-
-    // 上传到 R2
-    const result = await r2Storage.uploadProjectFile(c, projectId, arrayBuffer, fileName, contentType);
-    if (!result) {
-      return c.json({ error: 'Upload failed' }, 500);
-    }
-
-    const updateData: {
-      downloadUrl: string;
-      fileSize: number;
-      hasEjs: boolean;
-      hasCharacterArtwork: boolean;
-      status?: string;
-    } = {
-      downloadUrl: result.url,
-      fileSize: result.size,
-      hasEjs: inspectionSummary.hasEjs,
-      hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
-    };
-
-    await projectDb.update(c, projectId, updateData);
-    await projectDb.bumpDraftRevision(c, projectId);
+    const result = await writeProjectContent(c, targetProject, 'worldbook', async () => ({ text: worldbookText, body: arrayBuffer, contentType }));
+    if (!result) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
 
     return {
       success: true,
       downloadUrl: result.url,
       fileSize: result.size,
-      message: undefined,
+      ...(targetProject.id !== projectId ? { projectId: targetProject.id, message: '草稿版本已提交审核，主页仍显示旧版本。' } : {}),
     };
   }
 }
@@ -457,7 +446,7 @@ export class ProjectRegexUpload extends OpenAPIRoute {
     const validation = validateProjectContentText(regexText, 'regex');
     const codeCheck = validation.valid === false
       ? null
-      : analyzeProjectCode([{ fileName: `regex-${projectId}.json`, type: 'regex', text: regexText }]);
+      : await analyzeProjectCodeCached([{ fileName: `regex-${projectId}.json`, type: 'regex', text: regexText }]);
     if (codeCheck?.gate === 'reject') {
       return c.json(
         { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
@@ -468,36 +457,25 @@ export class ProjectRegexUpload extends OpenAPIRoute {
       return c.json({ error: validation.error }, 400);
     }
 
-    let targetProjectId = projectId;
+    let targetProject = project;
     if (project.isPublished && project.status === 'approved') {
       const draftId = await projectDb.createDraftFromPublished(c, projectId, {});
       if (!draftId) {
         return c.json({ error: 'Draft creation failed' }, 500);
       }
-      targetProjectId = draftId;
+      const draft = await projectDb.get(c, draftId);
+      if (!draft) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
+      targetProject = draft;
     }
 
-    const inspectionSummary = await computeProjectInspectionSummary(c, targetProjectId, { regex: regexText });
-    const fileName = `regex-${targetProjectId}.json`;
-
-    // 上传到 R2
-    const result = await r2Storage.uploadProjectFile(c, targetProjectId, arrayBuffer, fileName, contentType);
-    if (!result) {
-      return c.json({ error: 'Upload failed' }, 500);
-    }
-    await projectDb.update(c, targetProjectId, {
-      hasEjs: inspectionSummary.hasEjs,
-      hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
-    });
-    if (!(project.isPublished && project.status === 'approved')) {
-      await projectDb.bumpDraftRevision(c, targetProjectId);
-    }
+    const result = await writeProjectContent(c, targetProject, 'regex', async () => ({ text: regexText, body: arrayBuffer, contentType }));
+    if (!result) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
 
     return {
       success: true,
       downloadUrl: result.url,
       fileSize: result.size,
-      projectId: targetProjectId,
+      projectId: targetProject.id,
     };
   }
 }
@@ -536,58 +514,30 @@ export class ProjectEntryRemove extends OpenAPIRoute {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    let targetProjectId = project.id;
-    const existingDraft =
-      project.isPublished && project.status === 'approved' && project.draftProjectId
-        ? await projectDb.get(c, project.draftProjectId, payload)
-        : null;
-    const sourceProject =
-      project.isPublished && project.status === 'approved'
-        ? existingDraft || project
-        : project;
-    const sourceObject = await readProjectContentForEdit(c, sourceProject, kind as ProjectEntryKind);
-    if (!sourceObject) return c.json({ error: 'Project content file not found' }, 404);
-    const changed = removeProjectEntryFromJson(await sourceObject.text(), kind as ProjectEntryKind, entryKey);
-
+    let targetProject = project;
     if (project.isPublished && project.status === 'approved') {
+      const existingDraft = project.draftProjectId ? await projectDb.get(c, project.draftProjectId, payload) : null;
       const targetVersion = existingDraft?.version || bumpProjectVersionWithLegacyFallback(project.version, 'patch');
       const draftId = await projectDb.createDraftFromPublished(c, project.id, { version: targetVersion });
       if (!draftId) return c.json({ error: 'Draft creation failed' }, 500);
-      targetProjectId = draftId;
+      const draft = await projectDb.get(c, draftId, payload);
+      if (!draft) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
+      targetProject = draft;
     }
 
-    const inspectionSummary = await computeProjectInspectionSummary(c, targetProjectId, { [kind]: changed.text });
-    const result = await r2Storage.uploadProjectFile(
-      c,
-      targetProjectId,
-      await new Response(changed.text).arrayBuffer(),
-      kind === 'worldbook' ? `project-${targetProjectId}.json` : `regex-${targetProjectId}.json`,
-      'application/json',
-    );
-    if (!result) return c.json({ error: 'Upload failed' }, 500);
-
-    if (kind === 'worldbook') {
-      await projectDb.update(c, targetProjectId, {
-        downloadUrl: result.url,
-        fileSize: result.size,
-        hasEjs: inspectionSummary.hasEjs,
-        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
-      });
-    } else {
-      await projectDb.update(c, targetProjectId, {
-        hasEjs: inspectionSummary.hasEjs,
-        hasCharacterArtwork: inspectionSummary.hasCharacterArtwork,
-      });
-    }
-    if (!(project.isPublished && project.status === 'approved')) {
-      await projectDb.bumpDraftRevision(c, targetProjectId);
-    }
+    const result = await writeProjectContent(c, targetProject, kind, async () => {
+      const sourceObject = await readProjectContentForEdit(c, targetProject, kind);
+      if (!sourceObject) throw new Error('找不到项目文件，请刷新后重试。');
+      const changed = removeProjectEntryFromJson(await sourceObject.text(), kind, entryKey);
+      return { text: changed.text, body: await new Response(changed.text).arrayBuffer(), contentType: 'application/json' };
+    });
+    if (!result) return c.json({ error: CONTENT_CHANGED_ERROR }, 409);
 
     if (payload.isAdmin && project.authorId !== payload.userId) {
       await projectDb.logAdminAction(c, {
         action: 'project_entry_removed',
         targetType: project.reviewTarget === 'draft' || project.isPublished ? 'project_draft' : 'project',
-        targetId: targetProjectId,
+        targetId: targetProject.id,
         actorId: payload.userId,
         actorName: payload.globalName || payload.username,
         detail: { kind, entryKey, projectName: project.name },
@@ -596,7 +546,7 @@ export class ProjectEntryRemove extends OpenAPIRoute {
 
     return {
       success: true,
-      projectId: targetProjectId,
+      projectId: targetProject.id,
     };
   }
 }

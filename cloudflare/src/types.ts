@@ -239,6 +239,7 @@ export const ReviewRequest = z.object({
   action: z.enum(['approve', 'reject']).describe('审核操作'),
   rejectReason: z.string().optional().describe('拒绝原因(仅 reject 时需要)'),
   expectedRevision: z.number().int().min(1).optional().describe('审核时看到的草稿修订号'),
+  reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('审核详情绑定的内容与检查依据'),
 
 });
 

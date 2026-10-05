@@ -1,10 +1,5 @@
 import { sourceLocation } from './source-units.mjs';
-const OFFICIAL_URL_RULES=[
-  {host:'testingcf.jsdelivr.net',path:/^\/gh\/StageDog\/tavern_resource(?:\/|$)/i},
-  {host:'cdn.jsdelivr.net',path:/^\/gh\/StageDog\/tavern_resource(?:\/|$)/i},
-  {host:'raw.githubusercontent.com',path:/^\/StageDog\/tavern_resource(?:\/|$)/i},
-  {host:'github.com',path:/^\/zonde306\/ST-Prompt-Template(?:\/|$)/i}
-];
+import { inspectExternalLinks } from './links.mjs';
 
 function parseDecorators(content){
   const src=String(content||''),decorators=[],validStarts=new Set();let cursor=0;
@@ -42,15 +37,19 @@ function isRegexScript(value){
 }
 function extractRegexScripts(json,fileName,bookOrder){
   let list=[];
-  if(isRegexScript(json))list=[json];
-  else if(Array.isArray(json))list=json.filter(isRegexScript);
+  if(isRegexScript(json))list=[[0,json]];
+  else if(Array.isArray(json)){
+    if(!json.length)return [];
+    list=json.map((value,index)=>[index,value]).filter(([,value])=>isRegexScript(value));
+  }
   else{
+    if(json&&typeof json==='object'&&json.entries&&typeof json.entries==='object'&&!Object.keys(json.entries).length)return [];
     for(const key of ['regex_scripts','regexScripts','scripts']){
-      if(Array.isArray(json&&json[key])){list=json[key].filter(isRegexScript);if(list.length)break}
+      if(Array.isArray(json&&json[key])){list=json[key].map((value,index)=>[index,value]).filter(([,value])=>isRegexScript(value));if(list.length)break}
     }
   }
   if(!list.length)throw new Error('找不到世界书 entries 或正则脚本 replaceString');
-  return list.map((value,i)=>({
+  return list.map(([i,value])=>({
     id:bookOrder+':'+fileName+':regex:'+i,fileName,bookOrder,entryOrder:i,key:String(i),uid:value.id??i,
     name:value.scriptName||value.name||('Regex '+(i+1)),content:String(value.replaceString||''),
     isPrivate:false,hasEjs:false,sourceType:'regex',symbols:[],findRegex:String(value.findRegex||'')
@@ -64,55 +63,10 @@ function findingVisibility(ruleId){
 function finding(ruleId,severity,title,entry,index,detail,suggestion,extra={}){
   const source=extra.sourceText||(entry?entry.rawContent||entry.content:'');
   const pos=entry?sourceLocation(source,index||0):{line:extra.line||1,column:extra.column||1};
-  return{ruleId,severity,title,detail,suggestion,visibility:findingVisibility(ruleId),entryId:entry?entry.id:(extra.entryId||''),book:entry?entry.fileName:(extra.book||''),entry:extra.entry??(entry?entry.name:''),uid:extra.uid??(entry?entry.uid:''),line:pos.line,column:pos.column,index:index||0,bookOrder:entry?entry.bookOrder:(extra.bookOrder??999999),entryOrder:entry?entry.entryOrder:(extra.entryOrder??999999),...(extra.relatedEntryIds?{relatedEntryIds:extra.relatedEntryIds}:{})};
+  return{ruleId,severity,title,detail,suggestion,visibility:findingVisibility(ruleId),entryId:entry?entry.id:(extra.entryId||''),book:entry?entry.fileName:(extra.book||''),entry:extra.entry??(entry?entry.name:''),uid:extra.uid??(entry?entry.uid:''),line:pos.line,column:pos.column,index:index||0,bookOrder:entry?entry.bookOrder:(extra.bookOrder??999999),entryOrder:entry?entry.entryOrder:(extra.entryOrder??999999),...(extra.relatedEntryIds?{relatedEntryIds:extra.relatedEntryIds}:{}),...(extra.riskEvidence?{riskEvidence:extra.riskEvidence}:{})};
 }
-function collectDirectUrls(content){
-  const out=[],absolute=/https?:\/\/[^\s"'<>\\)]+/gi,protocolRelative=/(^|[\s"'(=,])\/\/((?:\[[0-9A-Fa-f:]+\]|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?:[^\s"'<>\\)]*)?)/gm;let m;
-  while((m=absolute.exec(content))){
-    const url=m[0].replace(/[;,\]\}]+$/,'');
-    if(/^http:\/\/www\.w3\.org\/(?:2000\/svg|1999\/xlink)$/i.test(url))continue;
-    out.push({url,index:m.index});
-  }
-  while((m=protocolRelative.exec(content))){
-    const raw='//'+m[2],url=raw.replace(/[;,\]\}]+$/,''),index=m.index+m[1].length;
-    out.push({url,index});
-  }
-  return out.sort((a,b)=>a.index-b.index);
-}
-function isIpHost(host){
-  const h=host.replace(/^\[|\]$/g,'');if(h.includes(':'))return true;
-  const p=h.split('.');return p.length===4&&p.every(x=>/^\d{1,3}$/.test(x)&&Number(x)>=0&&Number(x)<=255);
-}
-function parseDirectUrl(url){return new URL(String(url).startsWith('//')?'https:'+url:url)}
-function isOfficialUrl(url){
-  try{const u=parseDirectUrl(url);return OFFICIAL_URL_RULES.some(r=>u.hostname.toLowerCase()===r.host&&r.path.test(u.pathname))}
-  catch{return false}
-}
-function inspectLinks(entry,findings,u2SeenHosts){
-  const seen=new Set();
-  const linkContent=entry.sourceType==='worldbook' ? entry.content.replace(/<%#\s*poem-workshop-meta:v1-start[\s\S]*?poem-workshop-meta:v1-end\s*%>/gi, value=>value.replace(/[^\r\n]/g,' ')) : entry.content;
-  for(const item of collectDirectUrls(linkContent)){
-    let u;try{u=parseDirectUrl(item.url)}catch{continue}
-    const host=u.hostname.toLowerCase(),key=u.protocol+'//'+host;
-    if(isIpHost(host)){
-      if(!seen.has('U4:'+key)){seen.add('U4:'+key);findings.push(finding('U4','warn','外链使用 IP 直连',entry,item.index,item.url,'改用可识别、可审核的 HTTPS 域名；若确有必要，请明确说明用途。'))}
-    }else if(u.protocol==='http:'){
-      if(!seen.has('U3:'+key)){seen.add('U3:'+key);findings.push(finding('U3','warn','外链使用不安全 HTTP',entry,item.index,item.url,'改成 HTTPS；若目标不支持 HTTPS，不建议把它作为项目依赖。'))}
-    }else if(!isOfficialUrl(item.url)){
-      if(!u2SeenHosts.has(host)){u2SeenHosts.add(host);findings.push(finding('U2','warn','外链来自未确认的第三方域名',entry,item.index,host,'确认这个域名确实是项目需要的资源来源。相同域名在本次扫描中只提示一次，避免跨条目/文件刷屏。'))}
-    }
-  }
-  const dynamicPatterns=[
-    /(?:https?:)?\/\/[^\s"'<>\\)]*(?:\x24\d+|\x24<[A-Za-z][\w]*>)[^\s"'<>\\)]*/gi,
-    /(['"])(?:https?:)?\/\/[^'"]*\1\s*\+\s*(?!\s*['"])/gi,
-    /`(?:https?:)?\/\/[^`]*\${[^}]+}[^`]*`/gi
-  ];
-  for(const re of dynamicPatterns){
-    let m;while((m=re.exec(entry.content))){
-      const key='U5:'+m.index;if(seen.has(key))continue;seen.add(key);
-      findings.push(finding('U5','warn','远程资源目标不是固定可审阅集合',entry,m.index,m[0].slice(0,220),'把可能访问的远程资源写成有限、明确的 URL 映射。像 mood → 固定 URL 可以；不要让 $1/$2、命名 capture 或任意变量直接决定远程文件路径。'));
-    }
-  }
+function inspectLinks(entry,findings,parsed){
+  for(const record of inspectExternalLinks(entry,parsed))findings.push(finding(record.ruleId,record.severity,record.title,entry,record.index,record.detail,record.suggestion,record.extra));
 }
 function inspectDecorators(entry,findings){
   if(entry.sourceType!=='worldbook'||!entry.decoratorIssues||!entry.decoratorIssues.length)return;
@@ -150,14 +104,18 @@ function parseCodeCheckInput(input, bookOrder){
 
 export function toUploaderCodeCheck(report){
   if(!report || !Array.isArray(report.findings) || !['accept','reject'].includes(report.gate))throw new TypeError('代码检查未完成，不能继续提交。');
-  const visible=report.findings.filter(f=>f.visibility!=='reviewer_only').map(f=>{
+  const visible=report.findings.filter(f=>f.visibility!=='reviewer_only'||['M3','M4'].includes(f.ruleId)).map(f=>{
+    if(['M3','M4'].includes(f.ruleId))return{ruleId:'SCRIPT-REVIEW',severity:'warn',title:'这段脚本需要额外审核',detail:'上传可以继续。审核员会进一步确认这段脚本的用途与影响；这条提示不代表违规。',suggestion:'如审核员需要补充说明，请介绍这项功能为何必要。',visibility:'uploader_generic',book:f.book||'',entry:f.entry||'',uid:f.uid??'',line:f.line||1,column:f.column||1};
     if(f.visibility!=='uploader_generic')return f;
+    const behavior={
+      M1:{title:'检测到动态代码执行 eval()',detail:'这段代码使用或保存了 eval 能力，可能执行运行时生成的代码，工坊不接受。',suggestion:'请改为明确的函数调用或固定逻辑，再重新上传。'},
+      M2:{title:'检测到动态创建函数',detail:'这段代码使用或保存了通过 Function(...) 动态生成函数的能力，工坊不接受。',suggestion:'请改用普通函数或明确的分支逻辑，再重新上传。'},
+      M5:{title:'检测到可能无法自行结束的循环',detail:'这段循环没有明确的结束条件，可能导致页面卡死。',suggestion:'请设置清楚可靠的结束条件，再重新上传。'},
+    }[f.ruleId];
     return{
       ruleId:'SCRIPT-RISK',
       severity:'high',
-      title:'脚本未通过 Workshop 自动安全规则',
-      detail:'请移除 Workshop 不允许的高风险脚本能力后重新提交。具体检测细节只提供给审核员。',
-      suggestion:'修改脚本后重新上传。',
+      ...behavior,
       visibility:'uploader_generic',
       book:f.book||'',
       entry:f.entry||'',
@@ -181,7 +139,7 @@ export function formatUploaderCodeCheckError(report){
   const first=uploader.findings.find(f=>f.severity==='high');
   if(!first)return '文件没有通过自动检查，请修改脚本后重新上传。';
   const where=first.entry ? '「'+first.entry+'」' : (first.book ? '「'+first.book+'」' : '文件');
-  if(first.ruleId==='SCRIPT-RISK')return where+'：脚本包含 Workshop 不允许的高风险能力，请修改后重新上传。';
+  if(first.ruleId==='SCRIPT-RISK')return where+'：'+first.title+'（第 '+first.line+' 行，第 '+first.column+' 列）。'+first.suggestion;
   return where+'：['+first.ruleId+'] '+first.title+'（第 '+first.line+' 行，第 '+first.column+' 列）。'+first.suggestion;
 }
 

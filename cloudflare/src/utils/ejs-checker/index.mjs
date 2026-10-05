@@ -3,10 +3,12 @@ import { inspectAstPolicy, inspectSymbolCollisions } from './policy.mjs';
 import { inspectCapabilities } from './capabilities.mjs';
 import { inspectApiUsage } from './api-catalogue.mjs';
 import { syntaxFindings } from './syntax-findings.mjs';
+import { CHECK_POLICY_VERSION } from './policy-config.mjs';
 import { parseCodeCheckInput, finding, inspectDecorators, inspectLinks, compareFindings, gateStatus, auditStatus, certificationStatus } from './report.mjs';
 
 export const CHECKER_VERSION = Object.freeze({
   engine:'v2',
+  policyVersion:CHECK_POLICY_VERSION,
   parserCompatibility:'EJS 3.1.9 / ST nested tags; Acorn 8.18.0; HTML parse5 8.0.1',
 });
 
@@ -27,7 +29,7 @@ function worldbookHtml(entry, parsed) {
 }
 
 export function analyzeProjectCodeV2(inputs) {
-  const books=[],findings=[],seenHosts=new Set();
+  const books=[],findings=[];
   const add=(entry,record)=>findings.push(finding(record.ruleId,record.severity,record.title,entry,record.index,record.detail,record.suggestion,record.extra));
   for(const [bookOrder,input] of (Array.isArray(inputs)?inputs:[]).entries()) {
     try { books.push(parseCodeCheckInput(input,bookOrder)); }
@@ -48,7 +50,7 @@ export function analyzeProjectCodeV2(inputs) {
     for(const record of policy.findings)add(entry,record);
     for(const record of inspectCapabilities(entry,parsed))add(entry,record);
     for(const record of inspectApiUsage(entry,parsed))add(entry,record);
-    inspectLinks(entry,findings,seenHosts);
+    inspectLinks(entry,findings,parsed);
   }
   for(const record of inspectSymbolCollisions(entries))add(record.entry,record);
   findings.sort(compareFindings);

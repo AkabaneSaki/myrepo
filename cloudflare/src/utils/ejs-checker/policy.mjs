@@ -1,6 +1,6 @@
 import { buildScopes, isFunctionLocal, patternTargets, resolveBinding } from './scope.mjs';
 
-export const GENERIC_GLOBAL_NAMES = new Set(['data','value','result','state','temp','tmp','config','ctx','context','output','response','item']);
+export const GENERIC_GLOBAL_NAMES = new Set(['data','value','result','state','temp','tmp','config','ctx','context','output','response','item','utils']);
 const GLOBAL_BASES = new Set(['globalThis', 'window', 'self']);
 
 function hasLeakDocumentation(content, index) {

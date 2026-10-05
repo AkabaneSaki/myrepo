@@ -129,11 +129,11 @@ try {
   });
   await uploadCover(publishedId, initialCover, 'image/png', 'initial.png');
 
-  const pending = await api(`/api/projects/${publishedId}`, { token: creatorToken });
+  const pending = await api(`/api/admin/review/${publishedId}`, { token: adminToken });
   await api(`/api/admin/review/${publishedId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: pending.project.draftRevision },
+    body: { action: 'approve', expectedRevision: pending.project.draftRevision, reviewToken: pending.reviewToken },
   });
 
   assert.deepEqual(await fetchFile(`/api/files/projects/${publishedId}/cover.png`), initialCover);
@@ -163,11 +163,11 @@ try {
     replacementCoverJpg,
   );
 
-  const draft = await api(`/api/projects/${draftId}`, { token: creatorToken });
+  const draft = await api(`/api/admin/review/${draftId}`, { token: adminToken });
   await api(`/api/admin/review/${draftId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: draft.project.draftRevision },
+    body: { action: 'approve', expectedRevision: draft.project.draftRevision, reviewToken: draft.reviewToken },
   });
   draftId = null;
 

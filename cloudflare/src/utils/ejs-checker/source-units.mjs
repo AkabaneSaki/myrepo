@@ -175,7 +175,7 @@ function attributeRange(source, location, value) {
   return { start: cursor, end: location.endOffset - (quoted && source[location.endOffset - 1] === source[cursor - 1] ? 1 : 0), value };
 }
 
-function firstAttributeLocations(source, tagLocation) {
+export function firstAttributeLocations(source, tagLocation) {
   if (!tagLocation) return new Map();
   const tag = source.slice(tagLocation.startOffset,tagLocation.endOffset);
   const nameEnd = /^<[^\t\n\f\r />]+/.exec(tag)?.[0].length ?? 0;

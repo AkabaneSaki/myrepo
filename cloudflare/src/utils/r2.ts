@@ -129,6 +129,7 @@ export const r2Storage = {
     sourceProjectId: string,
     targetProjectId: string,
     selectedCoverKey?: string,
+    reviewedCodeFiles?: ReadonlyArray<{ type: 'worldbook' | 'regex'; text: string }>,
   ): Promise<{
     downloadUrl?: string;
     fileSize?: number;
@@ -157,6 +158,9 @@ export const r2Storage = {
       const fileName = item.key.slice(sourcePrefix.length);
       if (!fileName) continue;
       if (fileName.startsWith('cover.') && item.key !== normalizedSelectedCoverKey) continue;
+      // Approval publishes the bytes that passed the bound review, even if a
+      // later upload changes the draft while the cover files are being copied.
+      if (reviewedCodeFiles && (fileName === `project-${sourceProjectId}.json` || fileName === `regex-${sourceProjectId}.json`)) continue;
 
       const sourceObject = await bucket.get(item.key);
       if (!sourceObject) continue;
@@ -183,6 +187,17 @@ export const r2Storage = {
         copied.fileSize = sourceObject.size;
       } else if (targetFileName.startsWith('cover.')) {
         copied.coverImage = targetKey;
+      }
+    }
+
+    for (const file of reviewedCodeFiles ?? []) {
+      const targetFileName = file.type === 'worldbook' ? `project-${targetProjectId}.json` : `regex-${targetProjectId}.json`;
+      const body = await new Blob([file.text]).arrayBuffer();
+      const targetKey = `projects/${targetProjectId}/${targetFileName}`;
+      pendingCopies.push({ targetKey, targetFileName, body, size: body.byteLength, httpMetadata: { contentType: 'application/json' }, customMetadata: {} });
+      if (file.type === 'worldbook') {
+        copied.downloadUrl = r2Storage.getProxyUrl(c, targetKey);
+        copied.fileSize = body.byteLength;
       }
     }
 

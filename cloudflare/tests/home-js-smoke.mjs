@@ -967,7 +967,8 @@ assert.equal(contentPolicyUi.validateProjectContentSelection('角色', false, tr
 assert.equal(contentPolicyUi.validateProjectContentSelection('事件', false, true).valid, false);
 assert.match(contentPolicyUi.getProjectContentRequirementText('扩展'), /世界书或正则选一种就可以/);
 assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
-assert.match(homeScript, /expectedRevision: project\?\.draftRevision \|\| reviewProjectData\?\.draftRevision/);
+assert.match(homeScript, /expectedRevision: reviewProjectData\.draftRevision/);
+assert.match(homeScript, /reviewToken: detail\.reviewToken/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /当前编辑草稿也会一并删除/);
 assert.match(homeScript, /document\.querySelectorAll\('\.project-card, \.discover-card'\)/);

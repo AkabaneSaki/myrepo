@@ -127,8 +127,8 @@ assert.ok(rules(regexEval).includes('M1'));
 assert.ok(!rules(regexEval).some(rule => /^L[1-7]$/.test(rule)));
 
 const assetsSource = fs.readFileSync(new URL('../src/endpoints/projects/assets.ts', import.meta.url), 'utf8');
-assert.match(assetsSource, /analyzeProjectCode\(\[\{ fileName: `project-\$\{projectId\}\.json`/);
-assert.match(assetsSource, /analyzeProjectCode\(\[\{ fileName: `regex-\$\{projectId\}\.json`/);
+assert.match(assetsSource, /analyzeProjectCodeCached\(\[\{ fileName: `project-\$\{projectId\}\.json`/);
+assert.match(assetsSource, /analyzeProjectCodeCached\(\[\{ fileName: `regex-\$\{projectId\}\.json`/);
 assert.match(assetsSource, /toUploaderCodeCheck\(codeCheck\)/);
 assert.match(assetsSource, /422/);
 assert.match(assetsSource, /class ProjectUploadPreflight/);

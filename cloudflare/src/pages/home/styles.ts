@@ -533,6 +533,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-code-check-item summary > span:last-child { color:rgba(226,232,240,.48); text-align:right; font-size:.7rem; }
 .admin-code-check-item-body { padding:0 10px 10px; color:rgba(226,232,240,.78); font-size:.76rem; line-height:1.5; overflow-wrap:anywhere; }
 .admin-code-check-item-body p { margin:6px 0 0; white-space:pre-wrap; }
+.admin-code-check-entry-body { padding:0 8px 8px; display:flex; flex-direction:column; gap:8px; }
+.admin-code-check-risk { min-width:0; border-left:3px solid rgba(148,163,184,.3); border-radius:5px; background:rgba(15,23,42,.3); }
+.admin-code-check-risk--high { border-left-color:#F87171; }
+.admin-code-check-risk--warn,.admin-code-check-risk--hint { border-left-color:#FBBF24; }
+.admin-code-check-risk--accepted { border-left-color:#4ADE80; }
+.admin-code-check-risk-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; padding:9px 10px; color:inherit; font-size:.78rem; overflow-wrap:anywhere; }
+.admin-code-check-risk-head > span:last-child { color:#FCD34D; font-size:.7rem; }
+.admin-code-check-history { font-size:.78rem; }
+.admin-code-check-history > summary { cursor:pointer; padding:8px 0; }
+.admin-code-check-entry > summary { flex-wrap:wrap; overflow-wrap:anywhere; }
 .admin-code-check-empty { color:#BBF7D0; font-size:.8rem; }
 .admin-review-description { border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(15,23,42,.58); overflow:hidden; }
 .admin-review-description summary { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:11px 13px; cursor:pointer; font-weight:650; color:#E2E8F0; }

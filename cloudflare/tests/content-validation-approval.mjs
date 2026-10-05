@@ -62,11 +62,11 @@ async function createProject(name, tags = ['角色']) {
 }
 
 async function approve(projectId, expected = 200) {
-  const detail = await api(`/api/projects/${projectId}`, { token: creatorToken });
+  const detail = await api(`/api/admin/review/${projectId}`, { token: adminToken });
   return api(`/api/admin/review/${projectId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: detail.project.draftRevision },
+    body: { action: 'approve', expectedRevision: detail.project.draftRevision, reviewToken: detail.reviewToken },
     expected,
   });
 }
@@ -323,6 +323,31 @@ try {
   assert.equal(republishedRegex.regexEntriesPreview[0].id, 'regex-only');
   assert.equal(republishedRegex.regexEntriesPreview[0].scriptName, 'Regex only edited');
   assert.equal(republishedRegex.regexEntriesPreview[0].replaceString, 'baz');
+
+  // Removing the last worldbook entry is an explicit tombstone. The remaining
+  // valid regex keeps this extension valid, and approval must not revive the old file.
+  const mixedDraft = await api(`/api/projects/${extensionRegexOnly.projectId}/upload`, { method: 'POST', token: creatorToken, body: worldbook });
+  cleanupIds.add(mixedDraft.projectId);
+  const mixedDetail = await api(`/api/projects/${mixedDraft.projectId}`, { token: creatorToken });
+  const removedEntry = await api(`/api/projects/${mixedDraft.projectId}/entries/remove`, { method: 'POST', token: creatorToken, body: { kind: 'worldbook', entryKey: mixedDetail.worldbookEntriesPreview[0].entryKey } });
+  assert.equal(removedEntry.success, true);
+  await approve(mixedDraft.projectId);
+  cleanupIds.delete(mixedDraft.projectId);
+  const afterRemoval = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  assert.equal(afterRemoval.worldbookEntriesPreview.length, 0);
+  assert.equal(afterRemoval.regexEntriesPreview.length, 1);
+
+  // The inverse tombstone has no regex sources to inspect but its bytes are
+  // still bound to the review and must replace the published regex file.
+  const worldbookDraft = await api(`/api/projects/${extensionRegexOnly.projectId}/upload`, { method: 'POST', token: creatorToken, body: worldbook });
+  cleanupIds.add(worldbookDraft.projectId);
+  const inverseDetail = await api(`/api/projects/${worldbookDraft.projectId}`, { token: creatorToken });
+  await api(`/api/projects/${worldbookDraft.projectId}/entries/remove`, { method: 'POST', token: creatorToken, body: { kind: 'regex', entryKey: inverseDetail.regexEntriesPreview[0].entryKey } });
+  await approve(worldbookDraft.projectId);
+  cleanupIds.delete(worldbookDraft.projectId);
+  const afterRegexRemoval = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  assert.equal(afterRegexRemoval.regexEntriesPreview.length, 0);
+  assert.equal(afterRegexRemoval.worldbookEntriesPreview.length, 1);
 
   const regexDelete = await api(`/api/projects/${extensionRegexOnly.projectId}`, {
     method: 'DELETE',

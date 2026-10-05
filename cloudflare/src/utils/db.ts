@@ -24,6 +24,9 @@ import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
 const MAX_DAILY_COUNTED_DOWNLOADS = 15_000;
+// Symbol properties survive internal object spreads but never appear in JSON
+// responses. Review evidence must not leak through the public Project shape.
+export const acceptedCodeCheckKey = Symbol('acceptedCodeCheck');
 
 /**
  * 生成 UUID
@@ -248,6 +251,7 @@ export const projectDb = {
       originalConflictReferenceItemIds?: string[];
       originalConflictEntryNames?: string[];
       worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
+      acceptedCodeCheck?: string | null;
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -286,8 +290,8 @@ export const projectDb = {
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
-				conflicts_with_original, original_conflict_reference_item_ids, original_conflict_entry_names, worldbook_ejs_length_estimates, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				conflicts_with_original, original_conflict_reference_item_ids, original_conflict_entry_names, worldbook_ejs_length_estimates, accepted_code_check, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -336,6 +340,7 @@ export const projectDb = {
         JSON.stringify(project.originalConflictReferenceItemIds || []),
         JSON.stringify(project.originalConflictEntryNames || []),
         JSON.stringify(normalizeWorldbookEjsLengthEstimates(project.worldbookEjsLengthEstimates)),
+        project.acceptedCodeCheck ?? null,
         now(),
         now(),
       )
@@ -489,6 +494,7 @@ export const projectDb = {
       visibility?: boolean;
       isPublished?: boolean;
       latestApprovedAt?: string | null;
+      acceptedCodeCheck?: string | null;
     },
   ): Promise<void> => {
     const db = c.env.DB;
@@ -656,21 +662,60 @@ export const projectDb = {
       setClauses.push('latest_approved_at = ?');
       values.push(updates.latestApprovedAt);
     }
+    if (updates.acceptedCodeCheck !== undefined) {
+      setClauses.push('accepted_code_check = ?');
+      values.push(updates.acceptedCodeCheck);
+    }
 
     values.push(projectId);
 
-    await db
+    const updated = await db
       .prepare(
         `
-			UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?
+			UPDATE projects SET ${setClauses.join(', ')} WHERE id = ? AND content_mutation_token IS NULL RETURNING id
 		`,
       )
       .bind(...values)
-      .run();
+      .first<{ id: string }>();
+    if (!updated) throw new Error('文件正在保存或项目已变化，请稍后刷新再试。');
+  },
+
+  beginContentMutation: async (c: AppContext, project: { id: string; draftRevision: number; status: string }) => {
+    const token = crypto.randomUUID();
+    const result = await c.env.DB.prepare(
+      `UPDATE projects SET content_mutation_token = ?, status = 'drafting', draft_revision = draft_revision + 1,
+         reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND status = ?
+         AND status IN ('pending', 'drafting', 'rejected') AND content_mutation_token IS NULL
+       RETURNING draft_revision`,
+    ).bind(token, now(), project.id, project.draftRevision, project.status).first<{ draft_revision: number }>();
+    return result ? { token, revision: result.draft_revision } : null;
+  },
+
+  finishContentMutation: async (
+    c: AppContext,
+    projectId: string,
+    mutation: { token: string; revision: number },
+    updates: { downloadUrl?: string; fileSize?: number; hasEjs: boolean; hasCharacterArtwork: boolean },
+  ): Promise<boolean> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects SET download_url = COALESCE(?, download_url), file_size = COALESCE(?, file_size),
+         has_ejs = ?, has_character_artwork = ?, status = 'pending', content_mutation_token = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND content_mutation_token = ? RETURNING id`,
+    ).bind(updates.downloadUrl ?? null, updates.fileSize ?? null, updates.hasEjs ? 1 : 0,
+      updates.hasCharacterArtwork ? 1 : 0, now(), projectId, mutation.revision, mutation.token).first<{ id: string }>();
+    return result?.id === projectId;
+  },
+
+  cancelContentMutation: async (c: AppContext, projectId: string, mutation: { token: string; revision: number }): Promise<void> => {
+    await c.env.DB.prepare(
+      `UPDATE projects SET status = 'pending', content_mutation_token = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND content_mutation_token = ?`,
+    ).bind(now(), projectId, mutation.revision, mutation.token).run();
   },
 
   bumpDraftRevision: async (c: AppContext, projectId: string): Promise<void> => {
-    await c.env.DB.prepare(
+    const updated = await c.env.DB.prepare(
       `UPDATE projects
        SET draft_revision = draft_revision + 1,
            status = 'pending',
@@ -678,10 +723,11 @@ export const projectDb = {
            reviewed_at = NULL,
            reviewer_id = NULL,
            updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND content_mutation_token IS NULL RETURNING id`,
     )
       .bind(now(), projectId)
-      .run();
+      .first<{ id: string }>();
+    if (!updated) throw new Error('文件正在保存或项目已变化，请稍后刷新再试。');
   },
 
   /**
@@ -1013,30 +1059,35 @@ export const projectDb = {
     action: 'approve' | 'reject',
     rejectReason: string | undefined,
     expectedRevision: number,
+    acceptedSnapshot?: Record<string, unknown>,
   ): Promise<string | null> => {
     const db = c.env.DB;
     const reviewedAt = now();
+    if (action === 'approve' && !acceptedSnapshot) throw new Error('Approval requires a reviewed code snapshot');
+    const acceptance = action === 'approve'
+      ? JSON.stringify({ ...acceptedSnapshot, reviewerId, reviewedAt, revision: expectedRevision })
+      : null;
 
     const result = action === 'approve'
       ? await db
           .prepare(
             `UPDATE projects
              SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
-                 latest_approved_at = ?, updated_at = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+                 latest_approved_at = ?, updated_at = ?, accepted_code_check = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
           )
-          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, projectId, expectedRevision)
-          .run()
+          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, acceptance, projectId, expectedRevision)
+          .first<{ id: string }>()
       : await db
           .prepare(
             `UPDATE projects
              SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
           )
           .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
-          .run();
+          .first<{ id: string }>();
 
-    return Number(result.meta?.changes || 0) === 1 ? reviewedAt : null;
+    return result?.id === projectId ? reviewedAt : null;
   },
 
   rejectSupersededSiblingDrafts: async (
@@ -1094,17 +1145,18 @@ export const projectDb = {
     expectedRevision: number,
     reviewedAt: string,
     previousLatestApprovedAt: string | null,
+    previousAcceptedCodeCheck: string | null,
   ): Promise<boolean> => {
     const result = await c.env.DB.prepare(
       `UPDATE projects
        SET status = 'pending', reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL,
-           latest_approved_at = ?, updated_at = ?
-       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ?`,
+           latest_approved_at = ?, updated_at = ?, accepted_code_check = ?
+       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ? RETURNING id`,
     )
-      .bind(previousLatestApprovedAt, now(), projectId, expectedRevision, reviewerId, reviewedAt)
-      .run();
+      .bind(previousLatestApprovedAt, now(), previousAcceptedCodeCheck, projectId, expectedRevision, reviewerId, reviewedAt)
+      .first<{ id: string }>();
 
-    return Number(result.meta?.changes || 0) === 1;
+    return result?.id === projectId;
   },
 
   /**
@@ -1448,6 +1500,7 @@ export const projectDb = {
       originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
       originalConflictEntryNames: updates.originalConflictEntryNames !== undefined ? updates.originalConflictEntryNames : published.originalConflictEntryNames,
       worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : published.worldbookEjsLengthEstimates,
+      acceptedCodeCheck: published[acceptedCodeCheckKey],
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -1478,12 +1531,12 @@ export const projectDb = {
     const claimResult = await c.env.DB.prepare(
       `UPDATE projects
        SET draft_project_id = ?, updated_at = ?
-       WHERE id = ? AND draft_project_id IS NULL`,
+       WHERE id = ? AND draft_project_id IS NULL RETURNING id`,
     )
       .bind(draftId, now(), publishedProjectId)
-      .run();
+      .first<{ id: string }>();
 
-    if (Number(claimResult.meta?.changes || 0) === 1) {
+    if (claimResult?.id === publishedProjectId) {
       await projectDb.update(c, draftId, { status: 'pending' });
       return draftId;
     }
@@ -1714,6 +1767,7 @@ export function parseProjectRow(row: Record<string, unknown>) {
   const rawPublishedVersion = typeof row.published_version === 'string' ? row.published_version.trim() : '';
 
   return {
+    [acceptedCodeCheckKey]: typeof row.accepted_code_check === 'string' ? row.accepted_code_check : null,
     id: row.id as string,
     rootProjectId: ((row.root_project_id as string | null) || (row.id as string)) as string,
     publishedProjectId: row.published_project_id as string | null,

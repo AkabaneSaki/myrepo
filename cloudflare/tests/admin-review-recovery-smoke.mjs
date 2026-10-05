@@ -138,4 +138,17 @@ function makeContext(bucket) {
   assert.equal(state.has('projects/live/cover.png'), false);
 }
 
+{
+  const { bucket, state } = createFakeBucket();
+  const result = await r2Storage.copyProjectFilesToPublished(
+    makeContext(bucket), 'draft', 'live', 'projects/draft/cover.png',
+    [{ type: 'worldbook', text: 'REVIEWED_PROJECT' }, { type: 'regex', text: 'REVIEWED_REGEX' }],
+  );
+  assert.equal(state.get('projects/live/project-live.json')?.body, 'REVIEWED_PROJECT', 'a later draft upload must not replace the reviewed bytes');
+  assert.equal(state.get('projects/live/regex-live.json')?.body, 'REVIEWED_REGEX');
+  await result.rollback();
+  assert.equal(state.get('projects/live/project-live.json')?.body, 'OLD_PROJECT');
+  assert.equal(state.get('projects/live/regex-live.json')?.body, 'OLD_REGEX');
+}
+
 console.log('Admin review recovery smoke checks passed.');

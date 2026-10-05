@@ -106,7 +106,7 @@ test('plain-text links cover unknown, HTTP, IPv4 and IPv6 without EJS', async ({
   await expect(page.locator('#mStatus')).toHaveText('需确认');
 });
 
-test('U2 third-party domains are deduplicated across entries and files', async ({ page }) => {
+test('U2 keeps each entry and target available for review', async ({ page }) => {
   await loadBooks(page, [
     {
       name: 'book-a.json',
@@ -125,8 +125,8 @@ test('U2 third-party domains are deduplicated across entries and files', async (
   ]);
 
   const u2 = page.locator('.finding').filter({ hasText: '[U2]' });
-  await expect(u2).toHaveCount(2);
-  await expect(u2.filter({ hasText: 'shared-third-party.example.com' })).toHaveCount(1);
+  await expect(u2).toHaveCount(4);
+  await expect(u2.filter({ hasText: 'shared-third-party.example.com' })).toHaveCount(3);
   await expect(u2.filter({ hasText: 'other-third-party.example.net' })).toHaveCount(1);
 });
 
