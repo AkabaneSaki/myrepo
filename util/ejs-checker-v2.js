@@ -14767,8 +14767,10 @@ var PoemEjsChecker = (() => {
   }
 
   // src/utils/ejs-checker/policy-config.mjs
-  var CHECK_POLICY_VERSION = "PW-CODE-POLICY-2026-10-05.2";
+  var CHECK_POLICY_VERSION = "PW-CODE-POLICY-2026-10-05.3";
   var trustedAssetHosts = Object.freeze(["files.catbox.moe", "i.ibb.co"]);
+  var CHARINFO_MANAGED_BLOCK_START = "<%# char-info-ejs-builder:start:v2 %>";
+  var CHARINFO_MANAGED_BLOCK_END = "<%# char-info-ejs-builder:end:v2 %>";
   var MEDIA_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|apng|bmp|ico|mp4|webm|mov|m4v|ogv)$/i;
   function trustedStaticMediaUrl(value, usage) {
     if (usage !== "media" || typeof value !== "string" || /\$\d+|\$<[^>]+>|\$\{/.test(value)) return false;
@@ -14778,6 +14780,99 @@ var PoemEjsChecker = (() => {
     } catch {
       return false;
     }
+  }
+  function countOccurrences(content, target) {
+    if (!target) return 0;
+    let count = 0;
+    let offset2 = 0;
+    while ((offset2 = content.indexOf(target, offset2)) !== -1) {
+      count += 1;
+      offset2 += target.length;
+    }
+    return count;
+  }
+  function readJsonObjectAfterAssignment(block, assignment) {
+    if (countOccurrences(block, assignment) !== 1) return null;
+    let cursor = block.indexOf(assignment) + assignment.length;
+    while (cursor < block.length && /\s/.test(block[cursor])) cursor += 1;
+    if (block[cursor] !== "{") return null;
+    const start = cursor;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (; cursor < block.length; cursor += 1) {
+      const character = block[cursor];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+      } else if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(block.slice(start, cursor + 1));
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+    return null;
+  }
+  function normalizeProfileMediaUrls(profile) {
+    const values = [];
+    const add = (value) => {
+      if (typeof value !== "string" || !value.trim()) return;
+      try {
+        const url = new URL(value.trim());
+        if (!["http:", "https:"].includes(url.protocol) || !url.hostname) return;
+        if (!values.includes(url.href)) values.push(url.href);
+      } catch {
+      }
+    };
+    add(profile?.avatarUrl);
+    add(profile?.coverUrl);
+    for (const image of Array.isArray(profile?.gallery) ? profile.gallery : []) {
+      if (!image || typeof image !== "object" || Array.isArray(image)) continue;
+      for (const source of Array.isArray(image.sources) ? image.sources : []) add(source);
+      add(image.thumbnail);
+    }
+    return values;
+  }
+  function managedBlockLooksLikeCharInfoV2(block) {
+    return block.startsWith(CHARINFO_MANAGED_BLOCK_START) && block.endsWith(CHARINFO_MANAGED_BLOCK_END) && block.includes("const npcName = profile.characterName;") && block.includes("setLocalVar(`char_info.profiles[") && block.includes("gallery: profile.gallery.map(image =>") && block.includes("status.externalAvatars.partners") && block.includes("status.externalGalleries.partners");
+  }
+  function inspectCharInfoManagedV2Block(source, index = -1) {
+    const text = String(source || "");
+    let cursor = 0;
+    while (cursor < text.length) {
+      const start = text.indexOf(CHARINFO_MANAGED_BLOCK_START, cursor);
+      if (start < 0) return null;
+      const endMarker = text.indexOf(CHARINFO_MANAGED_BLOCK_END, start + CHARINFO_MANAGED_BLOCK_START.length);
+      if (endMarker < 0) return null;
+      const end = endMarker + CHARINFO_MANAGED_BLOCK_END.length;
+      if (index < 0 || index >= start && index < end) {
+        const block = text.slice(start, end);
+        if (!managedBlockLooksLikeCharInfoV2(block)) return null;
+        const profile = readJsonObjectAfterAssignment(block, "const profile =");
+        if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
+        if (typeof profile.characterName !== "string" || !Array.isArray(profile.gallery)) return null;
+        return {
+          start,
+          end,
+          profile,
+          mediaUrls: normalizeProfileMediaUrls(profile)
+        };
+      }
+      cursor = end;
+    }
+    return null;
   }
 
   // src/utils/ejs-checker/links.mjs
@@ -14789,7 +14884,7 @@ var PoemEjsChecker = (() => {
   ];
   var GLOBALS = /* @__PURE__ */ new Set(["window", "globalThis", "self"]);
   var NETWORK_NAMES = /* @__PURE__ */ new Set(["fetch", "XMLHttpRequest", "WebSocket", "EventSource"]);
-  var MEDIA_KEYS = /^(?:avatar(?:url)?|image(?:url)?|img(?:url)?|video(?:url)?|poster|portrait|thumbnail|cover|background(?:url)?|gallery)$/i;
+  var MEDIA_KEYS = /^(?:avatar(?:url)?|image(?:url)?|img(?:url)?|video(?:url)?|poster|portrait|thumbnail|cover(?:url)?|background(?:url)?|gallery)$/i;
   var MEDIA_GROUPS = /^(?:gallery|images|videos|avatars|sources)$/i;
   function propertyName2(node) {
     if (node?.type !== "MemberExpression" && node?.type !== "Property") return null;
@@ -14906,6 +15001,27 @@ var PoemEjsChecker = (() => {
     }
     return false;
   }
+  function isCharInfoGalleryMapCall(node) {
+    if (node?.type !== "CallExpression") return false;
+    const callee = node.callee?.type === "ChainExpression" ? node.callee.expression : node.callee;
+    if (callee?.type !== "MemberExpression" || propertyName2(callee) !== "map") return false;
+    const gallery = callee.object;
+    const callback = node.arguments?.[0];
+    return gallery?.type === "MemberExpression" && propertyName2(gallery) === "gallery" && gallery.object?.type === "Identifier" && gallery.object.name === "profile" && callback?.type === "ArrowFunctionExpression" && callback.params?.length === 1 && callback.params[0]?.type === "Identifier" && callback.params[0].name === "image";
+  }
+  function isGeneratedCharInfoMediaNode(node, parentByNode) {
+    if (isCharInfoGalleryMapCall(node)) return true;
+    if (node?.type !== "MemberExpression" || node.object?.type !== "Identifier" || node.object.name !== "image" || !["sources", "thumbnail"].includes(propertyName2(node))) return false;
+    let current2 = node;
+    while (current2) {
+      const parent = parentByNode.get(current2);
+      if (!parent) return false;
+      if (parent.type === "ArrowFunctionExpression") return parent.params?.[0]?.type === "Identifier" && parent.params[0].name === "image" && isCharInfoGalleryMapCall(parentByNode.get(parent)) && parentByNode.get(parent)?.arguments?.[0] === parent;
+      if (["FunctionExpression", "FunctionDeclaration"].includes(parent.type)) return false;
+      current2 = parent;
+    }
+    return false;
+  }
   function directUrls(content) {
     const items = [];
     const pattern = /(?:https?:\/\/|\/\/)(?:\[[0-9a-f:]+\]|(?:[a-z0-9-]+\.)+[a-z0-9-]+)(?:[^\s"'<>\\)\]]*)/gi;
@@ -14952,7 +15068,9 @@ var PoemEjsChecker = (() => {
         }
         else if (!["ObjectExpression", "ArrayExpression", "Literal", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type) && !(node.type === "CallExpression" && propertyName2(node.callee) === "createElement") && !(node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "Image" && !resolveBinding(scope, "Image"))) {
           const index = unit.sourceMap.map(node.start);
-          const candidates = sourceUrlCandidates(source);
+          const charInfoBlock = inspectCharInfoManagedV2Block(source, index);
+          const candidates = charInfoBlock?.mediaUrls?.length ? charInfoBlock.mediaUrls : sourceUrlCandidates(source);
+          if (charInfoBlock && isGeneratedCharInfoMediaNode(node, parents) && candidates.length && candidates.every((value) => trustedStaticMediaUrl(value, "media"))) continue;
           hints.push({ ruleId: "AH2", severity: "hint", title: "\u5A92\u4F53\u6765\u6E90\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4", index, detail: "\u6700\u7EC8\u56FE\u7247\u6216\u89C6\u9891\u5730\u5740\u7531\u8FD0\u884C\u65F6\u5185\u5BB9\u51B3\u5B9A\uFF0C\u81EA\u52A8\u68C0\u67E5\u65E0\u6CD5\u786E\u5B9A\u5B9E\u9645\u4F1A\u52A0\u8F7D\u54EA\u4E2A\u5730\u5740\u3002", suggestion: candidates.length ? "\u8BF7\u6838\u5BF9\u4E0B\u65B9 URL \u5019\u9009\u4E0E\u8FD9\u6BB5\u5A92\u4F53\u903B\u8F91\u7684\u5B9E\u9645\u7528\u9014\uFF1B\u5982\u679C\u5019\u9009\u4E0E\u5B9E\u9645\u5730\u5740\u4E0D\u540C\uFF0C\u8BF7 Creator \u8BF4\u660E\u6700\u7EC8\u6765\u6E90\u3002" : "\u5F53\u524D\u6761\u76EE\u6CA1\u6709\u53EF\u76F4\u63A5\u8BFB\u51FA\u7684 URL\u3002\u8BF7 Creator \u63D0\u4F9B\u5B9E\u9645\u56FE\u7247/\u89C6\u9891\u5730\u5740\u6216\u6765\u6E90\u89C4\u5219\u540E\u518D\u786E\u8BA4\u3002", extra: { riskEvidence: { action: "resource", usage: "media", target: "dynamic", expression: expressionEvidence(node), candidates } } });
         }
       }

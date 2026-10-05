@@ -1,19 +1,75 @@
 import assert from 'node:assert/strict';
 import { analyzeProjectCodeV2 } from '../src/utils/ejs-checker/index.mjs';
 import { toUploaderCodeCheck, formatUploaderCodeCheckError } from '../src/utils/ejs-checker/report.mjs';
-import { trustedAssetHosts, trustedStaticMediaUrl } from '../src/utils/ejs-checker/policy-config.mjs';
+import { inspectCharInfoManagedV2Block, trustedAssetHosts, trustedCharInfoManagedMediaBlock, trustedStaticMediaUrl } from '../src/utils/ejs-checker/policy-config.mjs';
 
 const check=(source,type='worldbook')=>analyzeProjectCodeV2([{fileName:'policy.json',type,text:JSON.stringify(type==='regex'?{id:'script',scriptName:'media',findRegex:'x',replaceString:source}:{entries:{1:{uid:1,comment:'media',content:source}}})}]);
 const ejs=source=>check('@@private\n<% { '+source+' } %>');
 const rules=report=>report.findings.map(finding=>finding.ruleId);
 let count=0;
 function noAssetReview(report){assert.equal(rules(report).some(rule=>['M4','U2','U3','U4','U5'].includes(rule)),false,JSON.stringify(report.findings));count++;}
+function makeCurrentCharInfoManagedBlock(mediaUrls = ['https://i.ibb.co/YTpkjhVt/file-00000000e0bc81fda16e63b1a9c1ba24.png']) {
+  const profile = {
+    characterName: 'Test',
+    avatarUrl: 'https://files.catbox.moe/avatar.png',
+    coverUrl: 'https://i.ibb.co/demo/cover.webp',
+    raceColor: '#A9DBC3',
+    tierColor: '#B7D9E8',
+    entranceQuote: '',
+    gallery: [{ title: '主立绘', sources: mediaUrls }],
+  };
+  return [
+    '<%# char-info-ejs-builder:start:v2 %>',
+    '<%_',
+    '{',
+    '  const profile = ' + JSON.stringify(profile, null, 2) + ';',
+    '  const npcName = profile.characterName;',
+    '  const statusGalleryExtensions = [".png", ".jpg", ".jpeg", ".webp", ".avif"];',
+    '  const statusGalleryImages = profile.gallery.flatMap(image => {',
+    '    const candidates = [...image.sources, ...(image.thumbnail ? [image.thumbnail] : [])];',
+    '    const url = candidates.find(value => {',
+    '      try {',
+    '        const pathname = new URL(value).pathname.toLowerCase();',
+    '        return statusGalleryExtensions.some(extension => pathname.endsWith(extension));',
+    '      } catch { return false; }',
+    '    }) ?? "";',
+    '    return url ? [{ title: image.title, url }] : [];',
+    '  });',
+    '  setLocalVar(`char_info.profiles[${JSON.stringify(npcName)}]`, {',
+    '    schema_version: 2,',
+    '    ...(profile.coverUrl ? { cover_url: profile.coverUrl } : {}),',
+    '    gallery: profile.gallery.map(image => ({ title: image.title, sources: image.sources, ...(image.thumbnail ? { thumbnail: image.thumbnail } : {}) })),',
+    '  });',
+    '  if (profile.avatarUrl) {',
+    '    setLocalVar(`status.externalAvatars.partners[${JSON.stringify(npcName)}].url`, profile.avatarUrl);',
+    '  }',
+    '  setLocalVar(`status.externalGalleries.partners[${JSON.stringify(npcName)}].images`, statusGalleryImages);',
+    '}',
+    '_%>',
+    '<%# char-info-ejs-builder:end:v2 %>',
+  ].join('\n');
+}
 assert.deepEqual(trustedAssetHosts,['files.catbox.moe','i.ibb.co']);count++;
 noAssetReview(ejs('const profile = {avatarUrl:"https://files.catbox.moe/a.png", gallery:[{sources:["https://files.catbox.moe/a.mp4"]}]};'));
 noAssetReview(ejs('const image = "https://i.ibb.co/album/a.webp"; const video = "https://files.catbox.moe/a.webm";'));
 noAssetReview(ejs('video.src = "https://files.catbox.moe/a.mp4";'));
 noAssetReview(check('<img src="https://files.catbox.moe/a.png"><video src="https://i.ibb.co/a.mp4"></video>','regex'));
 noAssetReview(check('<div style="background:url(https://files.catbox.moe/a.png)"></div>','regex'));
+const charInfoTrusted=makeCurrentCharInfoManagedBlock();
+const charInfoIndex=charInfoTrusted.indexOf('profile.gallery.map');
+const charInfoInspection=inspectCharInfoManagedV2Block(charInfoTrusted,charInfoIndex);
+assert.ok(charInfoInspection);assert.ok(charInfoInspection.mediaUrls.includes('https://i.ibb.co/YTpkjhVt/file-00000000e0bc81fda16e63b1a9c1ba24.png'));count+=2;
+assert.equal(trustedCharInfoManagedMediaBlock(charInfoTrusted,charInfoIndex),true);count++;
+const charInfoTrustedReport=check(charInfoTrusted);
+assert.equal(charInfoTrustedReport.findings.some(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media'),false,JSON.stringify(charInfoTrustedReport.findings));
+assert.equal(rules(charInfoTrustedReport).some(rule=>['U2','U3','U4','U5'].includes(rule)),false,JSON.stringify(charInfoTrustedReport.findings));count+=2;
+const charInfoMixed=makeCurrentCharInfoManagedBlock(['https://i.ibb.co/YTpkjhVt/file-00000000e0bc81fda16e63b1a9c1ba24.png','https://untrusted.example/portrait.png']);
+assert.equal(trustedCharInfoManagedMediaBlock(charInfoMixed,charInfoMixed.indexOf('profile.gallery.map')),false);
+const charInfoMixedReport=check(charInfoMixed);
+assert.ok(charInfoMixedReport.findings.some(finding=>finding.ruleId==='U2'||(finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media')),JSON.stringify(charInfoMixedReport.findings));count+=2;
+const charInfoInjected=charInfoTrusted.replace('\n}\n_%>','\n  const injectedImage = document.createElement("img");\n  injectedImage.src = runtimeTarget;\n}\n_%>');
+const charInfoInjectedReport=check(charInfoInjected);
+assert.ok(charInfoInjectedReport.findings.some(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media'&&String(finding.riskEvidence?.expression||'').includes('runtimeTarget')),JSON.stringify(charInfoInjectedReport.findings));count++;
 
 for(const source of [
   'window.open("https://files.catbox.moe/a.png");',

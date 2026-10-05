@@ -1,6 +1,6 @@
 import { parseFragment } from 'parse5';
 import { buildScopes, resolveBinding } from './scope.mjs';
-import { trustedStaticMediaUrl } from './policy-config.mjs';
+import { inspectCharInfoManagedV2Block, trustedStaticMediaUrl } from './policy-config.mjs';
 import { firstAttributeLocations } from './source-units.mjs';
 
 const OFFICIAL_URL_RULES = [
@@ -11,7 +11,7 @@ const OFFICIAL_URL_RULES = [
 ];
 const GLOBALS = new Set(['window','globalThis','self']);
 const NETWORK_NAMES = new Set(['fetch','XMLHttpRequest','WebSocket','EventSource']);
-const MEDIA_KEYS = /^(?:avatar(?:url)?|image(?:url)?|img(?:url)?|video(?:url)?|poster|portrait|thumbnail|cover|background(?:url)?|gallery)$/i;
+const MEDIA_KEYS = /^(?:avatar(?:url)?|image(?:url)?|img(?:url)?|video(?:url)?|poster|portrait|thumbnail|cover(?:url)?|background(?:url)?|gallery)$/i;
 const MEDIA_GROUPS = /^(?:gallery|images|videos|avatars|sources)$/i;
 
 export function propertyName(node) {
@@ -130,6 +130,39 @@ function mediaContext(node,scope,parentByNode,analysis) {
   return false;
 }
 
+function isCharInfoGalleryMapCall(node) {
+  if(node?.type!=='CallExpression')return false;
+  const callee=node.callee?.type==='ChainExpression'?node.callee.expression:node.callee;
+  if(callee?.type!=='MemberExpression'||propertyName(callee)!=='map')return false;
+  const gallery=callee.object;
+  const callback=node.arguments?.[0];
+  return gallery?.type==='MemberExpression'
+    && propertyName(gallery)==='gallery'
+    && gallery.object?.type==='Identifier'
+    && gallery.object.name==='profile'
+    && callback?.type==='ArrowFunctionExpression'
+    && callback.params?.length===1
+    && callback.params[0]?.type==='Identifier'
+    && callback.params[0].name==='image';
+}
+
+function isGeneratedCharInfoMediaNode(node,parentByNode) {
+  if(isCharInfoGalleryMapCall(node))return true;
+  if(node?.type!=='MemberExpression'||node.object?.type!=='Identifier'||node.object.name!=='image'||!['sources','thumbnail'].includes(propertyName(node)))return false;
+  let current=node;
+  while(current) {
+    const parent=parentByNode.get(current);
+    if(!parent)return false;
+    if(parent.type==='ArrowFunctionExpression')return parent.params?.[0]?.type==='Identifier'
+      && parent.params[0].name==='image'
+      && isCharInfoGalleryMapCall(parentByNode.get(parent))
+      && parentByNode.get(parent)?.arguments?.[0]===parent;
+    if(['FunctionExpression','FunctionDeclaration'].includes(parent.type))return false;
+    current=parent;
+  }
+  return false;
+}
+
 function directUrls(content) {
   const items=[];const pattern=/(?:https?:\/\/|\/\/)(?:\[[0-9a-f:]+\]|(?:[a-z0-9-]+\.)+[a-z0-9-]+)(?:[^\s"'<>\\)\]]*)/gi;let match;
   while((match=pattern.exec(content)))items.push({url:match[0].replace(/[;,\]}]+$/,''),index:match.index,end:pattern.lastIndex});
@@ -159,7 +192,9 @@ export function inspectExternalLinks(entry,parsed) {
           && !(node.type==='CallExpression'&&propertyName(node.callee)==='createElement')
           && !(node.type==='NewExpression'&&node.callee.type==='Identifier'&&node.callee.name==='Image'&&!resolveBinding(scope,'Image'))) {
         const index=unit.sourceMap.map(node.start);
-        const candidates=sourceUrlCandidates(source);
+        const charInfoBlock=inspectCharInfoManagedV2Block(source,index);
+        const candidates=charInfoBlock?.mediaUrls?.length?charInfoBlock.mediaUrls:sourceUrlCandidates(source);
+        if(charInfoBlock&&isGeneratedCharInfoMediaNode(node,parents)&&candidates.length&&candidates.every(value=>trustedStaticMediaUrl(value,'media')))continue;
         hints.push({ruleId:'AH2',severity:'hint',title:'媒体来源需要人工确认',index,detail:'最终图片或视频地址由运行时内容决定，自动检查无法确定实际会加载哪个地址。',suggestion:candidates.length?'请核对下方 URL 候选与这段媒体逻辑的实际用途；如果候选与实际地址不同，请 Creator 说明最终来源。':'当前条目没有可直接读出的 URL。请 Creator 提供实际图片/视频地址或来源规则后再确认。',extra:{riskEvidence:{action:'resource',usage:'media',target:'dynamic',expression:expressionEvidence(node),candidates}}});
       }
     }
