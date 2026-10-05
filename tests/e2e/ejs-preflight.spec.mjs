@@ -82,6 +82,27 @@ test('v2 reports preserve uploader controls, exports and admin findings', async 
   await page.screenshot({path:testInfo.outputPath('v2-upload-admin.png'),fullPage:true});
 });
 
+test('resource failures explain incomplete checks and next steps without implying a cooldown', async ({ page }, testInfo) => {
+  const {homeApiScript}=await sourceModule('cloudflare/src/pages/home/api.ts');
+  const {homeUploadPreviewScript}=await sourceModule('cloudflare/src/pages/home/upload-preview.ts');
+  const {homeStyles}=await sourceModule('cloudflare/src/pages/home/styles.ts');
+  await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><main style="max-width:540px;margin:24px auto;padding:16px"><h2>上传内容</h2><div id="upload" class="upload-preview"><div class="upload-preview-summary">已选择 1 个文件 · 合计 5 条正则</div><p>技能美化.json · 5 条</p></div></main>');
+  await page.addStyleTag({content:homeStyles});
+  await page.addScriptTag({content:'const WORKSHOP_LIMITS={projectUploadBytes:10485760,projectUploadLabel:"10MB"}; function escapeHtml(value){const el=document.createElement("div");el.textContent=String(value??"");return el.innerHTML;}\n'+homeApiScript+'\n'+homeUploadPreviewScript});
+  await page.evaluate(()=>renderUploadPreflightStatus(document.querySelector('#upload'),'error',resolveApiErrorMessage(500,'Worker exceeded resource limits (1102)',null,'自动检查失败')));
+  const failure=page.getByRole('alert');
+  await expect(failure.locator('strong')).toContainText('检查未完成');
+  await expect(failure).toContainText('暂时不能提交');
+  await expect(failure).toContainText('联系管理员');
+  await expect(failure).toContainText('截图');
+  await expect(failure).not.toContainText('稍后再试');
+  await expect(page.locator('#upload')).toContainText('技能美化.json');
+  expect(await failure.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  expect(await page.evaluate(()=>resolveApiErrorMessage(429,'Too many requests',null,''))).toContain('请求过于频繁');
+  expect(await page.evaluate(()=>resolveApiErrorMessage(500,'Error 1027',null,''))).toContain('额度用尽');
+  await page.screenshot({path:testInfo.outputPath('resource-failure-guidance.png'),fullPage:true});
+});
+
 test('plain-text links cover unknown, HTTP, IPv4 and IPv6 without EJS', async ({ page }) => {
   const findings = await loadEntries(page, {
     1: { uid: 1, comment: 'official', content: 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js' },

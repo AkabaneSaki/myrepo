@@ -254,7 +254,10 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
   const groups = groupUploadPreflightFindings(findings);
   const headline = normalized === 'error' && blockerCount
     ? '自动检查未通过：发现 ' + blockerCount + ' 个阻断项，涉及 ' + groups.length + ' 个内容。'
-    : String(message || '');
+    : normalized === 'error' && !codeCheck ? '文件检查未完成，暂时不能提交' : String(message || '');
+  const failureDetailHtml = normalized === 'error' && !codeCheck && message
+    ? '<p class="upload-preflight-finding-detail">' + escapeHtml(message) + '</p>'
+    : '';
   const toolsHtml = findings.length
     ? '<div class="upload-preflight-tools"><button type="button" class="upload-preflight-action" data-upload-copy-all><i class="fas fa-wand-magic-sparkles"></i> 复制全部给 LLM</button><button type="button" class="upload-preflight-action" data-upload-export-report><i class="fas fa-file-arrow-down"></i> 导出检查报告</button></div>'
     : '';
@@ -290,7 +293,7 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
   node.setAttribute('role', normalized === 'error' ? 'alert' : 'status');
   node.setAttribute('aria-live', normalized === 'error' ? 'assertive' : 'polite');
   const versionHtml = codeCheck?.engine ? '<details><summary>检查版本：' + escapeHtml(codeCheck.engine) + '</summary><p>语法检查依据：' + escapeHtml(codeCheck.parserCompatibility || '未记录') + '</p></details>' : '';
-  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + versionHtml + toolsHtml + findingsHtml + '</div>';
+  node.innerHTML = '<i class="fas ' + icon + '"></i><div class="upload-preflight-status-body"><strong class="upload-preflight-headline">' + escapeHtml(headline) + '</strong>' + failureDetailHtml + versionHtml + toolsHtml + findingsHtml + '</div>';
   const summary = container.querySelector('.upload-preview-summary');
   if (summary?.nextSibling) container.insertBefore(node, summary.nextSibling);
   else container.appendChild(node);

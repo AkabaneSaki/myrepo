@@ -16,7 +16,7 @@ function assertUploadSize(file) {
 function resolveApiErrorMessage(status, rawText, data, fallbackMessage) {
   const text = String(rawText || '').trim();
   if (/\b1027\b/.test(text)) return '服务额度用尽，请稍后再试';
-  if (/\b1102\b/.test(text) || /Worker exceeded resource limits/i.test(text)) return '服务资源超限，请稍后再试';
+  if (/\b1102\b/.test(text) || /Worker exceeded resource limits/i.test(text)) return '服务器未能完成这次处理。重复操作可能仍会失败，请联系管理员，并附上当前页面截图。';
   if (status === 429 || /rate limit|too many requests|quota|limit exceeded/i.test(text)) return '请求过于频繁，请稍后再试';
   if (data && (data.error || data.message)) return data.error || data.message;
   const lowerText = text.toLowerCase();
