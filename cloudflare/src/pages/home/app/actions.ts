@@ -17,6 +17,7 @@ export const homeAppActionsScript = String.raw`
     const dlcRepairBtn = document.getElementById('dlcRepairBtn');
     const dlcUpdateStatusBtn = document.getElementById('dlcUpdateStatusBtn');
     const desktopUpdateHubBtn = document.getElementById('desktopUpdateHubBtn');
+    const discordCommunityBtn = document.getElementById('discordCommunityBtn');
     const sortMenuTrigger = document.getElementById('sortMenuTrigger');
     const sortMenu = document.getElementById('sortMenu');
     const fontMenuTrigger = document.getElementById('fontMenuTrigger');
@@ -46,6 +47,7 @@ export const homeAppActionsScript = String.raw`
     const mobileAddAdminBtn = document.getElementById('mobileAddAdminBtn');
     const mobileAdminLogsBtn = document.getElementById('mobileAdminLogsBtn');
     const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
+    const mobileDiscordCommunityBtn = document.getElementById('mobileDiscordCommunityBtn');
 
     if (loginBtn) loginBtn.onclick = openLoginPopup;
     if (mobileLoginBtn) mobileLoginBtn.onclick = openLoginPopup;
@@ -66,6 +68,8 @@ export const homeAppActionsScript = String.raw`
     if (mobileLocalAdminLoginBtn) mobileLocalAdminLoginBtn.onclick = () => runLocalAdminLogin(mobileLocalAdminLoginBtn);
     if (dlcUpdateStatusBtn) dlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
     if (desktopUpdateHubBtn) desktopUpdateHubBtn.onclick = () => openWorkshopUpdateHub();
+    if (discordCommunityBtn) discordCommunityBtn.onclick = event => { event.stopPropagation(); openExternalLinkWarning('https://discord.com/channels/1417861565679669272/1556973079853277244'); };
+    if (mobileDiscordCommunityBtn) mobileDiscordCommunityBtn.onclick = event => { event.stopPropagation(); closeMobileTool(); openExternalLinkWarning('https://discord.com/channels/1417861565679669272/1556973079853277244'); };
     if (mobileDlcUpdateStatusBtn) mobileDlcUpdateStatusBtn.onclick = () => void openDlcUpdateCenter();
     scriptDependencyHealthBtns.forEach(button => {
       button.onclick = event => {
