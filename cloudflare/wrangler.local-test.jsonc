@@ -18,7 +18,8 @@
   "vars": {
     "ALLOWED_GUILD_IDS": "",
     "ADMIN_ROLE_IDS": "",
-    "SUPER_ADMIN_USER_ID": ""
+    "SUPER_ADMIN_USER_ID": "",
+    "LOCAL_PREVIEW_ADMIN": "1"
   },
   "d1_databases": [
     {

@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 import { getStProfileDefinition, getWorkshopViewport } from '../support/profiles.mjs';
 
-const ST_BASE_URL = process.env.ST_BASE_URL || 'http://127.0.0.1:8000/';
+const ST_BASE_URL = process.env.ST_BASE_URL || 'http://127.0.0.1:8011/';
 const SAFE_STARTUP_DISMISSALS = ['我知道了', '暂不安装'];
 const CHAT_INTEGRITY_ERROR = 'SillyTavern chat-integrity warning blocks Workshop startup; stop the test before any chat overwrite.';
 
@@ -44,7 +44,7 @@ export class WorkshopSession {
       timeout: 30_000,
     });
 
-    expect(response?.status(), 'Laptop SillyTavern should answer successfully').toBe(200);
+    expect(response?.status(), 'TestLab SillyTavern should answer successfully').toBe(200);
     await expect(this.page).toHaveTitle(/SillyTavern/i);
     await this.page.waitForFunction(
       () => document.body?.innerText.trim() !== 'Initializing…',

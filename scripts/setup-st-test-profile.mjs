@@ -21,7 +21,7 @@ const page = pages[0] || (await context.newPage());
 
 console.log(`[st-setup] profile=${profileName}`);
 console.log('[st-setup] Opening SillyTavern in the dedicated test Edge profile...');
-await page.goto(process.env.ST_BASE_URL || 'http://127.0.0.1:8000/', {
+await page.goto(process.env.ST_BASE_URL || 'http://127.0.0.1:8011/', {
   waitUntil: 'domcontentloaded',
   timeout: 30_000,
 });

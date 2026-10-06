@@ -29,7 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chromium',
-      testIgnore: /(?:st-control|issue-regression|css-regression|keyboard-regression|auth-regression)\.spec\.mjs/,
+      testIgnore: /(?:st-control|issue-regression|css-regression|keyboard-regression|auth-regression|testlab-upload-audit)\.spec\.mjs/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
@@ -37,7 +37,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-chromium',
-      testIgnore: /(?:st-control|issue-regression|css-regression|keyboard-regression|auth-regression)\.spec\.mjs/,
+      testIgnore: /(?:st-control|issue-regression|css-regression|keyboard-regression|auth-regression|testlab-upload-audit)\.spec\.mjs/,
       use: {
         ...devices['Pixel 7'],
       },
@@ -45,6 +45,15 @@ export default defineConfig({
     {
       name: 'st-edge',
       testMatch: /(?:st-control|issue-regression|css-regression|keyboard-regression|auth-regression)\.spec\.mjs/,
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'msedge',
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'testlab-edge',
+      testMatch: /testlab-upload-audit\.spec\.mjs/,
       use: {
         ...devices['Desktop Chrome'],
         channel: 'msedge',

@@ -24,6 +24,16 @@ export const test = base.extend({
         viewport: getWorkshopViewport(viewportName),
       });
 
+      // TestLab is disposable. Reuse only the non-account Workshop disclaimer acknowledgement
+      // so copied profiles never block automation on the first-run legal overlay.
+      await context.addInitScript(() => {
+        try {
+          if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+            localStorage.setItem('creative_workshop_agreement_accepted', 'true');
+          }
+        } catch {}
+      });
+
       // Startup extensions may save the active ST chat. Journeys only inspect Workshop,
       // so keep their copied browser sessions from writing to Master's real chat.
       await context.route('**/api/chats/save', route => route.fulfill({ status: 204 }));

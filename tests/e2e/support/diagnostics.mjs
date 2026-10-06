@@ -27,7 +27,7 @@ function isCriticalUrl(raw) {
     const url = new URL(raw);
     if (url.origin === 'https://workshop-test.uika.cc.cd') return true;
     if (
-      (url.origin === 'http://127.0.0.1:8000' || url.origin === 'http://localhost:8000') &&
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost') &&
       (url.pathname === '/' || /CreativeWorkshop/i.test(url.pathname))
     ) {
       return true;

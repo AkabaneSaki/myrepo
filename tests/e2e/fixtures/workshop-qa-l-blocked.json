@@ -1,0 +1,14 @@
+{
+  "entries": {
+    "0": {
+      "uid": 9101,
+      "comment": "QA-L2-顶层const",
+      "content": "<%_ const qaLeaked = 1; _%>"
+    },
+    "1": {
+      "uid": 9102,
+      "comment": "QA-L4-裸赋值",
+      "content": "<%_ qaUndeclared = 2; _%>"
+    }
+  }
+}
