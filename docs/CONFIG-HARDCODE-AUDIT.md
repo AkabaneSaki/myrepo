@@ -13,7 +13,7 @@ A value belongs in shared configuration when changing that real-world fact would
 
 | Domain fact | Single source now | Previous problem |
 | --- | --- | --- |
-| Creative Workshop stable / minimum / staging client versions | `config/workshop.json` | release docs, client source and Worker UI could disagree |
+| Creative Workshop stable / staging client versions | `config/workshop.json` | release docs, client source and Worker UI could disagree |
 | Production / staging Workshop endpoints and staging aliases | `config/workshop.json` | client entry, staging entry and Worker host checks copied URLs independently |
 | Companion-script repository key, display name and latest version | `config/workshop.json` | dependency-health logic owned operational release data |
 | Project upload / cover request / banner upload limits | `cloudflare/src/config/runtime-limits.ts` | frontend and backend repeated byte limits and user-facing size labels |

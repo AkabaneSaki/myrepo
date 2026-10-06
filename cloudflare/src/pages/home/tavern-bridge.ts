@@ -26,6 +26,9 @@ function createBridgeRequest(type, payload) {
 }
 
 function postBridgeMessage(type, payload) {
+  if (!['bridge:handshake', 'bridge:get-context', 'bridge:close-workshop'].includes(type)) {
+    requireLatestWorkshopClient();
+  }
   const message = createBridgeRequest(type, payload);
   window.parent.postMessage(message, '*');
   return message.requestId;
@@ -199,9 +202,12 @@ function handleBridgeMessage(event) {
       setTavernConnectionStatus('connected');
       setTavernClientVersion(data.payload?.clientVersion);
       renderApp();
-      if (shouldShowWorkshopReleaseNotice(WORKSHOP_MINIMUM_CLIENT_VERSION)) {
+      if (shouldShowWorkshopReleaseNotice()) {
         openReleaseNoticeModal();
+        break;
       }
+      postBridgeMessage('bridge:list-installed-projects');
+      postBridgeMessage('bridge:list-script-dependencies');
       break;
     case 'bridge:context':
       syncContextFromBridge(data.payload || {});
@@ -275,8 +281,6 @@ function initializeTavernBridge() {
   window.addEventListener('message', handleBridgeMessage);
   postBridgeMessage('bridge:handshake');
   postBridgeMessage('bridge:get-context');
-  postBridgeMessage('bridge:list-installed-projects');
-  postBridgeMessage('bridge:list-script-dependencies');
 }
 
 function getLegacyProjectNameForBridge(projectId) {
