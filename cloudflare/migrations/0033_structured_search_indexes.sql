@@ -1,34 +1,19 @@
--- Keep searchable project identity/taxonomy text and exact tag values in indexed tables.
--- Creator descriptions are display copy and intentionally do not participate in search.
+-- Converge databases that already ran the legacy search migration onto the final
+-- structured-only FTS schema. project_search_tags is kept because its schema/data
+-- are already canonical; the two FTS tables are rebuilt from it.
+DROP TRIGGER IF EXISTS project_search_insert;
+DROP TRIGGER IF EXISTS project_search_update;
+DROP TRIGGER IF EXISTS project_search_delete;
+DROP TRIGGER IF EXISTS project_search_author_update;
+
+DROP TABLE IF EXISTS project_search_short;
+DROP VIEW IF EXISTS project_search_short_source;
+DROP TABLE IF EXISTS project_search;
+
 CREATE VIRTUAL TABLE project_search USING fts5(
     name, project_type, extension_type, tag_text, author_name, global_name,
     tokenize = 'trigram'
 );
-
-CREATE TABLE project_search_tags (
-    project_id TEXT NOT NULL,
-    tag TEXT NOT NULL,
-    PRIMARY KEY (project_id, tag),
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-CREATE INDEX idx_project_search_tags_tag_project ON project_search_tags(tag, project_id);
-
-INSERT INTO project_search_tags (project_id, tag)
-SELECT project_id, value FROM (
-    SELECT p.id AS project_id, tree.value AS value
-      FROM projects p, json_tree(CASE WHEN json_valid(p.facets) THEN p.facets ELSE '{}' END) tree
-      WHERE tree.type = 'text'
-    UNION
-    SELECT p.id, item.value
-      FROM projects p, json_each(CASE WHEN json_valid(p.custom_tags) THEN p.custom_tags ELSE '[]' END) item
-      WHERE item.type = 'text'
-    UNION
-    SELECT p.id, item.value
-      FROM projects p, json_each(CASE WHEN json_valid(p.tags) THEN p.tags ELSE '[]' END) item
-      WHERE item.type = 'text'
-    UNION
-    SELECT id, extension_type FROM projects WHERE extension_type IS NOT NULL
-) WHERE value <> '';
 
 INSERT INTO project_search (
     rowid, name, project_type, extension_type, tag_text, author_name, global_name
@@ -38,19 +23,20 @@ SELECT p.rowid, p.name, p.project_type, p.extension_type,
        p.author_name, u.global_name
 FROM projects p LEFT JOIN users u ON u.id = p.author_id;
 
--- Trigram FTS cannot serve one- or two-character Chinese substring searches.
--- Build a compact short-search index from structured discovery fields only.
 CREATE VIEW project_search_short_source AS
 SELECT p.rowid AS project_rowid,
        (WITH RECURSIVE chars(text, n) AS (
-           SELECT COALESCE(p.name, '') || char(31)
+           SELECT substr(
+               COALESCE(p.name, '') || char(31)
                || COALESCE(p.project_type, '') || char(31)
                || COALESCE(p.extension_type, '') || char(31)
                || COALESCE(p.author_name, '') || char(31)
                || COALESCE(u.global_name, '') || char(31)
                || COALESCE((SELECT group_concat(tag, char(31))
                               FROM project_search_tags t
-                              WHERE t.project_id = p.id), ''), 1
+                              WHERE t.project_id = p.id), ''),
+               1, 1000
+           ), 1
            UNION ALL
            SELECT text, n + 1 FROM chars WHERE n < length(text)
        ) SELECT group_concat(substr(text, n, 1), ' ') FROM chars) AS spaced_text
