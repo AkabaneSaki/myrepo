@@ -65,7 +65,7 @@ assert.match(
 );
 
 const claimSqlMatch = createDraftSource.match(
-  /\`(UPDATE projects\s+SET draft_project_id = \?, updated_at = \?\s+WHERE id = \? AND draft_project_id IS NULL)\`/,
+  /\`(UPDATE projects\s+SET draft_project_id = \?, updated_at = \?\s+WHERE id = \? AND draft_project_id IS NULL)(?: RETURNING id)?\`/,
 );
 assert.ok(claimSqlMatch, 'review draft claim SQL must remain directly testable');
 const raceDb = new DatabaseSync(':memory:');
