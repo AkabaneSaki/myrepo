@@ -47,10 +47,11 @@ export const homeAdminReviewModalScript = [
   'function renderAdminReviewCard(project, index, total) {',
   '  const coverSources = getCoverImageSources(project);',
   '  const typeLabel = getProjectTypeDisplayLabel(project);',
+  '  const coverMonogram = Array.from(String(project?.name || typeLabel || "?").trim())[0] || "·";',
   '  return `',
   '    <article class="admin-review-card" data-review-card data-project-id="${escapeHtml(String(project.id || ""))}" role="button" tabindex="0" aria-label="审核：${escapeHtml(project.name || "未命名项目")}">',
   '      <div class="admin-review-card-grid">',
-  '        <div class="admin-review-thumb" data-cover-src="${escapeHtml(coverSources.primary)}" data-cover-fallback-src="${escapeHtml(coverSources.fallback)}" data-cover-placeholder-src="${escapeHtml(coverSources.placeholder)}" data-cover-auth-src="${escapeHtml(coverSources.authenticated || "")}" style="background-image:url(\'${escapeHtml(coverSources.primary)}\')"></div>',
+  '        <div class="admin-review-thumb" data-cover-src="${escapeHtml(coverSources.primary)}" data-cover-fallback-src="${escapeHtml(coverSources.fallback)}" data-cover-placeholder-src="${escapeHtml(coverSources.placeholder)}" data-cover-auth-src="${escapeHtml(coverSources.authenticated || "")}" data-cover-title="${escapeHtml(coverMonogram)}" data-cover-kind="${escapeHtml(typeLabel)}"></div>',
   '        <div class="admin-review-card-body">',
   '          <div class="admin-review-card-head">',
   '            <div class="admin-review-card-heading">',
@@ -558,6 +559,7 @@ export const homeAdminReviewModalScript = [
   '    const overlay = loadingOverlay;',
   '    const queue = overlay.querySelector(".admin-review-queue");',
   '    if (queue) queue.innerHTML = renderAdminReviewQueueContents(currentPending, currentTotal, currentSort, currentProjectType);',
+  '    if (queue) bindCoverImageFallbacks(queue);',
   "    overlay.setAttribute('aria-busy', 'false');",
 
 

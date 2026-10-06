@@ -764,7 +764,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-start-btn { flex:none; min-height:38px; padding:0 14px; border:1px solid #bca47f; background:#aa916d; color:#151619; box-shadow:none; }
 .admin-review-start-btn:hover { transform:none; border-color:#ccb48d; background:#bda27a; box-shadow:none; }
 .admin-review-card-grid { grid-template-columns:64px minmax(0,1fr); gap:12px; align-items:center; }
-.admin-review-thumb { width:64px; height:64px; min-height:64px; align-self:start; }
+.admin-review-thumb { position:relative; width:64px; height:64px; min-height:64px; align-self:start; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(190,164,125,.14),transparent 38%),linear-gradient(145deg,#282724,#1d1e21 58%,#18191b); }
+.admin-review-thumb.discover-card-cover--title { display:grid; place-items:center; padding:0; background:radial-gradient(circle at 72% 18%,rgba(190,164,125,.18),transparent 38%),linear-gradient(145deg,#292824,#202124 58%,#191a1c); }
+.admin-review-thumb.discover-card-cover--title span { max-width:none; color:#ded7cb; font-family:"LXGW WenKai Lite","Microsoft YaHei",sans-serif; font-size:1.35rem; font-weight:760; line-height:1; text-shadow:0 1px 10px rgba(0,0,0,.22); }
+.admin-review-thumb.discover-card-cover--title::after { content:attr(data-cover-kind); position:absolute; left:6px; right:6px; bottom:5px; color:#8f8b83; font-size:.5rem; font-weight:700; line-height:1; letter-spacing:.04em; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .admin-review-card-head { align-items:flex-start; gap:10px; }
 .admin-review-card-heading { min-width:0; flex:1; }
 .admin-review-tail-btn { flex:none; min-height:34px; padding:0 10px; border-radius:8px; font-size:.71rem; white-space:nowrap; }
@@ -827,7 +830,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-queue-summary > div > span { color:var(--ar-light-subtle); }
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-card { border-color:rgba(135,131,120,.22); background:var(--ar-light-surface); box-shadow:0 4px 14px rgba(75,73,79,.055); }
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-card:hover { border-color:rgba(105,125,123,.3); background:#FFFEFA; box-shadow:0 8px 20px rgba(75,73,79,.08); }
-.admin-review-overlay[data-admin-review-theme="light"] .admin-review-thumb { border-color:rgba(135,131,120,.2); background-color:var(--ar-light-soft); }
+.admin-review-overlay[data-admin-review-theme="light"] .admin-review-thumb { border-color:rgba(135,131,120,.2); background:radial-gradient(circle at 72% 18%,rgba(105,125,123,.12),transparent 38%),linear-gradient(145deg,#F0EEE6,#E5E3DA 58%,#DDDBD1); }
+.admin-review-overlay[data-admin-review-theme="light"] .admin-review-thumb.discover-card-cover--title span { color:#55544F; text-shadow:none; }
+.admin-review-overlay[data-admin-review-theme="light"] .admin-review-thumb.discover-card-cover--title::after { color:#77746C; }
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-position { color:#596C69; background:rgba(105,125,123,.09); border-color:rgba(105,125,123,.22); }
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-title { color:var(--ar-light-text); }
 .admin-review-overlay[data-admin-review-theme="light"] .admin-review-author { color:var(--ar-light-muted); }
