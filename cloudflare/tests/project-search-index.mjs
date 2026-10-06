@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 const schema = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../migrations/0025_project_search_indexes.sql', import.meta.url), 'utf8');
 const convergenceMigration = readFileSync(new URL('../migrations/0033_structured_search_indexes.sql', import.meta.url), 'utf8');
+const completeShortMigration = readFileSync(new URL('../migrations/0034_complete_structured_short_search.sql', import.meta.url), 'utf8');
 const dbSource = readFileSync(new URL('../src/utils/db.ts', import.meta.url), 'utf8');
 
 function insertProject(db, id, name, tags = [], facets = {}, description = '') {
@@ -70,6 +71,8 @@ function createMigrationBase() {
     'old', '旧项目', '秘密描述', 'author', '作者', '角色', NULL,
     '{"身份":["高阶法师"]}', '["魔法"]', '["角色"]'
   )`).run();
+  db.prepare('UPDATE projects SET custom_tags = ? WHERE id = ?')
+    .run(JSON.stringify(['魔法', 'A'.repeat(1200), '尾标']), 'old');
   return db;
 }
 
@@ -206,15 +209,18 @@ for (const size of [1_000, 10_000]) {
   sample.close();
 }
 
-// Production path: corrected 0025, then 0033.
+// Production path: corrected 0025, then both convergence migrations.
 const productionPath = createMigrationBase();
 productionPath.exec(migration);
+assert.deepEqual(productionPath.prepare(shortSql).all('"尾 标"').map(row => row.id), ['old']);
 productionPath.exec(convergenceMigration);
+productionPath.exec(completeShortMigration);
 
 // Staging path: legacy 0025 already applied, then 0033.
 const stagingPath = createMigrationBase();
 stagingPath.exec(legacySearchMigration);
 stagingPath.exec(convergenceMigration);
+stagingPath.exec(completeShortMigration);
 
 assert.deepEqual(
   searchObjectSchema(productionPath),
@@ -233,6 +239,20 @@ assert.deepEqual(
 );
 assert.deepEqual(productionPath.prepare(shortSql).all('"秘 密"'), []);
 assert.deepEqual(stagingPath.prepare(shortSql).all('"秘 密"'), []);
+
+for (const migrated of [productionPath, stagingPath]) {
+  assert.deepEqual(migrated.prepare(shortSql).all('"尾 标"').map(row => row.id), ['old'],
+    'migrated short search must retain tags after the first 1000 structured characters');
+  migrated.prepare('UPDATE projects SET custom_tags = ? WHERE id = ?')
+    .run(JSON.stringify(['A'.repeat(1200), '后标']), 'old');
+  assert.deepEqual(migrated.prepare(shortSql).all('"后 标"').map(row => row.id), ['old'],
+    'existing update triggers must use the complete structured search view');
+  assert.deepEqual(migrated.prepare(shortSql).all('"尾 标"'), []);
+}
+
+insertProject(db, 'p4', '完整标签项目', ['A'.repeat(1200), '尾标']);
+assert.deepEqual(db.prepare(shortSql).all('"尾 标"').map(row => row.id), ['p4'],
+  'fresh schema must retain tags after the first 1000 structured characters');
 
 productionPath.close();
 stagingPath.close();
