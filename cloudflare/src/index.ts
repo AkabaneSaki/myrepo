@@ -1,6 +1,12 @@
 import { fromHono } from 'chanfana';
 import { Hono } from 'hono';
+import { DurableObject } from 'cloudflare:workers';
 import workshopConfig from '../../config/workshop.json';
+import uploadCheckerBase64 from './generated/upload-checker.txt';
+import uploadCheckerRevision from './generated/upload-checker-revision.json';
+import checkerNotices from '../../util/ejs-checker-v2.NOTICES.txt';
+
+const uploadCheckerSource = new TextDecoder().decode(Uint8Array.from(atob(uploadCheckerBase64), char => char.charCodeAt(0)));
 
 // 类型定义
 import type { Env } from './env';
@@ -21,20 +27,26 @@ import {
   MyProjects,
   MySubscriptions,
   ProjectBatchFetch,
-  ProjectRepairResolve,
+  ProjectVersionCheck,
   ProjectCoverPresentationUpdate,
   ProjectCoverUpload,
   ProjectCreate,
   ProjectDelete,
+  ProjectDailyRandomDraw,
+  ProjectDailyRandomDrawState,
   ProjectEntryRemove,
   ProjectFetch,
+  ProjectInstallInfo,
   ProjectLikeToggle,
   ProjectList,
+  ProjectRatingSet,
+  ProjectRepairResolve,
   ProjectRegexUpload,
   ProjectSubscribeSet,
   ProjectSubscribeToggle,
   ProjectUpdate,
   ProjectUpload,
+  ProjectUploadPreflight,
   ProjectVisibilityUpdate,
 } from './endpoints/projects';
 
@@ -42,7 +54,9 @@ import {
 import {
   AdminActionLogList,
   AdminList,
+  AdminPendingCleanup,
   AdminPendingList,
+  AdminPublicCountsRecount,
   AdminProjectList,
   AdminReview,
   AdminReviewDetail,
@@ -50,6 +64,13 @@ import {
 } from './endpoints/admin';
 
 import { AdminDiscoverBannerUpdate, AdminDiscoverBannerUpload, DiscoverBannerGet } from './endpoints/site-settings';
+import {
+  AdminDevTeamCuratorProfileGet,
+  AdminDevTeamCuratorProfileSet,
+  AdminDevTeamRecommendationDelete,
+  AdminDevTeamRecommendationSet,
+  DevTeamRecommendationList,
+} from './endpoints/recommendations';
 import {
   AdminCharacterReferenceCreate,
   AdminCharacterReferenceVersionCreate,
@@ -59,6 +80,11 @@ import {
 } from './endpoints/character-references';
 
 // Start a Hono app
+const WORKSHOP_STAGING_HOSTS = new Set(
+  [workshopConfig.endpoints.staging, ...(workshopConfig.endpoints.stagingAliases || [])]
+    .map(value => new URL(value).hostname.toLowerCase()),
+);
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.onError((error, c) => {
@@ -128,18 +154,22 @@ app.use('*', async (c, next) => {
     const hasAuthorization = Boolean(c.req.header('authorization'));
     if (c.req.path === '/api/projects') {
       c.res.headers.append('Vary', 'Authorization');
-      c.res.headers.set(
-        'Cache-Control',
-        hasAuthorization ? 'private, no-store' : 'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
-      );
+      // The worker's revision-keyed Cache API entry is the only shared list cache.
+      // Browser/CDN caching by raw query URL could serve hidden projects after a revision change.
+      c.res.headers.set('Cache-Control', 'private, no-store');
     } else if (/^\/api\/projects\/[^/]+$/.test(c.req.path)) {
       c.res.headers.append('Vary', 'Authorization');
       c.res.headers.set(
         'Cache-Control',
         hasAuthorization ? 'private, no-store' : 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
       );
+    } else if (c.req.path === '/api/devteam-recommendations') {
+      c.res.headers.append('Vary', 'Authorization');
+      c.res.headers.set('Cache-Control', 'private, no-store');
+    } else if (c.req.path === '/api/site/discover-banner') {
+      c.res.headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
     } else if (c.req.path === '/assets/home.js') {
-      c.res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     }
   }
 });
@@ -156,10 +186,20 @@ app.get('/assets/home.js', c => {
   return new Response(homeScriptPage(), {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
 });
+
+app.get('/assets/upload-checker.js', c => new Response(uploadCheckerSource, {
+  headers: {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': c.req.query('v') === uploadCheckerRevision.revision ? 'public, max-age=31536000, immutable' : 'no-store',
+  },
+}));
+app.get('/assets/upload-checker-notices.txt', () => new Response(checkerNotices, {
+  headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+}));
 
 // 主页只返回静态壳；登录态、项目列表和审核状态由前端 API 按需加载。
 app.get('/', c => {
@@ -179,13 +219,18 @@ openapi.post('/api/auth/logout', AuthLogout);
 // ============ 项目接口 (公开) ============
 openapi.get('/api/projects', ProjectList);
 openapi.post('/api/projects/batch', ProjectBatchFetch);
+openapi.post('/api/projects/version-check', ProjectVersionCheck);
 openapi.post('/api/projects/repair-resolve', ProjectRepairResolve);
+openapi.get('/api/projects/:projectId/install-info', ProjectInstallInfo);
 openapi.get('/api/projects/:projectId', ProjectFetch);
 openapi.get('/api/site/discover-banner', DiscoverBannerGet);
+openapi.get('/api/devteam-recommendations', DevTeamRecommendationList);
 openapi.get('/api/character-references', CharacterReferenceList);
 openapi.get('/api/character-references/versions/:versionId/items', CharacterReferenceVersionItems);
 
 // ============ 项目接口 (需要登录) ============
+openapi.get('/api/projects/random-draw/state', ProjectDailyRandomDrawState);
+openapi.post('/api/projects/random-draw', ProjectDailyRandomDraw);
 openapi.get('/api/my/projects', MyProjects);
 openapi.get('/api/my/subscriptions', MySubscriptions);
 openapi.post('/api/projects', ProjectCreate);
@@ -195,14 +240,22 @@ openapi.put('/api/projects/:projectId/visibility', ProjectVisibilityUpdate);
 openapi.delete('/api/projects/:projectId', ProjectDelete);
 openapi.post('/api/projects/:projectId/entries/remove', ProjectEntryRemove);
 openapi.post('/api/projects/:projectId/like', ProjectLikeToggle);
+openapi.put('/api/projects/:projectId/rating', ProjectRatingSet);
 openapi.post('/api/projects/:projectId/subscribe', ProjectSubscribeToggle);
 openapi.put('/api/projects/:projectId/subscribe', ProjectSubscribeSet);
 
 // ============ 项目文件上传 ============
+openapi.post('/api/projects/preflight/:kind', ProjectUploadPreflight);
 openapi.post('/api/projects/:projectId/upload', ProjectUpload);
 openapi.post('/api/projects/:projectId/upload-cover', ProjectCoverUpload);
 openapi.put('/api/projects/:projectId/cover-presentation', ProjectCoverPresentationUpdate);
 openapi.post('/api/projects/:projectId/upload-regex', ProjectRegexUpload);
+
+// ============ DLC私房菜 (管理员维护) ============
+openapi.get('/api/admin/devteam-curator-profile', AdminDevTeamCuratorProfileGet);
+openapi.put('/api/admin/devteam-curator-profile', AdminDevTeamCuratorProfileSet);
+openapi.put('/api/admin/devteam-recommendations/:projectId', AdminDevTeamRecommendationSet);
+openapi.delete('/api/admin/devteam-recommendations/:projectId', AdminDevTeamRecommendationDelete);
 
 // ============ 项目文件下载 (代理) ============
 // 通过 worker 代理下载，解决 CORS 问题
@@ -261,6 +314,8 @@ app.get('/api/files/*', async c => {
 // ============ 管理员接口 ============
 openapi.get('/api/admin/logs', AdminActionLogList);
 openapi.get('/api/admin/pending', AdminPendingList);
+openapi.post('/api/admin/pending/cleanup', AdminPendingCleanup);
+openapi.post('/api/admin/projects/recount', AdminPublicCountsRecount);
 openapi.get('/api/admin/review/:projectId', AdminReviewDetail);
 openapi.post('/api/admin/review/:projectId', AdminReview);
 openapi.get('/api/admin/projects', AdminProjectList);
@@ -271,15 +326,11 @@ openapi.post('/api/admin/character-references/:referenceId/versions', AdminChara
 openapi.put('/api/admin/discover-banner', AdminDiscoverBannerUpdate);
 openapi.post('/api/admin/discover-banner/upload', AdminDiscoverBannerUpload);
 
-const WORKSHOP_STAGING_HOSTS = new Set(
-  [workshopConfig.endpoints.staging, ...(workshopConfig.endpoints.stagingAliases || [])]
-    .map(value => new URL(value).hostname.toLowerCase()),
-);
-
 // Staging-only QA hook for #38. Production hosts always return 404.
 app.post('/api/internal/staging/rankings/rebuild', async c => {
   const hostname = new URL(c.req.url).hostname.toLowerCase();
   const isStagingHost = WORKSHOP_STAGING_HOSTS.has(hostname);
+
   const qaHeader = c.req.header('x-workshop-staging-qa');
   if (!isStagingHost || qaHeader !== 'rebuild-daily-ranking') {
     return c.json({ error: 'Not found' }, 404);
@@ -292,9 +343,39 @@ app.post('/api/internal/staging/rankings/rebuild', async c => {
 // You may also register routes for non OpenAPI directly on Hono
 // app.get('/test', (c) => c.text('Hono!'))
 
+// Keep large bodies, JSON parsing, previews, and the entire authoritative check
+// in the object. Returning its response stream avoids spending the gateway's
+// 10 ms CPU budget decoding or serializing the content a second time.
+function contentServiceKey(request: Request): string | null {
+  const path = new URL(request.url).pathname;
+  if (request.method === 'POST' && /^\/api\/projects\/preflight\/(worldbook|regex)$/.test(path)) return 'preflight:' + crypto.randomUUID();
+  const review = path.match(/^\/api\/admin\/review\/([^/]+)$/);
+  if (review && ['GET', 'HEAD', 'POST'].includes(request.method)) return 'project:' + review[1];
+  const upload = path.match(/^\/api\/projects\/([^/]+)\/(upload|upload-regex|entries\/remove)$/);
+  if (upload && request.method === 'POST') return 'project:' + upload[1];
+  const detail = path.match(/^\/api\/projects\/([^/]+)$/);
+  if (detail && ['GET', 'HEAD'].includes(request.method)) return 'project:' + detail[1];
+  return null;
+}
+
+export class CodeCheckService extends DurableObject<Env> {
+  async fetch(request: Request) {
+    // The same endpoint handlers still enforce authentication, permissions,
+    // revision checks and R2 publication. No client check result is trusted.
+    const response = await app.fetch(request, this.env);
+    // Early 401/413 responses must finish the forwarded request stream before
+    // sending a body-bearing response (workerd issue #918). Discard chunks;
+    // do not buffer an oversized or unauthorized body in memory.
+    if (request.body && !request.bodyUsed) await request.body.pipeTo(new WritableStream());
+    return response;
+  }
+}
+
 // Export the Hono app
 const worker: ExportedHandler<Env> = {
   fetch(request, env, ctx) {
+    const key = contentServiceKey(request);
+    if (key) return env.CODE_CHECK_SERVICE.getByName(key).fetch(request);
     return app.fetch(request, env, ctx);
   },
   async scheduled(_controller, env) {

@@ -1,14 +1,9 @@
 export const homeApiScript = String.raw`
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
-const UPLOAD_SIZE_ERROR = '文件过大，最大 10MB';
+const MAX_UPLOAD_SIZE = WORKSHOP_LIMITS.projectUploadBytes;
+const UPLOAD_SIZE_ERROR = '文件过大，最大 ' + WORKSHOP_LIMITS.projectUploadLabel;
 const REPAIR_RESOLVE_CACHE_TTL_MS = 5 * 60 * 1000;
 const REPAIR_RESOLVE_LOCK_STORAGE_PREFIX = 'creative_workshop_repair_locked_until_v1:';
 const REPAIR_DAILY_LOCK_MESSAGE = '好啦別再点了喵！截图然后去DC找我吧喵！';
-const DISCOVER_ROTATION_WINDOW_MS = 6 * 60 * 60 * 1000;
-const DISCOVER_CANDIDATE_POOL_SIZE = 30;
-const DISCOVER_DISPLAY_COUNT = 10;
-const DISCOVER_ANCHOR_COUNT = 2;
-const DISCOVER_MAX_PER_AUTHOR = 2;
 const repairResolveCache = new Map();
 let repairLockNoticeShownFor = '';
 
@@ -21,7 +16,7 @@ function assertUploadSize(file) {
 function resolveApiErrorMessage(status, rawText, data, fallbackMessage) {
   const text = String(rawText || '').trim();
   if (/\b1027\b/.test(text)) return '服务额度用尽，请稍后再试';
-  if (/\b1102\b/.test(text) || /Worker exceeded resource limits/i.test(text)) return '服务资源超限，请稍后再试';
+  if (/\b1102\b/.test(text) || /Worker exceeded resource limits/i.test(text)) return '服务器未能完成这次处理。重复操作可能仍会失败，请联系管理员，并附上当前页面截图。';
   if (status === 429 || /rate limit|too many requests|quota|limit exceeded/i.test(text)) return '请求过于频繁，请稍后再试';
   if (data && (data.error || data.message)) return data.error || data.message;
   const lowerText = text.toLowerCase();
@@ -93,6 +88,19 @@ async function apiFetch(endpoint, options = {}) {
   return data || {};
 }
 
+async function fetchProjectInstallInfo(projectId, expectedVersion = null) {
+  if (!state.currentUser || !localStorage.getItem(TOKEN_KEY)) {
+    const error = new Error('请先 Discord 登录后再下载 / 安装 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    throw error;
+  }
+  const versionQuery = expectedVersion ? '?v=' + encodeURIComponent(expectedVersion) : '';
+  return apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/install-info' + versionQuery, {
+    method: 'GET',
+    cache: 'no-store',
+  });
+}
+
 async function fetchCurrentUser() {
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return null;
@@ -152,74 +160,11 @@ async function fetchSubscriptions(forceRefresh = false) {
   return projectIds;
 }
 
-function hashDiscoverRotation(value) {
-  let hash = 2166136261;
-  const text = String(value || '');
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function getDiscoverRotationBucket(nowMs = Date.now()) {
-  const numericNow = Number(nowMs);
-  return Math.floor((Number.isFinite(numericNow) ? numericNow : Date.now()) / DISCOVER_ROTATION_WINDOW_MS);
-}
-
-function selectDiscoverProjects(projects, nowMs = Date.now()) {
-  const candidates = (Array.isArray(projects) ? projects : [])
-    .filter(Boolean)
-    .slice(0, DISCOVER_CANDIDATE_POOL_SIZE);
-  if (candidates.length <= DISCOVER_DISPLAY_COUNT) return candidates.slice(0, DISCOVER_DISPLAY_COUNT);
-
-  const selected = [];
-  const selectedIds = new Set();
-  const authorCounts = new Map();
-  const authorKey = project => project?.authorId ? 'author:' + project.authorId : 'project:' + String(project?.id || '');
-  const addProject = (project, enforceAuthorCap = true) => {
-    const projectId = String(project?.id || '');
-    if (!projectId || selectedIds.has(projectId)) return false;
-    const key = authorKey(project);
-    const count = authorCounts.get(key) || 0;
-    if (enforceAuthorCap && count >= DISCOVER_MAX_PER_AUTHOR) return false;
-    selected.push(project);
-    selectedIds.add(projectId);
-    authorCounts.set(key, count + 1);
-    return true;
-  };
-
-  for (const project of candidates.slice(0, DISCOVER_ANCHOR_COUNT)) addProject(project);
-
-  const bucket = getDiscoverRotationBucket(nowMs);
-  const rotated = candidates
-    .slice(DISCOVER_ANCHOR_COUNT)
-    .map((project, index) => ({
-      project,
-      originalIndex: index,
-      rotationScore: hashDiscoverRotation(bucket + ':' + String(project?.id || index)),
-    }))
-    .sort((a, b) => a.rotationScore - b.rotationScore || a.originalIndex - b.originalIndex);
-
-  for (const entry of rotated) {
-    if (selected.length >= DISCOVER_DISPLAY_COUNT) break;
-    addProject(entry.project, true);
-  }
-  // A tiny/creator-heavy pool should still render a full shelf instead of leaving holes.
-  for (const entry of rotated) {
-    if (selected.length >= DISCOVER_DISPLAY_COUNT) break;
-    addProject(entry.project, false);
-  }
-
-  return selected;
-}
-
 async function fetchDiscoverShelves(forceRefresh = false) {
   const shelfSpecs = [
-    { key: 'discover', sort: 'discover', pageSize: DISCOVER_CANDIDATE_POOL_SIZE },
+    { key: 'discover', sort: 'discover', pageSize: 10 },
     { key: 'published', sort: 'published', pageSize: 5 },
-    { key: 'rating', sort: 'rating', pageSize: 5 },
-    { key: 'downloads', sort: 'downloads', pageSize: 5 },
+    { key: 'updated', sort: 'updated', pageSize: 5 },
   ];
   setDiscoverShelves({ ...state.discoverShelves, loading: true });
   renderApp();
@@ -229,9 +174,9 @@ async function fetchDiscoverShelves(forceRefresh = false) {
       if (forceRefresh) params.set('_', String(Date.now()));
       const data = await apiFetch('/api/projects?' + params.toString());
       const projects = Array.isArray(data.projects) ? data.projects : [];
-      return [spec.key, spec.key === 'discover' ? selectDiscoverProjects(projects) : projects];
+      return [spec.key, projects];
     }));
-    const shelves = { discover: [], published: [], rating: [], downloads: [], loading: false };
+    const shelves = { discover: [], published: [], updated: [], downloads: [], likes: [], loading: false };
     results.forEach(([key, projects]) => { shelves[key] = projects; });
     setDiscoverShelves(shelves);
     syncProjectStats(state.projects);
@@ -244,10 +189,102 @@ async function fetchDiscoverShelves(forceRefresh = false) {
   }
 }
 
+async function fetchDevTeamRecommendations(forceRefresh = false) {
+  const suffix = forceRefresh ? ('?_=' + Date.now()) : '';
+  const data = await apiFetch('/api/devteam-recommendations' + suffix);
+  const curators = Array.isArray(data.curators) ? data.curators : [];
+  setDevTeamCurators(curators);
+  const projects = curators.flatMap(curator => (curator.recommendations || []).map(item => item.project)).filter(Boolean);
+  syncProjectStats(projects, { replace: false });
+  return curators;
+}
+
+async function fetchDlcKitchenProfile(forceRefresh = false) {
+  if (!state.currentUser?.isAdmin) return null;
+  if (!forceRefresh && state.dlcKitchenProfile) return state.dlcKitchenProfile;
+  const suffix = forceRefresh ? ('?_=' + Date.now()) : '';
+  const data = await apiFetch('/api/admin/devteam-curator-profile' + suffix);
+  const profile = data?.profile || {};
+  state.dlcKitchenProfile = {
+    title: String(profile.title || ''),
+    bio: String(profile.bio || ''),
+    reactionPresets: Array.isArray(profile.reactionPresets)
+      ? profile.reactionPresets.map(item => String(item || '').trim()).filter(Boolean).slice(0, 12)
+      : [],
+  };
+  return state.dlcKitchenProfile;
+}
+
+async function saveDlcKitchenProfile(profile) {
+  const data = await apiFetch('/api/admin/devteam-curator-profile', {
+    method: 'PUT',
+    body: JSON.stringify(profile || {}),
+  });
+  const saved = data?.profile || {};
+  state.dlcKitchenProfile = {
+    title: String(saved.title || ''),
+    bio: String(saved.bio || ''),
+    reactionPresets: Array.isArray(saved.reactionPresets)
+      ? saved.reactionPresets.map(item => String(item || '').trim()).filter(Boolean).slice(0, 12)
+      : [],
+  };
+  await fetchDevTeamRecommendations(true);
+  return state.dlcKitchenProfile;
+}
+
+async function saveDevTeamRecommendation(projectId, fields) {
+  await apiFetch('/api/admin/devteam-recommendations/' + encodeURIComponent(projectId), {
+    method: 'PUT',
+    body: JSON.stringify(fields || {}),
+  });
+  return fetchDevTeamRecommendations(true);
+}
+
+async function deleteDevTeamRecommendation(projectId) {
+  await apiFetch('/api/admin/devteam-recommendations/' + encodeURIComponent(projectId), { method: 'DELETE' });
+  return fetchDevTeamRecommendations(true);
+}
+
+const PROJECT_LIST_CLIENT_CACHE_FRESH_MS = 15 * 1000;
+const PROJECT_LIST_CLIENT_CACHE_MAX_STALE_MS = 60 * 1000;
+const PROJECT_LIST_CLIENT_CACHE_MAX_ENTRIES = 24;
+const projectListClientCache = new Map();
+
+function clearProjectListClientCache() {
+  projectListClientCache.clear();
+}
+
+function writeProjectListClientCache(key, data) {
+  if (!key || !data) return;
+  projectListClientCache.delete(key);
+  projectListClientCache.set(key, { cachedAt: Date.now(), data });
+  while (projectListClientCache.size > PROJECT_LIST_CLIENT_CACHE_MAX_ENTRIES) {
+    const oldestKey = projectListClientCache.keys().next().value;
+    if (!oldestKey) break;
+    projectListClientCache.delete(oldestKey);
+  }
+}
+
+function applyProjectListClientCacheData(data, pageSize) {
+  const projectList = Array.isArray(data?.projects) ? data.projects : [];
+  setProjectsPage({
+    projects: projectList,
+    page: data?.page,
+    pageSize: data?.pageSize || pageSize,
+    hasMore: data?.hasMore,
+    publicCounts: data?.publicCounts,
+  });
+  syncProjectStats(state.projects);
+  renderApp();
+}
+
 async function fetchProjects(forceRefresh = false, options = {}) {
-  const append = Boolean(options.append);
-  const pageSize = Number(options.pageSize || state.projectPagination.pageSize || 50);
-  const nextPage = append ? Number(state.projectPagination.page || 0) + 1 : Number(options.page || 0);
+  const pageSize = state.projectPagination.pageSizeLocked
+    ? state.projectPagination.pageSize
+    : chooseProjectPageSize();
+  state.projectPagination.pageSize = pageSize;
+  state.projectPagination.pageSizeLocked = true;
+  const nextPage = Number(options.page ?? state.projectPagination.page ?? 0);
   const requestToken = createProjectRequestToken();
   const params = new URLSearchParams({
     page: String(nextPage),
@@ -266,6 +303,36 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   if (searchKeyword) {
     params.set('search', searchKeyword);
   }
+  const minLikes = Math.max(0, Math.floor(Number(state.minLikes || 0)));
+  if (minLikes > 0) params.set('minLikes', String(minLikes));
+  const minDownloads = Math.max(0, Math.floor(Number(state.minDownloads || 0)));
+  if (minDownloads > 0) params.set('minDownloads', String(minDownloads));
+
+  const canUseProjectListClientCache = !state.showOnlyMyProjects && !state.showSubscribedAndInstalledProjects;
+  forceRefresh = Boolean(forceRefresh && options.bypassClientCache);
+  // Writes clear this cache directly; bypassClientCache is only for an explicit uncached reread.
+  const projectListClientCacheKey = (state.currentUser?.id || 'anonymous') + '|' + params.toString();
+  let cachedFallbackData = null;
+
+  if (forceRefresh) {
+    clearProjectListClientCache();
+  } else if (canUseProjectListClientCache) {
+    const cached = projectListClientCache.get(projectListClientCacheKey);
+    if (cached) {
+      const ageMs = Date.now() - Number(cached.cachedAt || 0);
+      if (ageMs <= PROJECT_LIST_CLIENT_CACHE_MAX_STALE_MS) {
+        cachedFallbackData = cached.data;
+        if (isLatestProjectRequestToken(requestToken)) {
+          applyProjectListClientCacheData(cached.data, pageSize);
+        }
+        if (ageMs <= PROJECT_LIST_CLIENT_CACHE_FRESH_MS) {
+          return cached.data;
+        }
+      } else {
+        projectListClientCache.delete(projectListClientCacheKey);
+      }
+    }
+  }
 
   try {
     if (forceRefresh) {
@@ -275,6 +342,9 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     if (!isLatestProjectRequestToken(requestToken)) {
       return null;
     }
+    if (canUseProjectListClientCache) {
+      writeProjectListClientCache(projectListClientCacheKey, data);
+    }
     const projectList = data.projects || [];
 
     setProjectsPage({
@@ -282,7 +352,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       page: data.page,
       pageSize: data.pageSize || pageSize,
       hasMore: data.hasMore,
-      append,
+      publicCounts: data.publicCounts,
     });
 
     if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {
@@ -317,8 +387,12 @@ async function fetchProjects(forceRefresh = false, options = {}) {
     if (!isLatestProjectRequestToken(requestToken)) {
       return null;
     }
-    if (append) {
-      setProjectPaginationLoadingMore(false);
+    if (cachedFallbackData) {
+      console.warn('[CreativeWorkshop] 项目列表后台刷新失败，继续显示刚才的内容', error);
+      return cachedFallbackData;
+    }
+    if (nextPage > 0) {
+      setProjectPageLoading(false);
     } else {
       resetProjectPagination();
       setProjects([]);
@@ -474,20 +548,25 @@ async function searchWorkshopProjectsByName(query) {
   return { projects, exactNameMatches };
 }
 
-async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
-  if (manualQuery) {
-    const { projects, exactNameMatches } = await searchWorkshopProjectsByName(manualQuery);
-    if (exactNameMatches.length === 1) {
-      return { status: 'candidates', method: 'manual_exact_name', projects: exactNameMatches };
-    }
-    if (exactNameMatches.length > 1) {
-      return { status: 'ambiguous', method: 'manual_exact_name', projects: exactNameMatches };
-    }
-    if (projects.length > 0) {
-      return { status: 'candidates', method: 'manual_search', projects };
-    }
-    return { status: 'none', method: 'manual_search', projects: [] };
+async function searchWorkshopProjectsForRepair(query, methodPrefix = 'auto_search') {
+  const { projects, exactNameMatches } = await searchWorkshopProjectsByName(query);
+  if (exactNameMatches.length === 1) {
+    return { status: 'unique', method: methodPrefix + '_exact_name', projects: exactNameMatches };
   }
+  if (exactNameMatches.length > 1) {
+    return { status: 'ambiguous', method: methodPrefix + '_exact_name', projects: exactNameMatches };
+  }
+  if (projects.length === 1) {
+    return { status: 'unique', method: methodPrefix + '_single_result', projects };
+  }
+  if (projects.length > 1) {
+    return { status: 'candidates', method: methodPrefix, projects };
+  }
+  return { status: 'none', method: methodPrefix, projects: [] };
+}
+
+async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
+  if (manualQuery) return searchWorkshopProjectsForRepair(manualQuery, 'manual_search');
 
   const detectedProjectId = String(candidate?.detectedProjectId || '').trim();
   const projectId = detectedProjectId && isWorkshopUuid(detectedProjectId) ? detectedProjectId : '';
@@ -499,7 +578,10 @@ async function findWorkshopProjectsForRepair(candidate, manualQuery = '') {
     projectId,
     name,
   }]);
-  return result || { status: 'none', method: 'exact_name', projects: [] };
+  if (result?.status !== 'none' || !name) {
+    return result || { status: 'none', method: 'exact_name', projects: [] };
+  }
+  return searchWorkshopProjectsForRepair(name, 'auto_search');
 }
 
 async function fetchInstalledProjectDetails() {
@@ -530,7 +612,7 @@ async function fetchInstalledProjectDetails() {
 
   const foundRemoteIds = new Set(remoteProjects.map(project => project?.id).filter(Boolean));
   const missingIdSet = new Set(missingProjectIds);
-  const rebindRequests = [];
+  const nameSearchCache = new Map();
   for (const localProject of installedProjects) {
     const currentProjectId = localProject.projectId || localProject.id;
     if (!missingIdSet.has(currentProjectId) || foundRemoteIds.has(currentProjectId)) continue;
@@ -540,24 +622,15 @@ async function fetchInstalledProjectDetails() {
       setInstalledProjectRebindCandidates(installedProjectId, []);
       continue;
     }
-    rebindRequests.push({
-      candidateId: installedProjectId,
-      projectId: isWorkshopUuid(installedProjectId) ? installedProjectId : '',
-      name: projectNameHint,
-    });
-  }
-
-  if (rebindRequests.length) {
     try {
-      const resolved = await resolveWorkshopRepairCandidates(rebindRequests);
-      const byCandidateId = new Map(resolved.map(result => [String(result?.candidateId || ''), result]));
-      rebindRequests.forEach(request => {
-        const result = byCandidateId.get(request.candidateId);
-        setInstalledProjectRebindCandidates(request.candidateId, Array.isArray(result?.projects) ? result.projects : []);
-      });
+      if (!nameSearchCache.has(projectNameHint)) {
+        nameSearchCache.set(projectNameHint, searchWorkshopProjectsByName(projectNameHint));
+      }
+      const result = await nameSearchCache.get(projectNameHint);
+      setInstalledProjectRebindCandidates(installedProjectId, result?.exactNameMatches || []);
     } catch (error) {
-      console.warn('[CreativeWorkshop] stale installed project batch candidate lookup failed', { error });
-      rebindRequests.forEach(request => setInstalledProjectRebindCandidates(request.candidateId, []));
+      console.warn('[CreativeWorkshop] stale installed project candidate lookup failed', { installedProjectId, error });
+      setInstalledProjectRebindCandidates(installedProjectId, []);
     }
   }
 
@@ -565,28 +638,51 @@ async function fetchInstalledProjectDetails() {
   return remoteProjects;
 }
 
-async function loadMoreProjects() {
-  if (state.projectPagination.loadingMore || !shouldShowProjectLoadMore()) {
+async function goToProjectPage(page) {
+  if (state.projectPagination.loadingPage || !shouldShowProjectPagination()) {
     return;
   }
-  setProjectPaginationLoadingMore(true);
+  if (!Number.isInteger(page) || page < 0 || page > 19) return;
+  if (page === state.projectPagination.page) return;
+  if (page > state.projectPagination.page && !state.projectPagination.hasMore) return;
+  setProjectPageLoading(true);
   renderApp();
-  await fetchProjects(false, { append: true, pageSize: state.projectPagination.pageSize });
+  await fetchProjects(false, { page });
+  document.querySelector('.projects-grid')?.scrollIntoView({ block: 'start' });
 }
+
+const pendingLikeProjectIds = new Set();
 
 async function toggleLike(projectId) {
   if (!state.currentUser) {
     showToast('请先登录', 'warning');
     return;
   }
+  if (pendingLikeProjectIds.has(projectId)) return;
+  pendingLikeProjectIds.add(projectId);
   try {
     const data = await apiFetch('/api/projects/' + projectId + '/like', { method: 'POST' });
     updateLikeState(projectId, { liked: data.liked, count: data.count });
+    clearProjectListClientCache();
     invalidateProjectDetailCache(projectId);
     renderApp();
   } catch (error) {
     showToast('操作失败: ' + error.message, 'error');
+  } finally {
+    pendingLikeProjectIds.delete(projectId);
   }
+}
+
+async function setPrivateProjectRating(projectId, rating, comment = '') {
+  if (!state.currentUser) throw new Error('请先登录');
+  const numericRating = Math.max(1, Math.min(5, Math.floor(Number(rating || 0))));
+  const normalizedComment = String(comment || '').trim().slice(0, 500);
+  const result = await apiFetch('/api/projects/' + projectId + '/rating', {
+    method: 'PUT',
+    body: JSON.stringify({ rating: numericRating, comment: normalizedComment }),
+  });
+  invalidateProjectDetailCache(projectId);
+  return result;
 }
 
 async function setProjectSubscription(projectId, subscribed) {
@@ -680,6 +776,7 @@ async function fetchProjectEntries(projectOrId, options = {}) {
 }
 
 async function createProject(payload) {
+  clearProjectListClientCache();
   return apiFetch('/api/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -687,6 +784,7 @@ async function createProject(payload) {
 }
 
 async function updateProject(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId, {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -696,6 +794,7 @@ async function updateProject(projectId, payload) {
 }
 
 async function updateProjectVisibility(projectId, visibility) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/visibility', {
     method: 'PUT',
     body: JSON.stringify({ visibility }),
@@ -705,12 +804,75 @@ async function updateProjectVisibility(projectId, visibility) {
 }
 
 async function deleteProject(projectId) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId, { method: 'DELETE' });
   invalidateProjectDetailCache(projectId);
   return result;
 }
 
+const activeUploadChecks = new Map();
+
+function cancelUploadPreflight(kind) {
+  activeUploadChecks.get(kind)?.();
+}
+
+async function preflightProjectUpload(file, kind) {
+  assertUploadSize(file);
+  const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
+  cancelUploadPreflight(normalizedKind);
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(UPLOAD_CHECKER_URL);
+    const finish = (error, result) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      if (activeUploadChecks.get(normalizedKind) === cancel) activeUploadChecks.delete(normalizedKind);
+      if (error) reject(error); else resolve(result);
+    };
+    const cancel = () => finish(new DOMException('已取消旧文件的检查', 'AbortError'));
+    const timeout = setTimeout(() => finish(new Error('浏览器检查用时过长，尚未完成。请减少本次提交的脚本数量，或拆分过大的条目后再检查。')), UPLOAD_CHECKER_TIMEOUT_MS);
+    activeUploadChecks.set(normalizedKind, cancel);
+    worker.onmessage = event => {
+      const result = event.data;
+      if (!result?.success || !result.codeCheck || result.codeCheck.gate !== 'accept') {
+        const error = new Error(result?.error || '本地检查未完成，暂时不能提交。');
+        error.codeCheck = result?.codeCheck || null;
+        finish(error);
+      } else finish(null, result);
+    };
+    worker.onerror = () => finish(new Error('浏览器未能启动文件检查。请刷新页面；若仍然失败，请联系管理员并附上页面截图。'));
+    worker.postMessage({ file, kind: normalizedKind });
+  });
+}
+
+async function preflightProjectSubmission(file, kind) {
+  assertUploadSize(file);
+  const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
+  try {
+    const response = await fetch('/api/projects/preflight/' + normalizedKind, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+        'Content-Type': file.type || 'application/json',
+      },
+      body: file,
+    });
+    const { rawText, data } = await parseResponseBody(response);
+    if (!response.ok) {
+      const error = new Error(resolveApiErrorMessage(response.status, rawText, data, '自动检查失败'));
+      error.codeCheck = data?.codeCheck || null;
+      throw error;
+    }
+    if (!data?.success || data.codeCheck?.gate !== 'accept') throw new Error('提交检查未完成，暂时不能提交。请联系管理员并附上页面截图。');
+    return data;
+  } catch (error) {
+    const normalized = normalizeThrownError(error, '自动检查失败');
+    normalized.codeCheck = error?.codeCheck || null;
+    throw normalized;
+  }
+}
+
 async function uploadProjectFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   try {
     const response = await fetch('/api/projects/' + projectId + '/upload', {
@@ -733,6 +895,7 @@ async function uploadProjectFile(projectId, file) {
 }
 
 async function uploadRegexFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   try {
     const response = await fetch('/api/projects/' + projectId + '/upload-regex', {
@@ -755,6 +918,7 @@ async function uploadRegexFile(projectId, file) {
 }
 
 async function uploadCoverFile(projectId, file) {
+  clearProjectListClientCache();
   assertUploadSize(file);
   const formData = new FormData();
   formData.append('cover', file);
@@ -778,12 +942,13 @@ async function uploadCoverFile(projectId, file) {
 }
 
 async function fetchDiscoverBanner() {
-  const result = await apiFetch('/api/site/discover-banner', { cache: 'no-store' });
+  const result = await apiFetch('/api/site/discover-banner');
   setDiscoverBanner(result?.banner || {});
   return result?.banner || {};
 }
 
 async function updateCoverPresentation(projectId, presentation) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/cover-presentation', {
     method: 'PUT',
     body: JSON.stringify(presentation),
@@ -816,9 +981,26 @@ async function uploadDiscoverBanner(file) {
 }
 
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
-  const params = new URLSearchParams({ page: '0', pageSize: '50', sort });
+  const params = new URLSearchParams({ page: '0', pageSize: '12', sort });
   if (projectType) params.set('projectType', projectType);
-  return apiFetch('/api/admin/pending?' + params.toString());
+  const startedAt = performance.now();
+  const result = await apiFetch('/api/admin/pending?' + params.toString());
+  console.info('[CreativeWorkshop] admin pending loaded', {
+    ms: Math.round(performance.now() - startedAt),
+    returned: Array.isArray(result?.projects) ? result.projects.length : 0,
+    total: Number(result?.total || 0),
+  });
+  return result;
+}
+
+async function cleanupOutdatedReviewDrafts() {
+  return apiFetch('/api/admin/pending/cleanup', {
+    method: 'POST',
+  });
+}
+
+async function recountPublicProjects() {
+  return apiFetch('/api/admin/projects/recount', { method: 'POST' });
 }
 
 async function fetchAdminReviewDetail(projectId) {
@@ -829,6 +1011,7 @@ async function fetchAdminReviewDetail(projectId) {
 }
 
 async function reviewProject(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/admin/review/' + projectId, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -855,6 +1038,7 @@ async function fetchCharacterReferenceVersionItems(versionId) {
 
 
 async function updateProjectCompatibility(projectId, payload) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/compatibility', {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -870,6 +1054,7 @@ async function setAdmin(userId, isAdmin) {
   });
 }
 async function removeProjectEntry(projectId, kind, entryKey) {
+  clearProjectListClientCache();
   const result = await apiFetch('/api/projects/' + projectId + '/entries/remove', {
     method: 'POST',
     body: JSON.stringify({ kind, entryKey }),

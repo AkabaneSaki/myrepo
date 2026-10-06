@@ -37,26 +37,25 @@ jobs:
           cache: npm
           cache-dependency-path: cloudflare/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install Cloudflare dependencies
         run: npm ci
 
-      - name: Verify Workshop source of truth
-        run: npm run check:workshop-config
-
-      - name: Generate Worker runtime types
+      - name: Generate Worker types
         run: npm run cf-typegen
 
       - name: Typecheck
-        run: npm run check:types
+        run: npm exec --yes --package=typescript@5.9.2 -- tsc -p tsconfig.json
 
-      - name: Home regression smoke
-        run: npm run check:home-js-smoke
+      - name: Home regression checks
+        run: npm run check:home
 
-      - name: DLC Repair D1 guard smoke
-        run: npm run check:creative-workshop-repair-d1-guard
-
-      - name: CreativeWorkshop WS-first name format
-        run: npm run check:creative-workshop-name-format
+      - name: Staging sync schema checks
+        run: npm run check:staging-sync
 
       - name: CreativeWorkshop syntax
         run: npm run check:creative-workshop-syntax

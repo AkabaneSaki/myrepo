@@ -5,7 +5,6 @@ const PROJECT_DIFF_TIMEOUT_MS = 10000;
 const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
-const installSubscriptionSyncChains = new Map();
 const SCRIPT_DEPENDENCY_REGISTRY = new Map(
   (WORKSHOP_CONFIG.scriptDependencies || []).map(item => [
     String(item.key || ''),
@@ -69,8 +68,17 @@ function syncInstalledProjectsFromBridge(payload, options) {
   setInstalledProjects(installedProjects, {
     mode: syncMode,
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
+    complete: payload?.complete !== false,
+    unreadableWorldbookNames: Array.isArray(payload?.unreadableWorldbookNames) ? payload.unreadableWorldbookNames : [],
   });
+  if (payload?.complete === false) {
+    showToast(
+      '有些世界书暂时读不到，未确认项目的安装按钮已暂停。请稍后重开工坊再试。',
+      'error',
+    );
+  }
   renderApp();
+  scheduleDlcUpdateStatusCheck();
 }
 
 function normalizeScriptDependencyVersion(version) {
@@ -139,32 +147,9 @@ function getScriptDependencyHealthSummary() {
   };
 }
 
-function syncInstallSubscription(projectId, subscribed) {
-  if (!projectId || !state.currentUser) return Promise.resolve();
-
-  const previous = installSubscriptionSyncChains.get(projectId) || Promise.resolve();
-  const next = previous.catch(() => undefined).then(async () => {
-    try {
-      await setProjectSubscription(projectId, subscribed);
-    } catch (error) {
-      console.warn('[CreativeWorkshop] 同步更新订阅状态失败', { projectId, subscribed, error });
-      showToast('项目操作完成，但更新订阅状态同步失败', 'warning');
-    }
-  });
-
-  installSubscriptionSyncChains.set(projectId, next);
-  void next.finally(() => {
-    if (installSubscriptionSyncChains.get(projectId) === next) {
-      installSubscriptionSyncChains.delete(projectId);
-    }
-  });
-  return next;
-}
-
 function handleInstallResult(payload) {
   syncInstalledProjectsFromBridge(payload, { mode: 'merge' });
-  void syncInstallSubscription(payload?.projectId || null, true);
-  showToast(state.currentUser ? '项目安装完成，已自动订阅更新' : '项目安装完成');
+  showToast('项目安装完成');
 }
 
 function handleUninstallResult(payload) {
@@ -175,8 +160,7 @@ function handleUninstallResult(payload) {
     clearInstalledProject(projectId);
     renderApp();
   }
-  void syncInstallSubscription(projectId, false);
-  showToast(state.currentUser ? '项目已卸载，已取消更新订阅' : '项目已卸载');
+  showToast('项目已卸载');
 }
 
 function handleUpdateResult(payload) {
@@ -302,10 +286,23 @@ function getLegacyProjectNameForBridge(projectId) {
   return localMeta?.legacyProjectName || null;
 }
 
-function requestInstallProject(projectId, selection = {}) {
+async function requestInstallProject(projectId, selection = {}) {
+  if (!requireDiscordLoginForDownload('安装 DLC')) {
+    const error = new Error('请先 Discord 登录后安装 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    throw error;
+  }
+
+  const installInfo = await fetchProjectInstallInfo(projectId, selection?.projectVersion || null);
   setProjectPendingAction(projectId, 'install');
   renderApp();
-  postBridgeMessage('bridge:install-project', { projectId, ...selection });
+  postBridgeMessage('bridge:install-project', {
+    projectId,
+    ...selection,
+    ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
+    ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+  });
+  return true;
 }
 
 function requestUninstallProject(projectId) {
@@ -319,6 +316,11 @@ function requestUninstallProject(projectId) {
 }
 
 function requestProjectDiff(projectId, projectVersion = null) {
+  if (!requireDiscordLoginForDownload('更新 DLC')) {
+    const error = new Error('请先 Discord 登录后更新 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    return Promise.reject(error);
+  }
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   const cachedDiff = getProjectUpdateDiff(projectId);
   if (window.__CW_TAVERN_MOCK__ && cachedDiff) {
@@ -339,16 +341,25 @@ function requestProjectDiff(projectId, projectVersion = null) {
   });
 }
 
-function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false) {
+async function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false) {
+  if (!requireDiscordLoginForDownload('更新 DLC')) {
+    const error = new Error('请先 Discord 登录后更新 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    throw error;
+  }
+
+  const installInfo = await fetchProjectInstallInfo(projectId, projectVersion);
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   setProjectPendingAction(projectId, 'update');
   renderApp();
   postBridgeMessage('bridge:confirm-project-update', {
     projectId,
-    ...(projectVersion ? { projectVersion } : {}),
+    ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
+    ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
     manageOriginalConflicts: manageOriginalConflicts === true,
     ...(legacyProjectName ? { legacyProjectName } : {}),
   });
+  return true;
 }
 
 function requestRepairBridge(type, payload = {}) {
@@ -370,8 +381,20 @@ function requestDlcRepairScan(worldbookNames = null) {
   return requestRepairBridge('bridge:repair:scan', payload);
 }
 
-function requestDlcRepairProject(target) {
-  return requestRepairBridge('bridge:repair:project', target || {});
+async function requestDlcRepairProject(target) {
+  if (!requireDiscordLoginForDownload('修复 DLC')) {
+    const error = new Error('请先 Discord 登录后修复 DLC');
+    error.code = 'LOGIN_REQUIRED';
+    throw error;
+  }
+  const projectId = String(target?.projectId || '').trim();
+  if (!projectId) throw new Error('缺少修复项目 ID');
+  const installInfo = await fetchProjectInstallInfo(projectId);
+  return requestRepairBridge('bridge:repair:project', {
+    ...(target || {}),
+    ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
+    ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+  });
 }
 
 function requestOAuthLogin(authUrl, state) {

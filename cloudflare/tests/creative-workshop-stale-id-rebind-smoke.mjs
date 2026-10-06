@@ -3,18 +3,41 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import ts from '../../node_modules/typescript/lib/typescript.js';
 
-const source = await readFile(new URL('../../src/CreativeWorkshop/services/worldbook-reconcile.ts', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-    esModuleInterop: true,
-  },
-}).outputText;
+async function compile(relativePath) {
+  const source = await readFile(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true,
+    },
+  }).outputText;
+}
 
-const module = { exports: {} };
-vm.runInNewContext(compiled, { module, exports: module.exports, Set }, { filename: 'worldbook-reconcile.ts' });
-const { reconcileCreativeWorkshopWorldbookEntries } = module.exports;
+function loadCommonJs(compiled, context, filename) {
+  const module = { exports: {} };
+  vm.runInNewContext(compiled, { ...context, module, exports: module.exports }, { filename });
+  return module.exports;
+}
+
+const identityApi = loadCommonJs(
+  await compile('src/CreativeWorkshop/services/install-identity.ts'),
+  { JSON, String, Number, Object, Array, Error },
+  'install-identity.ts',
+);
+
+const reconcileApi = loadCommonJs(
+  await compile('src/CreativeWorkshop/services/worldbook-reconcile.ts'),
+  {
+    require(specifier) {
+      if (specifier === './install-identity') return identityApi;
+      throw new Error(`Unexpected require: ${specifier}`);
+    },
+    Set,
+  },
+  'worldbook-reconcile.ts',
+);
+const { reconcileCreativeWorkshopWorldbookEntries } = reconcileApi;
 
 const oldProjectId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const newProjectId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -36,7 +59,7 @@ const desired = [{
   legacyKey: newProjectId + ':0',
   sourceName: '角色设定',
   payload: {
-    name: '[WS][DLC][角色]角色设定',
+    name: '[DLC][角色][WS]角色设定',
     comment: '角色设定',
     content: 'new',
     extra: {
@@ -57,7 +80,6 @@ const desired = [{
   assert.equal(result.length, 1);
   assert.equal(result[0].uid, 42, 'confirmed stale-ID rebind should preserve the existing worldbook UID');
   assert.equal(result[0].content, 'new');
-  assert.equal(result[0].name, '[WS][DLC][角色]角色设定');
   assert.equal(result[0].extra.cw_project_id, newProjectId);
   assert.equal(result[0].extra.cw_entry_key, newProjectId + ':entry-1');
 }

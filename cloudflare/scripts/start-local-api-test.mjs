@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const cloudflareRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const wranglerCli = path.join(cloudflareRoot, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 const variableName = ['JWT', 'SECRET'].join('_');
-const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = [
-  'wrangler',
+  wranglerCli,
   'dev',
   '--config',
   'wrangler.local-test.jsonc',
@@ -16,7 +19,12 @@ const args = [
   `${variableName}:cw-local-api-test`,
 ];
 
-const child = spawn(command, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+const child = spawn(process.execPath, args, {
+  cwd: cloudflareRoot,
+  stdio: 'inherit',
+  shell: false,
+  windowsHide: true,
+});
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => child.kill(signal));

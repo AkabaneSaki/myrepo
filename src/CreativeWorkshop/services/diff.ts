@@ -1,11 +1,50 @@
-import { resolveCreativeWorkshopInstallWorldbook } from './install-registry';
+import {
+  createCreativeWorkshopRegexIdentityResolver,
+  resolveCreativeWorkshopInstallWorldbook,
+} from './install-registry';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 import { formatCreativeWorkshopEntryName } from './project-type';
-import { getCreativeWorkshopManagedRegexId, getCreativeWorkshopRegexId, getReadableRegexName } from './regex-name';
+import {
+  getCreativeWorkshopRegexIdentityKey,
+  getCreativeWorkshopWorldbookMetadataString,
+  stripCreativeWorkshopWorldbookMetadata,
+} from './install-identity';
+import {
+  getCreativeWorkshopManagedRegexStableIdentityKey,
+  getCreativeWorkshopRegexId,
+
+  getReadableRegexName,
+} from './regex-name';
 
 const CREATIVE_WORKSHOP_DIFF_CACHE_KEY = 'creative_workshop_diff_cache';
 const PROJECT_DIFF_CACHE_TTL_MS = 5 * 60 * 1000;
-const DIFF_IDENTITY_VERSION = 2;
+const DIFF_IDENTITY_VERSION = 5;
+
+type CreativeWorkshopDiffStatus = 'added' | 'modified' | 'deleted';
+
+type CreativeWorkshopDiffChange = {
+  status: CreativeWorkshopDiffStatus;
+  entryKey: string;
+  changedFields: string[];
+  current?: Record<string, any>;
+  previous?: Record<string, any>;
+  currentReviewText?: string;
+  previousReviewText?: string;
+};
+
+type CreativeWorkshopReviewDiff = {
+  mode: 'update';
+  summary: {
+    added: number;
+    modified: number;
+    deleted: number;
+    unchanged: 0;
+    changed: number;
+    total: number;
+  };
+  worldbook: CreativeWorkshopDiffChange[];
+  regex: CreativeWorkshopDiffChange[];
+};
 
 type CreativeWorkshopDiffCache = Record<
   string,
@@ -19,6 +58,7 @@ type CreativeWorkshopDiffCache = Record<
         added: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
         modified: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
         removed: { worldbookEntries: Record<string, any>[]; regexEntries: Record<string, any>[] };
+        reviewDiff: CreativeWorkshopReviewDiff;
       };
     };
   }
@@ -47,12 +87,12 @@ function pruneCreativeWorkshopDiffCache(cache: CreativeWorkshopDiffCache): Creat
 
 function normalizeWorldbookEntry(entry: WorldbookEntry) {
   const comment = _.get(entry, 'comment', entry.name);
-  const entryKey = _.get(entry, 'extra.cw_entry_key');
+  const entryKey = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_entry_key');
   return {
-    entryKey: _.isString(entryKey) && entryKey ? entryKey : comment,
+    entryKey: entryKey || comment,
     name: entry.name,
     comment,
-    content: entry.content,
+    content: stripCreativeWorkshopWorldbookMetadata(String(entry.content || '')),
     key: JSON.stringify(entry.strategy.keys || []),
     keysecondary: JSON.stringify(entry.strategy.keys_secondary?.keys || []),
   };
@@ -72,10 +112,35 @@ function normalizeRemoteEntry(
     entryKey,
     name: formatCreativeWorkshopEntryName(comment, project, projectName),
     comment,
-    content: entry.content || '',
+    content: stripCreativeWorkshopWorldbookMetadata(entry.content || ''),
     key: JSON.stringify(Array.isArray(entry.key) ? entry.key : []),
     keysecondary: JSON.stringify(Array.isArray(entry.keysecondary) ? entry.keysecondary : []),
   };
+}
+
+function formatDiffEntryForReview(entry: Record<string, any>): string {
+  return Object.keys(entry)
+    .filter(key => key !== 'entryKey' && key !== 'id')
+    .sort()
+    .flatMap(key => {
+      const value = entry[key];
+      if (typeof value === 'string' && value.includes('\n')) {
+        return [`${key}:`, ...value.split('\n').map(line => `  ${line}`)];
+      }
+      if (typeof value === 'string') return [`${key}: ${value}`];
+      if (value === undefined || value === null || typeof value === 'number' || typeof value === 'boolean') {
+        return [`${key}: ${String(value)}`];
+      }
+      return [`${key}: ${JSON.stringify(value)}`];
+    })
+    .join('\n');
+}
+
+function getChangedDiffFields(previous: Record<string, any>, current: Record<string, any>): string[] {
+  return Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]))
+    .filter(key => key !== 'entryKey' && key !== 'id')
+    .filter(key => JSON.stringify(previous[key]) !== JSON.stringify(current[key]))
+    .sort();
 }
 
 function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: T[], keyGetter: (item: T) => string) {
@@ -89,7 +154,37 @@ function diffByKey<T extends Record<string, any>>(localItems: T[], remoteItems: 
     return localMap.has(key) && JSON.stringify(localMap.get(key)) !== JSON.stringify(item);
   });
 
-  return { added, removed, modified };
+  const changes: CreativeWorkshopDiffChange[] = [
+    ...added.map(item => ({
+      status: 'added' as const,
+      entryKey: keyGetter(item),
+      changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+      current: item,
+      currentReviewText: formatDiffEntryForReview(item),
+    })),
+    ...modified.map(item => {
+      const entryKey = keyGetter(item);
+      const previous = localMap.get(entryKey)!;
+      return {
+        status: 'modified' as const,
+        entryKey,
+        changedFields: getChangedDiffFields(previous, item),
+        current: item,
+        previous,
+        currentReviewText: formatDiffEntryForReview(item),
+        previousReviewText: formatDiffEntryForReview(previous),
+      };
+    }),
+    ...removed.map(item => ({
+      status: 'deleted' as const,
+      entryKey: keyGetter(item),
+      changedFields: Object.keys(item).filter(key => key !== 'entryKey' && key !== 'id').sort(),
+      previous: item,
+      previousReviewText: formatDiffEntryForReview(item),
+    })),
+  ];
+
+  return { added, removed, modified, changes };
 }
 
 export async function getCreativeWorkshopProjectDiff(
@@ -104,13 +199,14 @@ export async function getCreativeWorkshopProjectDiff(
     ? await getWorldbook(worldbookName)
     : [];
   const localEntries = worldbookEntries
-    .filter(
-      entry =>
-        _.get(entry, 'extra.cw_project_id') === projectId ||
-        _.get(entry, 'extra.fate_project_name') === projectId ||
-        Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
-        Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName),
-    )
+    .filter(entry => {
+      const currentProjectId = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id');
+      const legacyName = getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name');
+      return currentProjectId === projectId ||
+        legacyName === projectId ||
+        Boolean(legacyProjectName && currentProjectId === legacyProjectName) ||
+        Boolean(legacyProjectName && legacyName === legacyProjectName);
+    })
     .map(normalizeWorldbookEntry);
   const localEntryKeys = new Set(localEntries.map(entry => entry.entryKey));
   const remoteEntries = (detail.worldbookEntriesPreview || []).map((entry, index) => {
@@ -127,22 +223,27 @@ export async function getCreativeWorkshopProjectDiff(
       : normalized;
   });
 
-  const localRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' })
-    .filter(
-      regex => {
-        const regexId = getCreativeWorkshopRegexId(regex);
-        return regexId.startsWith(`creative_workshop:${projectId}:`) ||
-          Boolean(legacyProjectName && regexId.startsWith(`creative_workshop:${legacyProjectName}:`));
-      },
-    )
-    .map(regex => ({
-      id: getCreativeWorkshopRegexId(regex),
+  const allRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes);
+  const localRegexes = allRegexes
+    .filter(regex => {
+      const identity = resolveRegexIdentity(regex);
+      return identity?.projectId === projectId ||
+        Boolean(legacyProjectName && identity?.projectId === legacyProjectName);
+    })
+    .map(regex => {
+      const identity = resolveRegexIdentity(regex);
+      return {
+      id: identity
+        ? getCreativeWorkshopRegexIdentityKey(identity.projectId, identity.entryKey)
+        : getCreativeWorkshopRegexId(regex),
       scriptName: String(regex.script_name || regex.id || ''),
       findRegex: regex.find_regex,
       replaceString: regex.replace_string,
-    }));
+      };
+    });
   const remoteRegexes = (detail.regexEntriesPreview || []).map((entry, index) => ({
-    id: getCreativeWorkshopManagedRegexId(projectId, entry, index),
+    id: getCreativeWorkshopManagedRegexStableIdentityKey(projectId, entry, index),
     scriptName: getReadableRegexName(detail.project.name || '未命名项目', entry, index),
     findRegex: entry.findRegex || '',
     replaceString: entry.replaceString || '',
@@ -166,6 +267,12 @@ export async function getCreativeWorkshopProjectDiff(
 
   const entryDiff = diffByKey(localEntries, remoteEntries, item => item.entryKey);
   const regexDiff = diffByKey(localRegexes, remoteRegexes, item => item.id);
+  const reviewSummary = {
+    added: entryDiff.added.length + regexDiff.added.length,
+    modified: entryDiff.modified.length + regexDiff.modified.length,
+    deleted: entryDiff.removed.length + regexDiff.removed.length,
+  };
+  const changedCount = reviewSummary.added + reviewSummary.modified + reviewSummary.deleted;
 
   const result = {
     projectId,
@@ -181,6 +288,17 @@ export async function getCreativeWorkshopProjectDiff(
       removed: {
         worldbookEntries: entryDiff.removed,
         regexEntries: regexDiff.removed,
+      },
+      reviewDiff: {
+        mode: 'update' as const,
+        summary: {
+          ...reviewSummary,
+          unchanged: 0 as const,
+          changed: changedCount,
+          total: changedCount,
+        },
+        worldbook: entryDiff.changes,
+        regex: regexDiff.changes,
       },
     },
   };

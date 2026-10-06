@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { CHARACTER_FACET_OPTIONS, EXTENSION_TYPES, MAX_CUSTOM_TAGS, MAX_DISPLAY_TAGS, PROJECT_TYPES } from './config/project-taxonomy';
 import type { Env } from './env';
+import { LEGACY_PROJECT_VERSION_BASE } from './utils/version.js';
 
 export type AppContext = Context<{ Bindings: Env }>;
 
@@ -57,6 +58,8 @@ export const WorldbookEntryPreview = z.object({
   uid: z.string().optional(),
   comment: z.string().optional(),
   content: z.string().optional(),
+  authorEstimatedLength: z.string().max(160).optional().describe('作者填写的 EJS 渲染后预估输出长度，仅展示'),
+  contentCharacterCount: z.number().int().min(0).optional().describe('非 EJS 世界书静态正文字符数，由系统计算'),
   key: z.array(z.string()).optional(),
   keysecondary: z.array(z.string()).optional(),
   constant: z.boolean().optional(),
@@ -115,7 +118,8 @@ export const Project = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
-  version: z.string().default('1.0.0').describe('工坊内部机器版本'),
+  discordThreadUrl: z.string().url().nullable().optional().describe('作者可选填写的 Discord 讨论帖链接'),
+  version: z.string().default(LEGACY_PROJECT_VERSION_BASE).describe('工坊内部机器版本'),
   versionLabel: z.string().nullable().optional().describe('作者自定义显示版本，仅展示'),
   publishedVersion: z.string().optional().describe('关联正式内部版本号，仅用于 draft 状态'),
   authorId: z.string().describe('作者 Discord ID'),
@@ -139,6 +143,7 @@ export const Project = z.object({
   coverPositionY: z.number().min(0).max(100).default(50).describe('封面垂直焦点百分比'),
   coverZoom: z.number().min(1).max(3).default(1).describe('封面显示缩放'),
   worldbookEntriesPreview: z.array(WorldbookEntryPreview).default([]).describe('世界书条目预览'),
+  worldbookEjsLengthEstimates: z.record(z.string().max(160)).default({}).describe('按世界书 entryKey 保存的 EJS 作者预估输出长度'),
   regexEntriesPreview: z.array(RegexEntryPreview).default([]).describe('正则条目预览'),
   likesCount: z.number().int().min(0).default(0).describe('点赞数'),
   subscribesCount: z.number().int().min(0).default(0).describe('订阅数'),
@@ -166,6 +171,7 @@ export const Project = z.object({
   compatibilityUpdatedAt: z.string().nullable().optional().describe('兼容性 metadata 最近更新时间'),
   conflictsWithOriginal: z.boolean().default(false).describe('是否需要暂时关闭原版世界书条目'),
   originalConflictReferenceItemIds: z.array(z.string()).max(500).default([]).describe('需要暂时关闭的原版条目基准 ID'),
+  originalConflictEntryNames: z.array(z.string()).max(500).default([]).describe('Creator 选择的原版世界书条目名称'),
 });
 
 // ============ API 请求/响应类型 ============
@@ -187,6 +193,7 @@ export const ProjectCreateRequest = z.object({
   name: z.string().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
+  discordThreadUrl: z.string().max(300).nullable().optional().describe('Discord 讨论帖链接，可选'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
@@ -209,6 +216,7 @@ export const ProjectUpdateRequest = z.object({
   name: z.string().optional().describe('项目名称'),
   description: z.string().optional().describe('项目描述'),
   precautions: z.string().max(2000).nullable().optional().describe('安装注意事项，按纯文本安全展示'),
+  discordThreadUrl: z.string().max(300).nullable().optional().describe('Discord 讨论帖链接，可选'),
   versionLabel: z.string().max(80).nullable().optional().describe('作者自定义显示版本'),
   builtForReferenceVersionId: z.string().max(120).nullable().optional().describe('基于角色卡版本；选择角色 Reference 时必填'),
   compatibilityConfirmed: z.boolean().optional().describe('创作者是否确认当前角色卡版本可正常使用'),
@@ -231,6 +239,7 @@ export const ReviewRequest = z.object({
   action: z.enum(['approve', 'reject']).describe('审核操作'),
   rejectReason: z.string().optional().describe('拒绝原因(仅 reject 时需要)'),
   expectedRevision: z.number().int().min(1).optional().describe('审核时看到的草稿修订号'),
+  reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('审核详情绑定的内容与检查依据'),
 
 });
 

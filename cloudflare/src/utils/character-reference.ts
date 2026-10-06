@@ -182,9 +182,9 @@ export async function validateOriginalConflictReferenceItems(
   c: AppContext,
   referenceVersionId: string | null | undefined,
   itemIds: string[] | null | undefined,
-): Promise<string[]> {
+): Promise<{ ids: string[]; entryNames: string[] }> {
   const uniqueIds = Array.from(new Set((itemIds || []).map(value => String(value).trim()).filter(Boolean)));
-  if (uniqueIds.length === 0) return [];
+  if (uniqueIds.length === 0) return { ids: [], entryNames: [] };
   if (!referenceVersionId) throw new Error('请先确认当前角色卡版本');
   if (uniqueIds.length > 500) throw new Error('选择的原版内容太多，请重新选择');
 
@@ -203,7 +203,11 @@ export async function validateOriginalConflictReferenceItems(
   if (rows.some(row => !String(row.display_name || '').startsWith('[本体]'))) {
     throw new Error('只能选择原版内容');
   }
-  return uniqueIds;
+  const namesById = new Map(rows.map(row => [String(row.id), String(row.display_name || '')]));
+  return {
+    ids: uniqueIds,
+    entryNames: uniqueIds.map(id => namesById.get(id) || ''),
+  };
 }
 
 export async function listCharacterReferences(c: AppContext): Promise<CharacterReferenceSummary[]> {

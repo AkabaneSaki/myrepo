@@ -5,11 +5,9 @@ on:
     paths:
       - 'src/**'
       - 'util/**'
-      - 'config/workshop.json'
-      - 'scripts/build-workshop-legacy-shim.mjs'
-      - 'scripts/check-workshop-bundles.mjs'
-      - 'scripts/check-workshop-compat.mjs'
+      - 'config/**'
       - 'scripts/check-workshop-config.mjs'
+      - 'scripts/check-workshop-bundles.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'webpack.config.cjs'
@@ -18,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   bundle:
@@ -43,11 +41,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Verify Workshop source of truth
+      - name: Check Workshop source of truth
         run: pnpm check:workshop-config
 
-      - name: Build all client artifact lifecycles
-        run: pnpm build:all
+      - name: Build dist
+        run: pnpm build
 
-      - name: Verify release, compatibility and staging artifacts
+      - name: Verify built Workshop bundles
         run: pnpm check:workshop-bundles
+
+      - name: Commit refreshed staging bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- dist/CreativeWorkshop-staging/index.js dist/CreativeWorkshop-staging/index.js.map
+          if git diff --cached --quiet; then
+            echo "Staging bundle already current"
+            exit 0
+          fi
+          git commit -m "build(workshop): refresh staging bundle"
+          git push origin HEAD:staging

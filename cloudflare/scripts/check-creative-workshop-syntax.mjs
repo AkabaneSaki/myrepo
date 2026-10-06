@@ -5,12 +5,16 @@ const files = [
   '../../src/CreativeWorkshop/index.ts',
   '../../src/CreativeWorkshop/bridge/host.ts',
   '../../src/CreativeWorkshop/services/diff.ts',
+  '../../src/CreativeWorkshop/services/install-identity.ts',
   '../../src/CreativeWorkshop/services/install-registry.ts',
   '../../src/CreativeWorkshop/services/install-state.ts',
   '../../src/CreativeWorkshop/services/project-fetch.ts',
+  '../../src/CreativeWorkshop/services/regex-name.ts',
   '../../src/CreativeWorkshop/services/regex.ts',
+  '../../src/CreativeWorkshop/services/repair.ts',
   '../../src/CreativeWorkshop/services/worldbook.ts',
   '../../src/CreativeWorkshop/services/worldbook-normalize.ts',
+  '../../src/CreativeWorkshop/services/worldbook-reconcile.ts',
 ].map(path => fileURLToPath(new URL(path, import.meta.url)));
 
 for (const file of files) {

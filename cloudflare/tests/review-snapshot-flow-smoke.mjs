@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { bumpProjectVersionWithLegacyFallback } from '../src/utils/version.js';
 
 const adminSource = await readFile(resolve('src/endpoints/admin.ts'), 'utf8');
-const projectsSource = await readFile(resolve('src/endpoints/projects.ts'), 'utf8');
+const projectsSource = await readFile(resolve('src/endpoints/projects/write.ts'), 'utf8');
 const dbSource = await readFile(resolve('src/utils/db.ts'), 'utf8');
 const typesSource = await readFile(resolve('src/types.ts'), 'utf8');
 const cardsSource = await readFile(resolve('src/pages/home/render/cards.ts'), 'utf8');
@@ -42,6 +43,45 @@ assert.doesNotMatch(
   /findDraftByPublishedId/,
   'historical review requests must not be silently reused as the current working draft',
 );
+assert.match(
+  createDraftSource,
+  /WHERE id = \? AND draft_project_id IS NULL/,
+  'draft creation must atomically claim an empty published draft pointer',
+);
+assert.doesNotMatch(
+  createDraftSource,
+  /projectDb\.update\(c, publishedProjectId, \{ draftProjectId: draftId \}\)/,
+  'draft creation must not unconditionally overwrite the current draft pointer',
+);
+assert.match(
+  createDraftSource,
+  /status: 'drafting'[\s\S]{0,900}claimResult[\s\S]{0,900}status: 'pending'/,
+  'an unclaimed candidate must stay out of the review queue until it wins the pointer claim',
+);
+assert.match(
+  createDraftSource,
+  /await projectDb\.delete\(c, draftId\)[\s\S]{0,300}createDraftFromPublished/,
+  'a losing draft candidate must be removed and retry against the winning pointer',
+);
+
+const claimSqlMatch = createDraftSource.match(
+  /\`(UPDATE projects\s+SET draft_project_id = \?, updated_at = \?\s+WHERE id = \? AND draft_project_id IS NULL)(?: RETURNING id)?\`/,
+);
+assert.ok(claimSqlMatch, 'review draft claim SQL must remain directly testable');
+const raceDb = new DatabaseSync(':memory:');
+raceDb.exec('CREATE TABLE projects (id TEXT PRIMARY KEY, draft_project_id TEXT, updated_at TEXT)');
+raceDb.prepare('INSERT INTO projects (id, draft_project_id, updated_at) VALUES (?, NULL, ?)').run('published', 't0');
+const claimDraft = raceDb.prepare(claimSqlMatch[1]);
+const firstClaim = claimDraft.run('draft-a', 't1', 'published');
+const secondClaim = claimDraft.run('draft-b', 't2', 'published');
+assert.equal(Number(firstClaim.changes), 1, 'first concurrent draft candidate must win the pointer claim');
+assert.equal(Number(secondClaim.changes), 0, 'second concurrent draft candidate must not overwrite the winner');
+assert.equal(
+  raceDb.prepare('SELECT draft_project_id FROM projects WHERE id = ?').get('published').draft_project_id,
+  'draft-a',
+  'published project must keep the first successfully claimed draft id',
+);
+raceDb.close();
 assert.match(
   dbSource,
   /UPDATE projects SET draft_project_id = NULL, updated_at = \? WHERE id = \? AND draft_project_id = \?/,

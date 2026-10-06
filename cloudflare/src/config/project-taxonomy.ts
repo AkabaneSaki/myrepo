@@ -114,7 +114,7 @@ export const PROJECT_TAXONOMY = {
   display: TAXONOMY_DISPLAY_POLICY,
 } as const;
 
-const LEGACY_BASE_TAG_BY_PROJECT_TYPE: Record<ProjectType, string> = {
+export const LEGACY_BASE_TAG_BY_PROJECT_TYPE: Record<ProjectType, string> = {
   事件: '事件',
   系统核心: '系统',
   角色: '角色',

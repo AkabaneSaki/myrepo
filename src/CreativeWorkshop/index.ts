@@ -228,13 +228,31 @@ function openCreativeWorkshop() {
     flex: '0 0 auto',
   });
 
-  const $frame = createScriptIdIframe().css({
-    width: '100%',
-    height: '100%',
+  const $frame = createScriptIdIframe()
+    .removeAttr('srcdoc')
+    .css({
+      width: '100%',
+      height: '100%',
+      borderRadius: '20px',
+      background: '#0f1012',
+      boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+    });
+
+  const $loading = host$('<div role="status" aria-live="polite">正在打开创意工坊…</div>').css({
+    position: 'absolute',
+    inset: '0',
+    zIndex: 2,
+    display: 'grid',
+    placeItems: 'center',
     borderRadius: '20px',
     background: '#0f1012',
-    boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+    color: '#a9a49b',
+    fontSize: '14px',
+    letterSpacing: '0.02em',
+    pointerEvents: 'none',
   });
+
+  let workshopReady = false;
 
   const $closeButton = host$('<button type="button">退出</button>').css({
     position: 'absolute',
@@ -274,16 +292,18 @@ function openCreativeWorkshop() {
       height: useFullscreenLayout ? '100%' : '90vh',
     });
 
+    const frameRadius = useFullscreenLayout ? '12px' : '20px';
     $frame.css({
       // Mobile keeps a small visual safe zone; desktop keeps simple 90% sizing.
       width: useFullscreenLayout ? '100%' : '90vw',
       height: useFullscreenLayout ? '100%' : '90vh',
-      borderRadius: useFullscreenLayout ? '12px' : '20px',
+      borderRadius: frameRadius,
       boxShadow: useFullscreenLayout ? '0 8px 30px rgba(0,0,0,0.28)' : '0 24px 80px rgba(0,0,0,0.45)',
     });
+    $loading.css({ borderRadius: frameRadius });
 
     $closeButton.css({
-      display: useFullscreenLayout ? 'none' : 'block',
+      display: useFullscreenLayout && workshopReady ? 'none' : 'block',
       top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
       right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
       left: 'auto',
@@ -299,8 +319,11 @@ function openCreativeWorkshop() {
   hostWindow.visualViewport?.addEventListener('resize', updateOverlayLayout);
   hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
 
-  $frameShell.append($frame, $closeButton);
+  $frameShell.append($frame, $loading, $closeButton);
   $overlay.append($frameShell).appendTo(hostDocument.body);
+  const slowOpenTimer = hostWindow.setTimeout(() => {
+    $loading.text('打开时间较长，可以退出后重试');
+  }, 8000);
 
   console.info('[CreativeWorkshop] openCreativeWorkshop:overlay-mounted', {
     iframeCount: $overlay.find('iframe').length,
@@ -310,10 +333,10 @@ function openCreativeWorkshop() {
   const close = () => {
     console.warn('[CreativeWorkshop] openCreativeWorkshop:close', {
       hasBridge: Boolean(bridge),
-      hasNavigated,
       overlayExists: hostDocument.body.contains($overlay[0]),
       activeElementTag: hostDocument.activeElement?.tagName,
     });
+    hostWindow.clearTimeout(slowOpenTimer);
     bridge?.destroy();
     host$(hostWindow).off('resize.creative-workshop-overlay', updateOverlayLayout);
     host$(hostWindow).off('scroll.creative-workshop-overlay', updateOverlayLayout);
@@ -338,44 +361,26 @@ function openCreativeWorkshop() {
     }
   });
 
-  let bridge: ReturnType<typeof createCreativeWorkshopBridgeHost> | null = null;
-  let hasNavigated = false;
-
-  $frame.on('load', () => {
-    const iframe = $frame[0];
-
-    console.info('[CreativeWorkshop] openCreativeWorkshop:iframe-load', {
-      hasBridge: Boolean(bridge),
-      hasNavigated,
-      iframeSrc: iframe.getAttribute('src'),
-      iframeHref: (() => {
-        try {
-          return iframe.contentWindow?.location.href ?? null;
-        } catch {
-          return '[cross-origin]';
-        }
-      })(),
-    });
-
-    if (!bridge) {
-      bridge = createCreativeWorkshopBridgeHost({
-        iframe,
-        targetOrigin: getCreativeWorkshopOrigin(),
-        onClose: close,
-      });
-      console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
-        targetOrigin: getCreativeWorkshopOrigin(),
-      });
-    }
-
-    if (!hasNavigated) {
-      hasNavigated = true;
-      console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
-        creativeWorkshopUrl,
-      });
-      iframe.contentWindow?.location.replace(creativeWorkshopUrl);
-    }
+  const iframe = $frame[0];
+  const bridge = createCreativeWorkshopBridgeHost({
+    iframe,
+    targetOrigin: getCreativeWorkshopOrigin(),
+    onClose: close,
+    onReady: () => {
+      workshopReady = true;
+      hostWindow.clearTimeout(slowOpenTimer);
+      $loading.remove();
+      updateOverlayLayout();
+      console.info('[CreativeWorkshop] openCreativeWorkshop:ready');
+    },
   });
+  console.info('[CreativeWorkshop] openCreativeWorkshop:bridge-created', {
+    targetOrigin: getCreativeWorkshopOrigin(),
+  });
+  console.info('[CreativeWorkshop] openCreativeWorkshop:navigate-iframe', {
+    creativeWorkshopUrl,
+  });
+  $frame.attr('src', creativeWorkshopUrl);
 }
 
 $(() => {

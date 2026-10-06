@@ -20,7 +20,7 @@ const text = '<script>alert(1)</script>\n先安装依赖';
 db.prepare('INSERT INTO projects (id, name, precautions) VALUES (?, ?, ?)').run('demo', 'Demo', text);
 assert.equal(db.prepare('SELECT precautions FROM projects WHERE id = ?').get('demo').precautions, text);
 
-const formSource = await readFile(new URL('../src/pages/home/modals.ts', import.meta.url), 'utf8');
+const formSource = await readFile(new URL('../src/pages/home/modal/project-editor.ts', import.meta.url), 'utf8');
 const detailSource = await readFile(new URL('../src/pages/home/render/detail-modal.ts', import.meta.url), 'utf8');
 const typesSource = await readFile(new URL('../src/types.ts', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');

@@ -1,8 +1,41 @@
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFile } from 'node:fs/promises';
+import ts from '../../node_modules/typescript/lib/typescript.js';
 
-const { reconcileCreativeWorkshopWorldbookEntries } = await import(
-  '../../src/CreativeWorkshop/services/worldbook-reconcile.ts'
+async function compile(relativePath) {
+  const source = await readFile(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true,
+    },
+  }).outputText;
+}
+
+function loadCommonJs(compiled, context, filename) {
+  const module = { exports: {} };
+  vm.runInNewContext(compiled, { ...context, module, exports: module.exports }, { filename });
+  return module.exports;
+}
+
+const identityApi = loadCommonJs(
+  await compile('src/CreativeWorkshop/services/install-identity.ts'),
+  { JSON, String, Number, Object, Array, Error },
+  'install-identity.ts',
 );
+const reconcileApi = loadCommonJs(
+  await compile('src/CreativeWorkshop/services/worldbook-reconcile.ts'),
+  {
+    require(specifier) {
+      if (specifier === './install-identity') return identityApi;
+      throw new Error(`Unexpected require: ${specifier}`);
+    },
+  },
+  'worldbook-reconcile.ts',
+);
+const { reconcileCreativeWorkshopWorldbookEntries } = reconcileApi;
 
 function entry({ uid, name, comment = name, content = '', extra = {} }) {
   return { uid, name, comment, content, extra };
@@ -148,6 +181,50 @@ const options = { projectName: 'AAA', legacyProjectName: 'AAA-old', pruneMissing
   assert.equal(result[0].uid, 30, 'very old entry without cw_entry_key must be adopted in place');
   assert.equal(result[0].extra.custom_flag, true);
   assert.equal(result[0].extra.cw_entry_key, `${projectId}:uid:ancient`);
+}
+
+{
+  const embeddedContent = identityApi.injectCreativeWorkshopWorldbookMetadata('old embedded content', {
+    cw_project_id: projectId,
+    cw_project_name_display: 'AAA',
+    cw_project_version: '1.0.0',
+    cw_remote_version: '1.0.0',
+    cw_entry_key: `${projectId}:uid:embedded`,
+    cw_name_format_version: 4,
+  });
+  const worldbook = [
+    entry({
+      uid: 35,
+      name: '[WS][DLC][角色]仅正文身份',
+      comment: '仅正文身份',
+      content: embeddedContent,
+      extra: { keep_me: 'yes' },
+    }),
+  ];
+
+  const result = reconcileCreativeWorkshopWorldbookEntries(
+    worldbook,
+    [
+      desired({
+        stableKey: `${projectId}:uid:embedded`,
+        legacyKey: `${projectId}:0`,
+        sourceName: '仅正文身份',
+        payload: entry({
+          name: '[WS][DLC][角色]仅正文身份',
+          comment: '仅正文身份',
+          content: 'new embedded content',
+          extra: { cw_project_id: projectId, cw_entry_key: `${projectId}:uid:embedded` },
+        }),
+      }),
+    ],
+    projectId,
+    options,
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].uid, 35, 'content backup identity must preserve the existing uid when extra identity is missing');
+  assert.equal(result[0].extra.keep_me, 'yes');
+  assert.equal(result[0].content, 'new embedded content');
 }
 
 {

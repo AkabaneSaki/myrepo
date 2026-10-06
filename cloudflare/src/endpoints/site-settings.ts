@@ -1,11 +1,12 @@
 import { OpenAPIRoute } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../types';
+import { WORKSHOP_LIMITS } from '../config/runtime-limits';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import { r2Storage } from '../utils/r2';
 import { normalizeDiscoverBannerSettings, siteSettingsDb } from '../utils/site-settings';
 
-const MAX_BANNER_SIZE = 8 * 1024 * 1024;
+const MAX_BANNER_SIZE = WORKSHOP_LIMITS.bannerUploadBytes;
 
 function isPreviewHost(c: AppContext): boolean {
   const hostname = new URL(c.req.url).hostname.toLowerCase();
@@ -21,7 +22,7 @@ function isPreviewHost(c: AppContext): boolean {
 function toPublicBanner(c: AppContext, settings: Awaited<ReturnType<typeof siteSettingsDb.getDiscoverBanner>>) {
   const imageUrl = settings.imageKey
     ? r2Storage.getProxyUrl(c, settings.imageKey)
-    : isPreviewHost(c) ? '/discover-preview-banner.png' : null;
+    : null;
   return { ...settings, imageUrl };
 }
 
@@ -73,7 +74,7 @@ export class AdminDiscoverBannerUpload extends OpenAPIRoute {
     const formData = await c.req.formData();
     const banner = formData.get('banner');
     if (!(banner instanceof File)) return c.json({ error: 'Banner file is required' }, 400);
-    if (banner.size > MAX_BANNER_SIZE) return c.json({ error: 'Banner must be 8 MB or smaller' }, 413);
+    if (banner.size > MAX_BANNER_SIZE) return c.json({ error: `Banner must be ${WORKSHOP_LIMITS.bannerUploadLabel} or smaller` }, 413);
     const extension = banner.type === 'image/png' ? 'png' : banner.type === 'image/webp' ? 'webp' : banner.type === 'image/jpeg' ? 'jpg' : null;
     if (!extension) return c.json({ error: 'Only jpg/png/webp images are allowed' }, 400);
 

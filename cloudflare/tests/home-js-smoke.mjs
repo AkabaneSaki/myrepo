@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { CHECKER_LIMITS } from '../src/utils/ejs-checker/limits.mjs';
 
 async function readExportExpression(relativePath, exportName) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -18,27 +19,49 @@ async function evaluateStandalone(relativePath, exportName) {
   return Function(`return (${expression});`)();
 }
 
-const homeAppSource = await readFile(resolve('src/pages/home/app.ts'), 'utf8');
+const homeAppSource = (await Promise.all([
+  'src/pages/home/app.ts',
+  'src/pages/home/app/auth-flow.ts',
+  'src/pages/home/app/actions.ts',
+  'src/pages/home/app/bootstrap.ts',
+].map(path => readFile(resolve(path), 'utf8')))).join('\n');
 const homePageSource = await readFile(resolve('src/pages/home.ts'), 'utf8');
 const homeStylesSource = await readFile(resolve('src/pages/home/styles.ts'), 'utf8');
+const recommendationsEndpointSource = await readFile(resolve('src/endpoints/recommendations.ts'), 'utf8');
+const indexSource = await readFile(resolve('src/index.ts'), 'utf8');
 const fragments = {
   homeStateScript: await evaluateStandalone('src/pages/home/state.ts', 'homeStateScript'),
   homeUtilsScript: await evaluateStandalone('src/pages/home/utils.ts', 'homeUtilsScript'),
   homeTavernBridgeScript: await evaluateStandalone('src/pages/home/tavern-bridge.ts', 'homeTavernBridgeScript'),
   homeApiScript: await evaluateStandalone('src/pages/home/api.ts', 'homeApiScript'),
+  homeDailyRandomDrawScript: await evaluateStandalone('src/pages/home/daily-random.ts', 'homeDailyRandomDrawScript'),
   homeCardsRenderScript: await evaluateStandalone('src/pages/home/render/cards.ts', 'homeCardsRenderScript'),
   homeDetailModalRenderScript: await evaluateStandalone('src/pages/home/render/detail-modal.ts', 'homeDetailModalRenderScript'),
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homePublishCheckScript: await evaluateStandalone('src/pages/home/publish-check.ts', 'homePublishCheckScript'),
-  homeModalsScript: await evaluateStandalone('src/pages/home/modals.ts', 'homeModalsScript'),
+  homeAppAuthFlowScript: await evaluateStandalone('src/pages/home/app/auth-flow.ts', 'homeAppAuthFlowScript'),
+  homeAppActionsScript: await evaluateStandalone('src/pages/home/app/actions.ts', 'homeAppActionsScript'),
+  homeAppBootstrapScript: await evaluateStandalone('src/pages/home/app/bootstrap.ts', 'homeAppBootstrapScript'),
+  homeModalsScript: [
+    await evaluateStandalone('src/pages/home/modal/core.ts', 'homeModalCoreScript'),
+    await evaluateStandalone('src/pages/home/modal/project-detail.ts', 'homeProjectDetailModalScript'),
+    await evaluateStandalone('src/pages/home/modal/project-update.ts', 'homeProjectUpdateModalScript'),
+    await evaluateStandalone('src/pages/home/modal/project-install.ts', 'homeProjectInstallModalScript'),
+    await evaluateStandalone('src/pages/home/modal/project-editor.ts', 'homeProjectEditorModalScript'),
+    await evaluateStandalone('src/pages/home/modal/admin-review.ts', 'homeAdminReviewModalScript'),
+    await evaluateStandalone('src/pages/home/modal/admin-tools.ts', 'homeAdminToolsModalScript'),
+    await evaluateStandalone('src/pages/home/modal/devteam-recommend.ts', 'homeDevTeamRecommendModalScript'),
+  ].join('\n'),
   homeRepairScript: await evaluateStandalone('src/pages/home/repair-ui.ts', 'homeRepairScript'),
+  homeUpdateCenterScript: await evaluateStandalone('src/pages/home/update-center.ts', 'homeUpdateCenterScript'),
   homePresentationScript: await evaluateStandalone('src/pages/home/presentation.ts', 'homePresentationScript'),
 };
 
 for (const [name, script] of Object.entries(fragments)) {
   assert.equal(typeof script, 'string', `${name} must evaluate to JavaScript text`);
+  assert.doesNotMatch(script, /REDACTED_/, `${name} must not contain a persisted redaction placeholder`);
   new Function(script);
 }
 
@@ -59,6 +82,15 @@ assert.doesNotMatch(homeStylesSource, /\.form-group \.taxonomy-chip input \{[^}]
 assert.match(homeStylesSource, /\.project-form-modal \{[^}]*overflow:clip;/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),/);
 assert.match(homeStylesSource, /\.project-form \.form-group input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):focus,/);
+assert.match(fragments.homeModalsScript, /data-admin-review-view="full"/, "update review must expose a full-content view");
+assert.match(fragments.homeModalsScript, /data-admin-review-full-body/, "full review entries must start as lazy shells");
+assert.match(fragments.homeModalsScript, /body\.dataset\.loaded/, "full review entry content must hydrate only after expansion");
+assert.match(homeStylesSource, /\.admin-review-full-content \.entry-content\.open \{[^}]*max-height:min\(56vh,560px\);[^}]*overflow:auto;/, "expanded full review entries must stay height-limited and scrollable");
+assert.match(fragments.homeModalsScript, /cw-admin-review-theme/, "admin review theme choice must persist locally");
+assert.match(fragments.homeModalsScript, /data-admin-review-theme-option="light"/, "admin review must expose a light theme option");
+assert.match(fragments.homeModalsScript, /data-admin-review-theme-option="dark"/, "admin review must expose a dark theme option");
+assert.match(fragments.homeModalsScript, /document\.querySelectorAll\("\.admin-review-overlay,\.admin-review-detail-overlay"\)/, "theme changes must sync queue and detail overlays");
+assert.match(homeStylesSource, /\.admin-review-overlay\[data-admin-review-theme="light"\]/, "admin review must include scoped light-theme styling");
 
 assert.doesNotMatch(
   fragments.homeTavernBridgeScript,
@@ -95,6 +127,33 @@ const codeFenceSafetyHtml = safeMarkdownUi.renderSafeMarkdown('```html\n<script>
 assert.doesNotMatch(codeFenceSafetyHtml, /<script/i, 'fenced code must not become executable HTML');
 assert.match(codeFenceSafetyHtml, /&lt;script&gt;/);
 assert.deepEqual(safeMarkdownUi.collectExternalHttpUrlsFromText('坏链接 https:// 后续文字'), [], 'malformed URLs must terminate scanning without hanging');
+
+const projectUpdateDiffUi = Function(
+  'escapeHtml',
+  'renderWorldbookEntryBehaviorMeta',
+  `${fragments.homeReviewDiffRenderScript}; return { renderProjectUpdateDiffSummary, renderProjectUpdateDiffSection };`,
+)(safeLinkUtils.escapeHtml, () => '');
+const projectUpdateDiffHtml = projectUpdateDiffUi.renderProjectUpdateDiffSection(
+  '正则变化',
+  'fa-code',
+  [{
+    status: 'modified',
+    entryKey: 'regex:test',
+    changedFields: ['replaceString'],
+    previous: { scriptName: 'Test Regex', replaceString: 'old value' },
+    current: { scriptName: 'Test Regex', replaceString: 'new value' },
+    previousReviewText: 'scriptName: Test Regex\nreplaceString: old value',
+    currentReviewText: 'scriptName: Test Regex\nreplaceString: new value',
+  }],
+  'regex',
+);
+assert.match(projectUpdateDiffHtml, /admin-review-diff-line--del/);
+assert.match(projectUpdateDiffHtml, /admin-review-diff-line--add/);
+assert.match(projectUpdateDiffHtml, /old value/);
+assert.match(projectUpdateDiffHtml, /new value/);
+const projectUpdateSummaryHtml = projectUpdateDiffUi.renderProjectUpdateDiffSummary({ summary: { changed: 1, added: 0, modified: 1, deleted: 0 } });
+assert.match(projectUpdateSummaryHtml, /1<\/strong> 处内容变化/);
+assert.doesNotMatch(projectUpdateSummaryHtml, /需要审核|未修改/);
 
 const uploadPreviewUi = Function(
   'validateJsonUpload',
@@ -176,14 +235,13 @@ assert.equal(d4PreviewEntry.role, 'assistant');
 assert.equal(d4PreviewEntry.order, 99);
 assert.equal(d4PreviewEntry.constant, true);
 
-const clientVersionSource = await readFile(resolve('../src/CreativeWorkshop/version.ts'), 'utf8');
 const workshopConfig = JSON.parse(await readFile(resolve('../config/workshop.json'), 'utf8'));
-assert.match(clientVersionSource, /__CREATIVE_WORKSHOP_CLIENT_VERSION__/);
 assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_STABLE_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.stable/);
 assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_MINIMUM_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.minimum/);
 assert.match(workshopConfig.client.stable, /^\d+\.\d+\.\d+$/);
 assert.match(workshopConfig.client.minimum, /^\d+\.\d+\.\d+$/);
-assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT|WORKSHOP_RELEASE_VERSION/);
+assert.match(workshopConfig.client.staging, /^\d+\.\d+\.\d+-dev\d+$/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT/);
 assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
 assert.match(fragments.homeModalsScript, /releaseUpdateAcknowledgeBtn[\s\S]*requestCloseWorkshop\(\)/);
@@ -192,7 +250,6 @@ assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
 assert.doesNotMatch(fragments.homeModalsScript, /releaseUpdateCode|data-dependency-copy|getScriptDependencySuggestedImport/);
 assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(WORKSHOP_MINIMUM_CLIENT_VERSION\)[\s\S]*openReleaseNoticeModal\(\)/);
 assert.match(fragments.homeTavernBridgeScript, /WORKSHOP_CONFIG\.scriptDependencies/);
-assert.match(fragments.homeModalsScript, /WORKSHOP_CONFIG\.client\.migrations/);
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
 assert.match(fragments.homeModalsScript, /id=\"regexInput\"[^>]*accept=\"\.json\"[^>]*multiple/);
@@ -210,8 +267,16 @@ assert.doesNotMatch(fragments.homeModalsScript, /characterFacetsGroup/);
 assert.match(fragments.homeModalsScript, /封面展示标签（可选）/);
 assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences\)/);
 assert.match(fragments.homeModalsScript, /openCreatorPublishCheck\(characterReferences, project\)/);
-assert.match(fragments.homeModalsScript, /if \(hasNewFile \|\| hasNewRegex\) \{\s*const publishCheck = await openCreatorPublishCheck\(characterReferences, project\)/);
-assert.match(fragments.homeModalsScript, /showToast\(updateResult\.draftProjectId \? '修改已提交审核，主页仍显示旧版本'/);
+assert.match(fragments.homeModalsScript, /if \(hasNewFile \|\| hasNewRegex\) \{/);
+assert.match(fragments.homeModalsScript, /showToast\(updateResult\.draftProjectId \?/);
+assert.doesNotMatch(
+  fragments.homeModalsScript,
+  /renderProjectDetail\(project, \[\], \[\]\)/,
+  'player update modal must not embed the full project detail UI',
+);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSummary\(reviewDiff\)/);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSection\("世界书变化"/);
+assert.match(fragments.homeModalsScript, /renderProjectUpdateDiffSection\("正则变化"/);
 assert.match(fragments.homePublishCheckScript, /发布前检查/);
 assert.match(fragments.homePublishCheckScript, /parseOriginalBaselineItem/);
 assert.match(fragments.homePublishCheckScript, /tags\[0\] !== '本体'/);
@@ -256,45 +321,13 @@ assert.match(fragments.homeApiScript, /INSTALLED_PROJECT_BATCH_SIZE = 50/);
 assert.match(fragments.homeApiScript, /apiFetch\('\/api\/projects\/batch'/);
 assert.match(fragments.homeApiScript, /JSON\.stringify\(\{ projectIds \}\)/);
 assert.doesNotMatch(fragments.homeApiScript, /missingProjectIds\.map\(async projectId/);
-const discoveryRotationUi = Function(
-  `${fragments.homeApiScript}; return { DISCOVER_CANDIDATE_POOL_SIZE, DISCOVER_DISPLAY_COUNT, getDiscoverRotationBucket, selectDiscoverProjects };`,
-)();
-assert.equal(discoveryRotationUi.DISCOVER_CANDIDATE_POOL_SIZE, 30);
-assert.equal(discoveryRotationUi.DISCOVER_DISPLAY_COUNT, 10);
-const firstRotationTime = Date.parse('2026-09-20T00:30:00Z');
-assert.equal(
-  discoveryRotationUi.getDiscoverRotationBucket(firstRotationTime),
-  discoveryRotationUi.getDiscoverRotationBucket(Date.parse('2026-09-20T05:59:59Z')),
-  'one six-hour discovery window must stay stable',
-);
-assert.equal(
-  discoveryRotationUi.getDiscoverRotationBucket(Date.parse('2026-09-20T06:00:00Z')),
-  discoveryRotationUi.getDiscoverRotationBucket(firstRotationTime) + 1,
-  'the next six-hour window must advance the discovery seed',
-);
-const discoveryCandidates = Array.from({ length: 30 }, (_, index) => ({
-  id: `discover-${index + 1}`,
-  authorId: `author-${index + 1}`,
-}));
-const firstRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, firstRotationTime);
-const repeatedRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, Date.parse('2026-09-20T05:00:00Z'));
-const nextRotation = discoveryRotationUi.selectDiscoverProjects(discoveryCandidates, Date.parse('2026-09-20T06:30:00Z'));
-assert.equal(firstRotation.length, 10);
-assert.deepEqual(firstRotation.map(project => project.id), repeatedRotation.map(project => project.id), 'refreshing inside one window must not reshuffle discovery');
-assert.deepEqual(firstRotation.slice(0, 2).map(project => project.id), ['discover-1', 'discover-2'], 'top two discovery projects remain anchors');
-assert.deepEqual(nextRotation.slice(0, 2).map(project => project.id), ['discover-1', 'discover-2'], 'anchors remain stable across windows');
-assert.notDeepEqual(firstRotation.map(project => project.id), nextRotation.map(project => project.id), 'crossing a six-hour boundary must rotate discovery');
-const changedProjectCount = firstRotation.filter(project => !nextRotation.some(next => next.id === project.id)).length;
-assert.ok(changedProjectCount >= 4, `expected a visible discovery rotation, only ${changedProjectCount} cards changed`);
-const crowdedAuthorCandidates = Array.from({ length: 30 }, (_, index) => ({
-  id: `crowded-${index + 1}`,
-  authorId: index < 10 ? 'same-author' : `other-author-${index}`,
-}));
-const crowdedRotation = discoveryRotationUi.selectDiscoverProjects(crowdedAuthorCandidates, firstRotationTime);
-const crowdedAuthorCounts = new Map();
-for (const project of crowdedRotation) crowdedAuthorCounts.set(project.authorId, (crowdedAuthorCounts.get(project.authorId) || 0) + 1);
-assert.ok([...crowdedAuthorCounts.values()].every(count => count <= 2), 'discovery rotation should keep the two-project creator cap when the pool has enough alternatives');
-assert.match(fragments.homeApiScript, /pageSize: DISCOVER_CANDIDATE_POOL_SIZE/);
+assert.doesNotMatch(fragments.homeApiScript, /selectDiscoverProjects|getDiscoverRotationBucket|DISCOVER_CANDIDATE_POOL_SIZE/);
+assert.match(fragments.homeApiScript, /\{ key: 'discover', sort: 'discover', pageSize: 10 \}/);
+assert.match(fragments.homeApiScript, /\{ key: 'updated', sort: 'updated', pageSize: 5 \}/);
+
+assert.match(fragments.homeLayoutRenderScript, /随机发现/);
+assert.match(fragments.homeLayoutRenderScript, /最近更新/);
+
 assert.match(fragments.homeCardsRenderScript, /const projectType = getBaseTag\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /const typeClass = getTypeClass\(project\)/);
 assert.match(fragments.homeCardsRenderScript, /getProjectDisplayTags\(project\)\.slice\(0, 5\)/);
@@ -343,17 +376,62 @@ assert.match(fragments.homeModalsScript, /getMobileReaderSourceIndex/);
 assert.match(fragments.homeDetailModalRenderScript, /tag-system-artwork/);
 assert.match(fragments.homeDetailModalRenderScript, /const tagsHtml = inspectionTagsHtml \+ creatorTagsHtml/);
 assert.match(fragments.homeModalsScript, /admin-review-signal--ejs/);
-assert.match(fragments.homeApiScript, /URLSearchParams\(\{ page: '0', pageSize: '50', sort \}\)/);
+assert.match(fragments.homeApiScript, /URLSearchParams\(\{ page: '0', pageSize: '12', sort \}\)/);
 assert.match(fragments.homeStateScript, /DEFAULT_SORT_MODE = 'discover'/);
 assert.match(fragments.homeStateScript, /viewMode: 'discover'/);
 assert.match(fragments.homeLayoutRenderScript, /data-workshop-view=\"discover\"/);
 assert.match(fragments.homeLayoutRenderScript, /renderDiscoverHome/);
+assert.match(fragments.homeLayoutRenderScript, /renderDevTeamRecommendations\(\)/);
+assert.match(fragments.homeCardsRenderScript, /DLC KITCHEN/);
+assert.match(fragments.homeCardsRenderScript, /devteam-recommend-btn/);
+assert.match(fragments.homeApiScript, /\/api\/devteam-recommendations/);
+assert.match(recommendationsEndpointSource, /SUPER_ADMIN_USER_ID/);
+assert.match(recommendationsEndpointSource, /FROM super_admins super_admin/);
+assert.match(recommendationsEndpointSource, /curator\.title AS curator_title/);
+assert.match(recommendationsEndpointSource, /r\.reaction_label/);
+assert.match(recommendationsEndpointSource, /devteam_recommendations r INDEXED BY idx_devteam_recommendations_updated/);
+const startupInitialRenderIndex = fragments.homeAppBootstrapScript.indexOf('renderApp();');
+const startupAuthTaskIndex = fragments.homeAppBootstrapScript.indexOf("const authTask = timedTask('auth'");
+const startupRecommendationsTaskIndex = fragments.homeAppBootstrapScript.indexOf("const recommendationsTask = timedTask('dlc-kitchen'");
+const startupShelvesTaskIndex = fragments.homeAppBootstrapScript.indexOf("const shelvesTask = timedTask('discover-shelves'");
+const startupAwaitIndex = fragments.homeAppBootstrapScript.indexOf('await Promise.allSettled');
+assert.ok(startupInitialRenderIndex >= 0 && startupInitialRenderIndex < startupAuthTaskIndex, 'Workshop shell must render before startup API tasks');
+assert.ok(startupAuthTaskIndex >= 0 && startupRecommendationsTaskIndex > startupAuthTaskIndex && startupShelvesTaskIndex > startupRecommendationsTaskIndex, 'startup tasks must be scheduled before the settle barrier');
+assert.ok(startupAwaitIndex > startupShelvesTaskIndex, 'DLC kitchen must not block Discover shelves startup');
+assert.match(recommendationsEndpointSource, /reaction_presets/);
+assert.match(recommendationsEndpointSource, /reactionLabel: z\.string\(\)\.trim\(\)\.max\(32\)/);
+assert.match(recommendationsEndpointSource, /reactionPresets: z\.array/);
+assert.match(indexSource, /\/api\/admin\/devteam-curator-profile/);
+assert.match(fragments.homeApiScript, /fetchDlcKitchenProfile/);
+assert.match(fragments.homeApiScript, /saveDlcKitchenProfile/);
+assert.match(fragments.homeCardsRenderScript, /data-devteam-curator-shift/);
+assert.match(fragments.homeCardsRenderScript, /查看全部 \$\{recommendations\.length\} 道/);
+assert.match(fragments.homeAppActionsScript, /touchstart/);
+assert.match(fragments.homeAppActionsScript, /openDlcKitchenCuratorModal/);
+assert.match(fragments.homeAppActionsScript, /openDlcKitchenSettingsModal/);
+assert.match(fragments.homeLayoutRenderScript, /dlcKitchenSettingsBtn/);
+assert.match(fragments.homeLayoutRenderScript, /mobileDlcKitchenSettingsBtn/);
+assert.match(fragments.homeModalsScript, /dlcKitchenCuratorTitle/);
+assert.match(fragments.homeModalsScript, /dlcKitchenCuratorBio/);
+assert.match(fragments.homeModalsScript, /dlcKitchenPresetAdd/);
+assert.match(fragments.homeModalsScript, /data-reaction-preset-index/);
+assert.doesNotMatch(fragments.homeModalsScript, /devTeamCuratorTitle/);
+assert.match(fragments.homeModalsScript, /devTeamReactionLabel/);
+assert.match(fragments.homeModalsScript, /DLC私房菜/);
+assert.match(fragments.homeDetailModalRenderScript, /DLC私房菜/);
+assert.match(fragments.homeDetailModalRenderScript, /detail-devteam-recommend-btn/);
+assert.match(fragments.homeModalsScript, /detail-devteam-recommend-btn/);
+assert.match(fragments.homeCardsRenderScript, /还没有私房菜/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /shelves\.downloads/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /shelves\.likes/);
+assert.doesNotMatch(fragments.homeApiScript, /key: 'downloads', sort: 'downloads'/);
+assert.doesNotMatch(fragments.homeApiScript, /key: 'likes', sort: 'likes'/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /value: \"discover\", label: \"发现\"/);
-assert.match(fragments.homeLayoutRenderScript, /value: \"published\", label: \"最新\"/);
-assert.match(fragments.homeLayoutRenderScript, /value: \"rating\", label: \"玩家好评\"/);
+assert.match(fragments.homeLayoutRenderScript, /value: \"published\", label: \"最新发布\"/);
+assert.match(fragments.homeLayoutRenderScript, /value: \"rating\", label: \"玩家好评（暂未开放）\", disabled: true/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"downloads\", label: \"下载最多\"/);
-assert.doesNotMatch(fragments.homeLayoutRenderScript, /value: \"updated\", label: \"按更新日期\"/);
-assert.doesNotMatch(fragments.homeLayoutRenderScript, /value: \"likes\", label: \"按点赞数\"/);
+assert.match(fragments.homeLayoutRenderScript, /value: \"updated\", label: \"最近更新\"/);
+assert.match(fragments.homeLayoutRenderScript, /value: \"likes\", label: \"点赞最多\"/);
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);
@@ -374,10 +452,51 @@ assert.doesNotMatch(fragments.homeLayoutRenderScript, /data-mobile-tool=\"filter
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /mobile-category-nav/);
 assert.match(fragments.homeLayoutRenderScript, /扩展方向/);
 assert.match(fragments.homeCardsRenderScript, /card-owner-stats/);
+assert.match(fragments.homeCardsRenderScript, /card-public-stats/);
+assert.match(fragments.homeCardsRenderScript, /discover-card-like like-btn/);
+assert.match(fragments.homeLayoutRenderScript, /data-metric-filter=\"likes\"/);
+assert.match(fragments.homeLayoutRenderScript, /data-metric-filter=\"downloads\"/);
+assert.match(fragments.homeApiScript, /params\.set\('minLikes'/);
+assert.match(fragments.homeApiScript, /params\.set\('minDownloads'/);
+assert.match(fragments.homeApiScript, /async function setPrivateProjectRating\(projectId, rating, comment = ''\)/);
+assert.match(fragments.homeDetailModalRenderScript, /data-project-rating/);
+assert.match(fragments.homeDetailModalRenderScript, /只有作者能看到统计与匿名留言/);
+assert.match(fragments.homeDetailModalRenderScript, /data-private-rating-comment/);
+assert.match(fragments.homeDetailModalRenderScript, /data-private-rating-submit/);
+assert.match(fragments.homeDetailModalRenderScript, /private-rating-comments/);
+assert.match(fragments.homeModalsScript, /setPrivateProjectRating\(projectId, rating, comment\)/);
+assert.match(fragments.homeModalsScript, /selectPrivateRating\(rating\)/);
+assert.doesNotMatch(fragments.homeModalsScript, /ratingNeedsInstallRepair/);
+assert.doesNotMatch(fragments.homeModalsScript, /setProjectSubscription\(detailProject\.id, true\)/);
+assert.match(fragments.homeModalsScript, /ratingStarsWrap\?\.classList\.add\("previewing"\)/);
+assert.match(fragments.homeModalsScript, /classList\.toggle\("preview"/);
 assert.match(fragments.homeCardsRenderScript, /view\.downloadsCount/);
 assert.match(fragments.homeModalsScript, /最旧优先/);
 assert.match(fragments.homeModalsScript, /最新优先/);
 assert.match(fragments.homeModalsScript, /refreshAdminReviewQueue/);
+const adminPanelLoadingOpenIndex = fragments.homeModalsScript.indexOf('const loadingOverlay = openModal');
+const adminPanelInitialFetchIndex = fragments.homeModalsScript.indexOf('const data = await fetchPendingProjects');
+assert.ok(adminPanelLoadingOpenIndex >= 0 && adminPanelInitialFetchIndex > adminPanelLoadingOpenIndex, 'admin review must open its loading shell before awaiting the queue API');
+assert.match(fragments.homeModalsScript, /data-admin-review-retry/);
+assert.match(fragments.homeModalsScript, /审核队列加载失败/);
+assert.match(fragments.homeLayoutRenderScript, /state\.filterRequestPending\) return `?<div class="projects-grid"><p class="projects-empty projects-loading"/);
+assert.match(fragments.homeLayoutRenderScript, /mobile-header-notice-btn/);
+assert.match(fragments.homeLayoutRenderScript, /mobile-account-script-update/);
+assert.match(fragments.homeAppActionsScript, /mobileHeaderNoticeBtn/);
+assert.match(fragments.homeAppActionsScript, /openMobileTool\('account'\)/);
+assert.match(fragments.homeLayoutRenderScript, /desktopUpdateHubBtn/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /id="dlcUpdateStatusBtn"/, 'desktop header must not expose a separate DLC update button');
+assert.match(fragments.homeApiScript, /function searchWorkshopProjectsForRepair\(query, methodPrefix = 'auto_search'\)/);
+assert.match(fragments.homeApiScript, /if \(projects\.length === 1\) \{[\s\S]*status: 'unique', method: methodPrefix \+ '_single_result'/);
+assert.match(fragments.homeRepairScript, /if \(match\.status === 'none' && fallbackName\) \{[\s\S]*searchWorkshopProjectsForRepair\(fallbackName, 'auto_search'\)/);
+assert.doesNotMatch(fragments.homeRepairScript, /能自动判断的事情已经帮你做完/);
+assert.match(fragments.homeUpdateCenterScript, /function openWorkshopUpdateHub\(\)/);
+assert.match(fragments.homeUpdateCenterScript, /data-update-hub-dlc/);
+assert.match(fragments.homeUpdateCenterScript, /data-update-hub-scripts/);
+assert.match(fragments.homeAppActionsScript, /desktopUpdateHubBtn/);
+assert.match(fragments.homeApiScript, /admin pending loaded/);
+assert.match(fragments.homeModalsScript, /const refreshedQueue = await fetchPendingProjects/);
+assert.match(fragments.homeModalsScript, /if \(!liveIds\.has\(String\(card\.dataset\.projectId\)\)\) card\.remove\(\)/);
 assert.match(fragments.homeModalsScript, /queue\.innerHTML = renderAdminReviewQueueContents/);
 assert.match(fragments.homeModalsScript, /refreshSequence/);
 assert.match(fragments.homeModalsScript, /aria-busy/);
@@ -389,6 +508,12 @@ assert.doesNotMatch(fragments.homeModalsScript, /查看详情/);
 assert.match(fragments.homeModalsScript, /放到队尾/);
 assert.match(fragments.homeModalsScript, /data-admin-review-start/);
 assert.match(fragments.homeModalsScript, /开始审查/);
+assert.match(fragments.homeModalsScript, /data-admin-review-cleanup/);
+assert.match(fragments.homeModalsScript, /清理过期请求/);
+assert.match(fragments.homeModalsScript, /cleanupOutdatedReviewDrafts\(\)/);
+assert.match(fragments.homeApiScript, /\/api\/admin\/pending\/cleanup/);
+assert.match(homeStylesSource, /\.admin-review-cleanup-btn \{[^}]*min-height:42px/);
+assert.match(homeStylesSource, /@media \(max-width:640px\)[\s\S]*\.admin-review-cleanup-btn \{[^}]*min-height:46px/);
 assert.doesNotMatch(fragments.homeModalsScript, /openCharacterReferenceAdminModal/);
 assert.doesNotMatch(fragments.homeModalsScript, /data-character-reference-admin/);
 assert.doesNotMatch(fragments.homeModalsScript, /角色卡版本管理/);
@@ -438,6 +563,10 @@ assert.match(fragments.homeLayoutRenderScript, /mobile-tool-dock/);
 assert.match(fragments.homeLayoutRenderScript, /projectSearchInputMobile/);
 assert.match(fragments.homeDetailModalRenderScript, /detail-stats-row/);
 assert.match(fragments.homeDetailModalRenderScript, /detail-like-btn/);
+assert.match(fragments.homeDetailModalRenderScript, /detail-like-label/);
+assert.match(fragments.homeDetailModalRenderScript, /compatibility-row/);
+assert.match(fragments.homeDetailModalRenderScript, /compatibility-status-dot/);
+assert.match(fragments.homeModalsScript, /label\.textContent = nextLike\.liked \? "已喜欢" : "喜欢"/);
 assert.doesNotMatch(fragments.homeDetailModalRenderScript, /canManageProject/);
 assert.match(fragments.homeDetailModalRenderScript, /isProjectEditable\(project\)/);
 assert.match(fragments.homeLayoutRenderScript, /script-dependency-health-btn/);
@@ -461,11 +590,15 @@ assert.match(fragments.homeModalsScript, /compatibility-modal/);
 assert.match(fragments.homeModalsScript, /compatibility-section-head/);
 assert.doesNotMatch(fragments.homeModalsScript, /project-form-section-head"><div><h3>角色卡版本/);
 assert.match(fragments.homeModalsScript, /loadProjectOriginalConflictItems/);
-assert.match(fragments.homeModalsScript, /resolvedOriginalConflictItems/);
+assert.doesNotMatch(fragments.homeModalsScript, /resolvedOriginalConflictItems/);
+assert.match(fragments.homeModalsScript, /originalConflictEntryNames/);
 assert.match(fragments.homeDetailModalRenderScript, /声明冲突的原版条目/);
 assert.match(fragments.homeDetailModalRenderScript, /安装或更新时 Workshop 会再次询问你是否帮忙关闭，不会直接修改/);
 assert.match(homeStylesSource, /\.compatibility-modal \.close-btn \{ position:relative; z-index:4; pointer-events:auto; \}/);
 assert.match(homeStylesSource, /\.compatibility-modal \.modal-content \{ width:100%; height:100dvh;/);
+assert.match(homeStylesSource, /\.mobile-detail-actions \.detail-actions-panel \{ width:100%; align-items:stretch;/);
+assert.match(homeStylesSource, /\.mobile-detail-actions \.detail-install-btn,.mobile-detail-actions \.detail-update-btn \{ min-width:0; min-height:46px; flex:1 1 0;/);
+assert.match(homeStylesSource, /button\.detail-like-btn \{ min-height:32px; padding:0 10px; border:1px solid/);
 assert.doesNotMatch(homeStylesSource, /\.external-link-domain[^\n]*rgba\(15,23,42/);
 assert.doesNotMatch(homeStylesSource, /\.external-link-item code[^\n]*#BFDBFE/);
 assert.match(homeStylesSource, /\.external-link-domain \{[^\n]*background:#151619/);
@@ -493,33 +626,23 @@ assert.match(fragments.homeStateScript, /confirmInstalledProjectRebind/);
 assert.doesNotMatch(fragments.homeStateScript, /canResolveLegacyProjectIdentities/);
 
 const resolveOriginalConflicts = Function(
-  'fetchCharacterReferenceVersionItems',
   `${fragments.homeModalsScript}; return loadProjectOriginalConflictItems;`,
-)(async () => ({
-  items: [
-    { id: 'wb-1', kind: 'worldbook', displayName: '原版条目 A' },
-    { id: 'rx-1', kind: 'regex', displayName: '不应计入' },
-  ],
-}));
+)();
 const resolvedOriginalConflicts = await resolveOriginalConflicts({
   conflictsWithOriginal: true,
-  builtForReferenceVersionId: 'version-1',
-  originalConflictReferenceItemIds: ['wb-1'],
+  originalConflictEntryNames: ['原版条目 A'],
 });
 assert.equal(resolvedOriginalConflicts.complete, true);
 assert.equal(resolvedOriginalConflicts.items.length, 1);
 assert.equal(resolvedOriginalConflicts.items[0].displayName, '原版条目 A');
 
-const resolvePartialOriginalConflicts = Function(
-  'fetchCharacterReferenceVersionItems',
-  `${fragments.homeModalsScript}; return loadProjectOriginalConflictItems;`,
-)(async () => ({ items: [{ id: 'wb-1', kind: 'worldbook', displayName: '原版条目 A' }] }));
-const partialOriginalConflicts = await resolvePartialOriginalConflicts({
+const legacyOriginalConflicts = await resolveOriginalConflicts({
   conflictsWithOriginal: true,
-  builtForReferenceVersionId: 'version-1',
-  originalConflictReferenceItemIds: ['wb-1', 'wb-2'],
+  originalConflictReferenceItemIds: ['wb-1'],
+  originalConflictEntryNames: [],
 });
-assert.equal(partialOriginalConflicts.complete, false);
+assert.equal(legacyOriginalConflicts.complete, false);
+assert.equal(legacyOriginalConflicts.items.length, 0);
 
 const cardViewModelUi = Function(
   'getLikeState',
@@ -715,7 +838,7 @@ const migratedCardUi = Function(
   () => [],
   () => null,
   () => null,
-  { tavern: { connected: true, installedProjectsLoaded: true } },
+  { tavern: { connected: true, installedProjectsLoaded: true, installedProjectsComplete: true } },
   value => String(value),
 );
 assert.equal(
@@ -738,7 +861,7 @@ const legacyConflictView = Function(
   () => [{}],
   () => null,
   () => null,
-  { tavern: { connected: true, installedProjectsLoaded: true } },
+  { tavern: { connected: true, installedProjectsLoaded: true, installedProjectsComplete: true } },
   value => String(value),
 );
 const legacyConflictCard = legacyConflictView.buildProjectCardViewModel({ id: 'remote', name: '同名旧项目', version: '2.0.0' });
@@ -811,6 +934,13 @@ const testProjectTaxonomy = {
   characterFacets: { 种族: ['人类'], 身份: ['法师'] },
   maxCustomTags: 4,
 };
+const testWorkshopLimits = {
+  projectUploadBytes: 1024,
+  projectUploadLabel: 'test-limit',
+  coverRequestOverheadBytes: 128,
+  bannerUploadBytes: 512,
+  bannerUploadLabel: 'test-banner-limit',
+};
 const taxonomyLabelUi = Function(
   'PROJECT_TAXONOMY',
   `${fragments.homeUtilsScript}; return { getProjectTypeDisplayLabel };`,
@@ -818,11 +948,14 @@ const taxonomyLabelUi = Function(
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: '规则' }), '扩展 · 规则');
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: null }), '扩展');
 
-const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', `return (${appExpression});`)(
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', 'workshopLimitsJson', 'uploadChecker', 'CHECKER_LIMITS', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
   JSON.stringify(testProjectTaxonomy),
   JSON.stringify(workshopConfig),
+  JSON.stringify(testWorkshopLimits),
+  JSON.parse(await readFile(resolve('src/generated/upload-checker-revision.json'), 'utf8')),
+  CHECKER_LIMITS,
 );
 assert.equal(typeof homeScript, 'string');
 new Function(homeScript);
@@ -837,7 +970,8 @@ assert.equal(contentPolicyUi.validateProjectContentSelection('角色', false, tr
 assert.equal(contentPolicyUi.validateProjectContentSelection('事件', false, true).valid, false);
 assert.match(contentPolicyUi.getProjectContentRequirementText('扩展'), /世界书或正则选一种就可以/);
 assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
-assert.match(homeScript, /expectedRevision: project\?\.draftRevision \|\| reviewProjectData\?\.draftRevision/);
+assert.match(homeScript, /expectedRevision: reviewProjectData\.draftRevision/);
+assert.match(homeScript, /reviewToken: detail\.reviewToken/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /当前编辑草稿也会一并删除/);
 assert.match(homeScript, /document\.querySelectorAll\('\.project-card, \.discover-card'\)/);

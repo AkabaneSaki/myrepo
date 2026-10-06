@@ -1,99 +1,111 @@
-# Creative Workshop Release SOP
+# Creative Workshop Client Release SOP
 
-This document defines client-artifact release behavior. Git branch routing is defined in `AGENTS.md` and `docs/GIT-WORKFLOW.md`.
+Creative Workshop has two independent version identities:
 
-## Three artifact lifecycles
+1. **SillyTavern client version** — the version embedded in the TavernHelper/Creative Workshop client script.
+2. **Worker/web build identity** — exact Git SHA + Cloudflare Worker Version ID.
 
-Creative Workshop has three distinct client artifact lifecycles. Do not merge them into one release command.
+Do not use client SemVer to identify Worker/web-only changes.
 
-### Stable distribution
+## The deciding question
 
-- Manifest: `client.stable`
-- Canonical path: `client.publicPath`
-- Endpoint role: current released Creative Workshop client
-- Build: `pnpm build:stable`
+Before changing any Creative Workshop client version, ask:
 
-### Historical public compatibility endpoint
+> Does this change require a SillyTavern user to change the `@version` in their Creative Workshop import in order to receive the fix/feature?
 
-- Manifest: `client.legacyShimPath`
-- Physical path may still contain the historical name `test-dist`, but its role is **not testing**.
-- It exists because real users previously received that public import path.
-- It must contain only the small self-rewrite compatibility shim.
-- It must never contain a second full Workshop bundle or a staging bundle.
-- Build: `pnpm build:compat`
-- Acceptance: `pnpm check:workshop-compat`
+- **No** → do **not** change client SemVer.
+  - Examples: Worker logic, web UI, copy, CSS, ranking, admin UI, D1/R2/backend logic, server-side validation.
+  - Track the release by Git SHA and Worker Version ID.
+- **Yes** → a client release is required.
+  - Bugfix to the client artifact → patch.
+  - New backwards-compatible client capability → minor.
+  - Incompatible client/bridge contract → major.
 
-### Staging distribution
+## Single source of truth
 
-- Manifest: `client.staging`
-- Path: `client.stagingPublicPath`
-- Endpoint role: future feature-line client used with the staging Worker
-- Build: `pnpm build:staging`
+All current client release values live only in `config/workshop.json`:
 
-## Build commands
+- `client.stable`
+- `client.minimum`
+- `client.staging`
+- `client.publicPath`
+- `client.stagingPublicPath`
+- `client.migrations`
 
-```text
-pnpm build:release
-= build:stable + build:compat
+Code, UI, build scripts and tests must reference that manifest; they must not repeat current version numbers or public bundle paths.
 
-pnpm build:staging
-= staging only
+### Meaning
 
-pnpm build:all
-= release artifacts + staging artifact
+- `stable`: newest released client tag.
+- `minimum`: oldest client allowed to enter the Workshop.
+- `staging`: active staging-client build line.
+
+A new stable release does **not** automatically require raising `minimum`.
+
+Example:
+
+```json
+{
+  "stable": "3.4.2",
+  "minimum": "3.4.1",
+  "staging": "3.5.0-dev"
+}
 ```
 
-A production release must not require building the future staging artifact. CI may use `build:all` to validate all artifact lifecycles together.
+In that example, users on 3.4.1 may continue using the Workshop without a forced-update popup.
 
-Webpack requires an explicit target. Do not invoke it without `--env target=stable` or `--env target=staging`.
+## Branch source rule
 
-## Version policy
+Release identity and branch base are separate decisions:
 
-Live values come only from `config/workshop.json`:
+- normal staging feature/fix work starts from freshly fetched `origin/staging`;
+- production hotfix/release work starts from the exact current production baseline (`upstream/main` / owner release line);
+- never start a normal staging feature from owner production merely because it may later be promoted upstream.
 
-- `client.stable`: newest released client
-- `client.minimum`: oldest client allowed to enter the Workshop
-- `client.staging`: active future/staging client
-
-Before changing client SemVer, ask:
-
-> Does a SillyTavern user need to change the `@version` in their Creative Workshop import to receive this change?
-
-If no, do not bump client SemVer. Track Worker/web/backend deployment by exact Git SHA and Worker Version ID.
-
-A new stable release does not automatically raise `client.minimum`.
-
-## Git routing
-
-Normal development:
+## Server-only release
 
 ```text
-origin/staging → task branch → origin/staging → acceptance → upstream/main → production
+change Worker/web code on a task branch based on origin/staging
+→ tests
+→ origin/staging
+→ staging Worker exact SHA
+→ acceptance
+→ owner PR/main
+→ production Worker exact SHA
+→ report Git SHA + Worker Version
+→ client version unchanged
 ```
 
-Production hotfix / patch release:
+## Client release
 
 ```text
-upstream/main / exact production source → hotfix branch → upstream/main → production
+client-side change on the active staging line requires new import @version
+→ start from refreshed origin/staging
+→ update config/workshop.json once
+→ run pnpm check:workshop-config
+→ build both client bundles
+→ verify bundle-reported versions
+→ staging validation
+→ owner PR/main
+→ create immutable release tag
+→ deploy production Worker if needed
+→ verify stable/minimum/staging values from manifest
 ```
 
-Never implement a production hotfix on staging first and backport it into production.
+### Legacy import-path migration
 
-After production is complete, forward-port the finished logical fix into `origin/staging` only if the future line still needs it. That synchronization is separate from the hotfix direction.
+When a released client moves its public bundle path, keep the real client bundle only at `client.publicPath`. If backward compatibility is needed, `client.legacyShimPath` may contain one small self-rewrite migration shim generated from the manifest. It is not a second Workshop distribution. The shim must update the current TavernHelper script in place and must not duplicate the full client bundle.
 
-## Release acceptance
+## Mandatory reporting
 
-Before publishing a client release:
+Every release/status report must state these separately:
 
-1. Run `pnpm check:workshop-config`.
-2. Run `pnpm build:release`.
-3. Run `pnpm check:workshop-release`.
-4. Verify the canonical `dist` client contains the intended stable client version and production endpoint.
-5. Verify the historical compatibility endpoint self-rewrites its own TavernHelper import to the canonical `dist` path.
-6. Verify the compatibility directory contains only the one shim.
-7. Merge the release into owner main.
-8. Create an immutable release tag at the exact accepted owner-main release commit.
-9. Use the guarded production deployment helper for Worker deployment.
-10. Record client tag separately from Worker Git SHA / Worker Version ID.
+```text
+Client stable: x.y.z
+Client minimum: x.y.z
+Client staging: x.y.z-dev
+Git source: <sha>
+Worker Version: <cloudflare-version-id>
+```
 
-Historical tags are immutable.
+Never say only “version updated” or “staging updated”.

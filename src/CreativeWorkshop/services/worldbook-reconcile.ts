@@ -1,3 +1,5 @@
+import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
+
 export type CreativeWorkshopDesiredWorldbookEntry = {
   payload: WorldbookEntry;
   stableKey: string;
@@ -23,7 +25,7 @@ function isSameCreativeWorkshopProject(
   legacyProjectName?: string,
 ): boolean {
   const extra = getEntryExtra(entry);
-  const itemProjectId = extra.cw_project_id;
+  const itemProjectId = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id');
   const legacyName = extra.fate_project_name;
   return (
     itemProjectId === projectId ||
@@ -44,11 +46,14 @@ function findExistingEntryIndex(
   return worldbook.findIndex((entry, index) => {
     if (alreadyMatched.has(index)) return false;
     const extra = getEntryExtra(entry);
-    const entryKey = extra.cw_entry_key;
+    const entryKey = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_entry_key');
     if (entryKey === desired.stableKey || entryKey === desired.legacyKey) return true;
     const isConfirmedLegacyAlias = Boolean(
       options.legacyProjectName &&
-        (extra.cw_project_id === options.legacyProjectName || extra.fate_project_name === options.legacyProjectName),
+        (
+          getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') === options.legacyProjectName ||
+          extra.fate_project_name === options.legacyProjectName
+        ),
     );
     if (entryKey && !isConfirmedLegacyAlias) return false;
     if (!isSameCreativeWorkshopProject(entry, projectId, options.projectName, options.legacyProjectName)) return false;
@@ -82,7 +87,7 @@ export function reconcileCreativeWorkshopWorldbookEntries(
   const seenDesiredKeys = new Set<string>();
   return worldbook.filter(entry => {
     if (!isSameCreativeWorkshopProject(entry, projectId, options.projectName, options.legacyProjectName)) return true;
-    const entryKey = getEntryExtra(entry).cw_entry_key;
+    const entryKey = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_entry_key');
     if (typeof entryKey !== 'string' || !desiredKeys.has(entryKey) || seenDesiredKeys.has(entryKey)) return false;
     seenDesiredKeys.add(entryKey);
     return true;

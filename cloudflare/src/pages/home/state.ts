@@ -61,12 +61,19 @@ function createDefaultTavernState() {
     clientVersionResolved: false,
     installedProjects: [],
     installedProjectsLoaded: false,
+    installedProjectsComplete: false,
+    unreadableWorldbookNames: [],
     localProjectMap: new Map(),
     installedRemoteProjectMap: new Map(),
     installedProjectRebindCandidates: new Map(),
     installedProjectRebindMap: new Map(),
     updateDiffMap: new Map(),
     pendingProjectActions: new Map(),
+    dlcUpdateKnown: false,
+    dlcUpdateAvailable: false,
+    dlcUpdateCheckedAt: 0,
+    dlcUpdateSignature: '',
+    dlcUpdateCheckPending: false,
     worldbooks: { primary: null, additional: [], available: [] },
   };
 }
@@ -74,10 +81,33 @@ function createDefaultTavernState() {
 function createDefaultProjectPagination() {
   return {
     page: 0,
-    pageSize: 50,
+    pageSize: 48,
+    pageSizeLocked: false,
     hasMore: false,
-    loadingMore: false,
+    loadingPage: false,
+    publicCounts: null,
   };
+}
+
+function createDefaultDailyRandomDrawState() {
+  return {
+    loaded: false,
+    loading: false,
+    busy: false,
+    count: 0,
+    limit: 10,
+    remaining: 10,
+    drawDay: '',
+    resetAt: '',
+  };
+}
+
+function chooseProjectPageSize() {
+  const grid = document.querySelector('.projects-grid');
+  const columns = grid
+    ? getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length
+    : 4;
+  return [50, 49, 48].find(size => size % columns === 0) || 48;
 }
 
 const state = {
@@ -87,12 +117,13 @@ const state = {
   discoverShelves: {
     discover: [],
     published: [],
-    rating: [],
+    updated: [],
     downloads: [],
+    likes: [],
     loading: false,
   },
   discoverBanner: {
-    imageUrl: '/discover-preview-banner.png',
+    imageUrl: null,
     positionX: 50,
     positionY: 50,
     zoom: 1,
@@ -100,6 +131,9 @@ const state = {
     mobilePositionY: 50,
     mobileZoom: 1,
   },
+  devTeamCurators: [],
+  dlcKitchenProfile: null,
+  activeDevTeamCuratorIndex: 0,
   viewMode: 'discover',
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
@@ -109,6 +143,8 @@ const state = {
   searchDraft: '',
   mobileToolMode: '',
   searchKeyword: '',
+  minLikes: 0,
+  minDownloads: 0,
   userMenuOpen: false,
   sortMenuOpen: false,
   fontMenuOpen: false,
@@ -120,6 +156,7 @@ const state = {
   subsMap: new Map(),
   subscriptionsLoaded: false,
   projectPagination: createDefaultProjectPagination(),
+  dailyRandomDraw: createDefaultDailyRandomDrawState(),
   tavern: createDefaultTavernState(),
   updateModal: {
     open: false,
@@ -143,9 +180,10 @@ function setCurrentUser(user) {
   const nextUserId = nextUser?.id || null;
   state.currentUser = nextUser;
   if (previousUserId !== nextUserId) {
-    
+    state.dlcKitchenProfile = null;
     state.subsMap = new Map();
     state.subscriptionsLoaded = false;
+    state.dailyRandomDraw = createDefaultDailyRandomDrawState();
   }
 }
 
@@ -154,6 +192,32 @@ function setDiscoverBanner(banner) {
     ...state.discoverBanner,
     ...(banner && typeof banner === 'object' ? banner : {}),
   };
+}
+
+function setDevTeamCurators(curators) {
+  state.devTeamCurators = Array.isArray(curators) ? curators : [];
+  if (!state.devTeamCurators.length) {
+    state.activeDevTeamCuratorIndex = 0;
+    return;
+  }
+  const currentIndex = Number(state.activeDevTeamCuratorIndex || 0);
+  state.activeDevTeamCuratorIndex = Math.min(state.devTeamCurators.length - 1, Math.max(0, currentIndex));
+}
+
+function getMyDevTeamRecommendation(projectId) {
+  const userId = state.currentUser?.id;
+  if (!userId) return null;
+  const curator = (state.devTeamCurators || []).find(item => item?.id === userId);
+  if (!curator) return null;
+  const recommendation = (curator.recommendations || []).find(item => item?.project?.id === projectId);
+  return recommendation ? { curator, recommendation } : null;
+}
+
+function getDevTeamRecommendationsForProject(projectId) {
+  return (state.devTeamCurators || []).flatMap(curator => {
+    const recommendation = (curator?.recommendations || []).find(item => item?.project?.id === projectId);
+    return recommendation ? [{ curator, recommendation }] : [];
+  });
 }
 
 function setProjects(projects) {
@@ -167,15 +231,17 @@ function setDiscoverShelves(payload = {}) {
   state.discoverShelves = {
     discover: Array.isArray(payload.discover) ? payload.discover : [],
     published: Array.isArray(payload.published) ? payload.published : [],
-    rating: Array.isArray(payload.rating) ? payload.rating : [],
+    updated: Array.isArray(payload.updated) ? payload.updated : [],
     downloads: Array.isArray(payload.downloads) ? payload.downloads : [],
+    likes: Array.isArray(payload.likes) ? payload.likes : [],
     loading: Boolean(payload.loading),
   };
   const combined = [
     ...state.discoverShelves.discover,
     ...state.discoverShelves.published,
-    ...state.discoverShelves.rating,
+    ...state.discoverShelves.updated,
     ...state.discoverShelves.downloads,
+    ...state.discoverShelves.likes,
   ];
   const uniqueProjects = [];
   const seen = new Set();
@@ -189,12 +255,13 @@ function setDiscoverShelves(payload = {}) {
 
 function setProjectsPage(payload) {
   const projects = Array.isArray(payload?.projects) ? payload.projects : [];
-  const append = Boolean(payload?.append);
-  state.projects = append ? [...state.projects, ...projects] : projects;
+  state.projects = projects;
   state.projectPagination.page = Number(payload?.page || 0);
-  state.projectPagination.pageSize = Number(payload?.pageSize || state.projectPagination.pageSize || 50);
+  state.projectPagination.pageSize = Number(payload?.pageSize || state.projectPagination.pageSize || 48);
+  state.projectPagination.pageSizeLocked = true;
   state.projectPagination.hasMore = Boolean(payload?.hasMore);
-  state.projectPagination.loadingMore = false;
+  state.projectPagination.publicCounts = payload?.publicCounts || state.projectPagination.publicCounts;
+  state.projectPagination.loadingPage = false;
   if (state.tavern.installedProjectsLoaded) {
     rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
   }
@@ -234,8 +301,8 @@ function isLatestProjectRequestToken(token) {
   return token === state.projectRequestToken;
 }
 
-function setProjectPaginationLoadingMore(loading) {
-  state.projectPagination.loadingMore = Boolean(loading);
+function setProjectPageLoading(loading) {
+  state.projectPagination.loadingPage = Boolean(loading);
 }
 
 function setProjectPendingAction(projectId, action) {
@@ -293,7 +360,11 @@ function updateSubscribeState(projectId, payload) {
 function setTavernConnectionStatus(status) {
   state.tavern.status = status || 'disconnected';
   state.tavern.connected = status === 'connected';
-  if (!state.tavern.connected) state.tavern.installedProjectsLoaded = false;
+  if (!state.tavern.connected) {
+    state.tavern.installedProjectsLoaded = false;
+    state.tavern.installedProjectsComplete = false;
+    state.tavern.unreadableWorldbookNames = [];
+  }
 }
 
 function setTavernClientVersion(version) {
@@ -439,6 +510,10 @@ function mergeInstalledRemoteProjects(projects) {
 function setInstalledProjects(projects, options) {
   const list = Array.isArray(projects) ? projects : [];
   state.tavern.installedProjectsLoaded = true;
+  state.tavern.installedProjectsComplete = options?.complete !== false;
+  state.tavern.unreadableWorldbookNames = Array.isArray(options?.unreadableWorldbookNames)
+    ? options.unreadableWorldbookNames.map(String).filter(Boolean)
+    : [];
   const mode = options && options.mode === 'merge' ? 'merge' : 'replace';
   const removeProjectId = options && options.removeProjectId ? options.removeProjectId : null;
   const installedProjectMap = mode === 'merge'
@@ -570,11 +645,50 @@ function getFilteredProjects() {
   return filteredSource;
 }
 
-function shouldShowProjectLoadMore() {
+function shouldShowProjectPagination() {
   if (state.showOnlyMyProjects || state.showSubscribedAndInstalledProjects) {
     return false;
   }
+  return state.viewMode === 'catalog';
+}
 
-  return Boolean(state.projectPagination.hasMore);
+function renderProjectPagination() {
+  if (!shouldShowProjectPagination()) return '';
+  const pagination = state.projectPagination;
+  const counts = pagination.publicCounts;
+  const filtered = Boolean(String(state.searchKeyword || '').trim()
+    || getActivePublicTags().length || state.minLikes || state.minDownloads);
+  const type = state.activeBaseTag;
+  const scopedTotal = counts ? (type === 'all' ? counts.total : Number(counts.byType?.[type] || 0)) : 0;
+  const pageCount = !filtered && counts ? Math.ceil(scopedTotal / pagination.pageSize) : null;
+  const lastVisiblePage = pageCount === null
+    ? pagination.page + (pagination.hasMore ? 1 : 0)
+    : Math.max(0, Math.min(19, pageCount - 1));
+  const firstNumber = Math.max(0, pagination.page - 2);
+  const lastNumber = Math.min(lastVisiblePage, pagination.page + 4);
+  const numbered = [];
+  for (let page = firstNumber; page <= lastNumber; page++) {
+    numbered.push('<button type="button" class="project-page-number' + (page === pagination.page ? ' active' : '')
+      + '" data-project-page="' + page + '"' + (page === pagination.page || pagination.loadingPage ? ' disabled' : '')
+      + ' aria-label="第 ' + (page + 1) + ' 页">' + (page + 1) + '</button>');
+  }
+  const byType = counts?.byType || {};
+  const countText = counts
+    ? '公开项目 ' + counts.total + ' · 角色 ' + Number(byType['角色'] || 0)
+      + ' · 系统核心 ' + Number(byType['系统核心'] || 0)
+      + ' · 扩展 ' + Number(byType['扩展'] || 0)
+      + ' · 事件 ' + Number(byType['事件'] || 0)
+    : '正在加载项目数量';
+  const morePages = pageCount !== null && pageCount > 20
+    ? '<small>更多作品可以用搜索查找</small>' : '';
+  return '<div class="project-pagination"><div class="project-pagination-summary">' + countText + morePages + '</div>'
+    + '<nav class="project-pagination-controls" aria-label="项目页码">'
+    + '<button type="button" data-project-page="' + (pagination.page - 1) + '"'
+    + (pagination.page === 0 || pagination.loadingPage ? ' disabled' : '') + '>上一页</button>'
+    + (firstNumber > 0 ? '<span aria-hidden="true">…</span>' : '') + numbered.join('')
+    + (lastNumber < lastVisiblePage ? '<span aria-hidden="true">…</span>' : '')
+    + '<button type="button" data-project-page="' + (pagination.page + 1) + '"'
+    + (!pagination.hasMore || pagination.loadingPage ? ' disabled' : '') + '>下一页</button>'
+    + '</nav></div>';
 }
 `;

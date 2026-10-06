@@ -19,6 +19,10 @@ import {
   type CreativeWorkshopDesiredWorldbookEntry,
 } from './worldbook-reconcile';
 import {
+  getCreativeWorkshopWorldbookMetadataString,
+  injectCreativeWorkshopWorldbookMetadata,
+} from './install-identity';
+import {
   getCreativeWorkshopFiniteNumber,
   getCreativeWorkshopPositionRole,
   getCreativeWorkshopPositionType,
@@ -98,8 +102,16 @@ export type CreativeWorkshopPreparedWorldbookEntry = {
   scanDepth: WorldbookEntry['strategy']['scan_depth'];
 };
 
-export async function prepareCreativeWorkshopProject(projectId: string, selectedEntryKeys?: string[], expectedVersion?: string) {
-  const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+export async function prepareCreativeWorkshopProject(
+  projectId: string,
+  selectedEntryKeys?: string[],
+  expectedVersion?: string,
+  downloadUrlOverride?: string,
+) {
+  const fetchedDetail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
+  const detail = downloadUrlOverride
+    ? { ...fetchedDetail, project: { ...fetchedDetail.project, downloadUrl: downloadUrlOverride } }
+    : fetchedDetail;
   const sourceEntries = await fetchCreativeWorkshopProjectWorldbookSource(detail);
   const entries = sourceEntries.length > 0 ? sourceEntries : detail.worldbookEntriesPreview || [];
   const selected = selectedEntryKeys ? new Set(selectedEntryKeys) : null;
@@ -178,7 +190,14 @@ export async function applyPreparedCreativeWorkshopProject(
             delay: fieldWithDefault(entry, 'effect.delay', 'delay', null),
           },
           probability,
-          content: entry.content || '',
+          content: injectCreativeWorkshopWorldbookMetadata(entry.content || '', {
+            cw_project_id: projectId,
+            cw_project_name_display: projectName,
+            cw_project_version: detail.project.version || null,
+            cw_remote_version: detail.project.version || null,
+            cw_entry_key: stableKey,
+            cw_name_format_version: CREATIVE_WORKSHOP_NAME_FORMAT_VERSION,
+          }),
           comment: entry.comment || entry.name || name,
           outletName: _.isString(entry.outletName) ? entry.outletName : '',
           extra: {
@@ -204,11 +223,13 @@ export async function applyPreparedCreativeWorkshopProject(
 }
 
 function isCreativeWorkshopProjectEntry(entry: WorldbookEntry, projectId: string, legacyProjectName?: string) {
+  const currentProjectId = getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id');
+  const legacyName = getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name');
   return (
-    _.get(entry, 'extra.cw_project_id') === projectId ||
-    _.get(entry, 'extra.fate_project_name') === projectId ||
-    Boolean(legacyProjectName && _.get(entry, 'extra.cw_project_id') === legacyProjectName) ||
-    Boolean(legacyProjectName && _.get(entry, 'extra.fate_project_name') === legacyProjectName)
+    currentProjectId === projectId ||
+    legacyName === projectId ||
+    Boolean(legacyProjectName && currentProjectId === legacyProjectName) ||
+    Boolean(legacyProjectName && legacyName === legacyProjectName)
   );
 }
 
@@ -270,9 +291,15 @@ export async function installCreativeWorkshopProject(
   requestedWorldbookName?: string,
   expectedVersion?: string,
   manageOriginalConflicts = false,
+  downloadUrlOverride?: string,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
-  const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion);
+  const { detail, prepared } = await prepareCreativeWorkshopProject(
+    projectId,
+    selectedEntryKeys,
+    expectedVersion,
+    downloadUrlOverride,
+  );
   if (prepared.length === 0) {
     const originalEntryStates = manageOriginalConflicts
       ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
@@ -281,6 +308,7 @@ export async function installCreativeWorkshopProject(
       worldbookName: null,
       installedVersion: detail.project.version || expectedVersion || null,
       originalEntryStates,
+      worldbookEntryKeys: [],
     });
     return detail;
   }
@@ -301,6 +329,7 @@ export async function installCreativeWorkshopProject(
     worldbookName,
     installedVersion: detail.project.version || expectedVersion || null,
     originalEntryStates,
+    worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
   });
   return detail;
 }
@@ -320,9 +349,15 @@ export async function updateCreativeWorkshopProject(
   expectedVersion?: string,
   legacyProjectName?: string,
   manageOriginalConflicts = false,
+  downloadUrlOverride?: string,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
-  const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion);
+  const { detail, prepared } = await prepareCreativeWorkshopProject(
+    projectId,
+    undefined,
+    expectedVersion,
+    downloadUrlOverride,
+  );
   const installedWorldbookName = await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName);
   let worldbookName: string | null = installedWorldbookName;
   if (installedWorldbookName) {
@@ -359,6 +394,7 @@ export async function updateCreativeWorkshopProject(
     worldbookName: prepared.length > 0 ? worldbookName : null,
     installedVersion: detail.project.version || expectedVersion || null,
     originalEntryStates,
+    worldbookEntryKeys: prepared.map(item => `${projectId}:${item.entryKey}`),
   });
   return detail;
 }

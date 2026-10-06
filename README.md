@@ -6,7 +6,7 @@
 - 面向角色对话表现优化的 **自适应正则美化**
 - 面向角色演出与展示的表情、立绘等素材资源
 
-仓库同时提供一套基于 Cloudflare Workers 的创意工坊后端，用于支撑与该角色卡生态相关的项目上传、审核、展示、点赞、订阅与鉴权等能力。
+仓库同时提供一套基于 Cloudflare Workers 的创意工坊后端，用于支撑与该角色卡生态相关的项目上传、审核、展示、点赞、可见性与鉴权等能力。
 
 ## 项目概览
 
@@ -27,7 +27,7 @@
 
 特性包括：
 
-- 支持从 CDN 拉取远程 [`regex.json`](src/AutoDialogueBeautifier/index.ts:8)
+- 支持从 CDN 拉取远程 `regex.json`（实现见 [`src/AutoDialogueBeautifier/index.ts`](src/AutoDialogueBeautifier/index.ts)）
 - 支持多 CDN 回退，提升加载成功率
 - 自动检测消息内容并匹配所需规则
 - 使用缓存与防抖机制降低重复计算和循环触发风险
@@ -42,7 +42,7 @@
 - Discord OAuth 登录与登录状态查询
 - 项目列表、详情、创建、更新、删除
 - 项目文件、封面与正则文件上传
-- 点赞、订阅、可见性切换
+- 点赞、项目可见性与登录鉴权
 - 管理员审核、连续审核队列、项目管理、管理员列表与审计日志查询
 - 结构化项目分类、扩展子类型、角色官方标签、自定义标签与首页展示标签
 - 基于 D1 的项目数据管理，表结构定义见 [`cloudflare/schema.sql`](cloudflare/schema.sql)
@@ -84,7 +84,7 @@ myrepo/
 
 如果你已经构建并发布了对应脚本文件，可以在 SillyTavern 的酒馆助手直接使用 CDN 地址接入：
 
-- 创意工坊：正式版本号与公开 bundle 路径以 `config/workshop.json` 的 `client.stable` / `client.publicPath` 为准。历史 `test-dist/CreativeWorkshop/index.js` 仅作为兼容迁移入口，不是第二套正式构建。
+- 创意工坊：版本号与公开 bundle 路径以 `config/workshop.json` 的 `client.stable` / `client.publicPath` 为准；不要在文档里维护第二份当前值。
 - 自适应正则：`import 'https://testingcf.jsdelivr.net/gh/Akabanesaki/myrepo@main/dist/AutoDialogueBeautifier/index.js'`
 
 > 当前仓库内主要保存的是源码与后端工程。如果要直接用于生产环境，通常还需要你自己的构建与发布流程。
@@ -96,29 +96,22 @@ myrepo/
 [`cloudflare/package.json`](cloudflare/package.json) 中定义了以下常用命令：
 
 - `npm run dev`：启动本地 Worker 开发环境
-- staging / production 部署：必须使用仓库规定的 guarded deployment helper；不要从 `cloudflare/package.json` 直接执行 Wrangler deploy。
+- `npm run deploy`：部署到 Cloudflare Workers
 - `npm run cf-typegen`：生成 Wrangler 类型
 
 ### 数据库初始化
 
-D1 的基础表结构定义在 [`cloudflare/schema.sql`](cloudflare/schema.sql)，包含：
+D1 的当前新库结构以 [`cloudflare/schema.sql`](cloudflare/schema.sql) 为准；已存在环境的演进历史以 [`cloudflare/migrations/`](cloudflare/migrations/) 为准。
 
-- `users`
-- `projects`
-- `project_likes`
-- `project_subscribes`
-- `admin_action_logs`
-- `super_admins`
-- `admins`
+不要在 README 手工维护第二份“当前表清单”：项目、审核、搜索索引、计数器、随机抽取等功能会持续增加或迁移表结构，复制清单很容易过期。
 
-这些表用于支撑用户体系、项目管理、互动行为与后台审核功能。
+开发文档从 [`docs/README.md`](docs/README.md) 进入。主要长期资料：
 
-当前 Workshop 开发状态与架构边界优先看：
-
-- [`docs/plans/workshop-p2.md`](docs/plans/workshop-p2.md)：当前 P2 / 本地 WIP / staging 状态；
-- [`docs/audits/workshop-policy-architecture-reference-20260908.md`](docs/audits/workshop-policy-architecture-reference-20260908.md)：taxonomy、内容规则与维护边界；
+- [`docs/audits/workshop-architecture.md`](docs/audits/workshop-architecture.md)：taxonomy、内容规则与维护边界；
 - [`cloudflare/README.md`](cloudflare/README.md)：Worker 目录、验证脚本与审核流程；
 - [`docs/GIT-WORKFLOW.md`](docs/GIT-WORKFLOW.md)：Git、staging Worker 与 production 的发布 SOP。
+
+未实现设计放在 `docs/plans/`；已经完成或被取代的阶段记录放在 `docs/archive/`，不要从 archive 推断当前运行状态。
 
 ## 使用说明
 

@@ -17,13 +17,24 @@ assert.match(reviewSource, /draft_revision = \?/, 'review mutation must atomical
 assert.match(reviewSource, /meta\?\.changes|meta\.changes/, 'review mutation must verify that exactly one row changed');
 assert.match(adminSource, /if \(!reviewedAt\)[\s\S]{0,180}409/, 'stale/already-completed reviews must return conflict');
 assert.match(adminSource, /restoreApprovedReviewToPending/, 'failed draft publication must restore the review to pending');
+assert.match(adminSource, /draftProjectId: null/, 'approving a draft must clear the published working-draft pointer');
+assert.match(adminSource, /rejectSupersededSiblingDrafts/, 'approving a draft must retire sibling review snapshots');
+assert.match(reviewSource, /reject_reason = '已被其他已通过版本取代'/, 'superseded sibling drafts must get an automatic reason');
+assert.match(reviewSource, /status IN \('pending', 'drafting'\)/, 'both submitted and still-editing stale siblings must be retired');
+assert.match(reviewSource, /COALESCE\(latest_approved_at, ''\) = COALESCE\(\?, ''\)/, 'direct sibling cleanup must stay on the approved draft base revision');
+assert.match(reviewSource, /COALESCE\(published\.latest_approved_at, ''\) <> COALESCE\(projects\.latest_approved_at, ''\)/, 'stale queued drafts must be detectable from their published baseline');
 
 const pendingEndpointStart = adminSource.indexOf('export class AdminPendingList');
+const pendingCleanupEndpointStart = adminSource.indexOf('export class AdminPendingCleanup');
 const reviewDetailEndpointStart = adminSource.indexOf('export class AdminReviewDetail');
-assert.ok(pendingEndpointStart >= 0 && reviewDetailEndpointStart > pendingEndpointStart, 'admin pending endpoint source must be readable');
-const pendingEndpointSource = adminSource.slice(pendingEndpointStart, reviewDetailEndpointStart);
+assert.ok(pendingEndpointStart >= 0 && pendingCleanupEndpointStart > pendingEndpointStart, 'admin pending endpoint source must be readable');
+assert.ok(reviewDetailEndpointStart > pendingCleanupEndpointStart, 'admin pending cleanup endpoint source must be readable');
+const pendingEndpointSource = adminSource.slice(pendingEndpointStart, pendingCleanupEndpointStart);
+const pendingCleanupEndpointSource = adminSource.slice(pendingCleanupEndpointStart, reviewDetailEndpointStart);
 assert.doesNotMatch(pendingEndpointSource, /readReviewContentText|readDirectReviewContentText|buildProjectReviewDiff|parseWorldbookEntriesPreview|parseRegexEntriesPreview|R2_BUCKET/, 'queue sorting/listing must not read or parse full project content');
 assert.match(pendingEndpointSource, /result\.projects\.map/, 'queue listing should map lightweight database metadata only');
+assert.doesNotMatch(pendingEndpointSource, /rejectOutdatedDrafts/, 'opening the queue must not trigger a cleanup write');
+assert.match(pendingCleanupEndpointSource, /projectDb\.rejectOutdatedDrafts/, 'manual cleanup endpoint must retire outdated drafts');
 
 assert.match(r2Source, /rollback:/, 'published R2 replacement must expose a rollback operation');
 assert.match(r2Source, /mutatedKeys/, 'R2 rollback must track only keys changed by the current publication attempt');
@@ -125,6 +136,19 @@ function makeContext(bucket) {
   assert.equal(state.get('projects/live/regex-live.json')?.body, 'OLD_REGEX');
   assert.equal(state.get('projects/live/cover.jpg')?.body, 'OLD_COVER');
   assert.equal(state.has('projects/live/cover.png'), false);
+}
+
+{
+  const { bucket, state } = createFakeBucket();
+  const result = await r2Storage.copyProjectFilesToPublished(
+    makeContext(bucket), 'draft', 'live', 'projects/draft/cover.png',
+    [{ type: 'worldbook', text: 'REVIEWED_PROJECT' }, { type: 'regex', text: 'REVIEWED_REGEX' }],
+  );
+  assert.equal(state.get('projects/live/project-live.json')?.body, 'REVIEWED_PROJECT', 'a later draft upload must not replace the reviewed bytes');
+  assert.equal(state.get('projects/live/regex-live.json')?.body, 'REVIEWED_REGEX');
+  await result.rollback();
+  assert.equal(state.get('projects/live/project-live.json')?.body, 'OLD_PROJECT');
+  assert.equal(state.get('projects/live/regex-live.json')?.body, 'OLD_REGEX');
 }
 
 console.log('Admin review recovery smoke checks passed.');

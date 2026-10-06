@@ -1,0 +1,19 @@
+{
+  "entries": {
+    "0": {
+      "uid": 9201,
+      "comment": "QA-M4-主动网络",
+      "content": "<%_ { if (false) fetch('/__qa_audit_only__'); } _%>"
+    },
+    "1": {
+      "uid": 9202,
+      "comment": "QA-U2-外部来源",
+      "content": "审核演示外部资源：https://audit-demo.example.com/resource.png"
+    },
+    "2": {
+      "uid": 9203,
+      "comment": "QA-AH1-编码构造",
+      "content": "<%_ { const qaDecoded = String.fromCharCode(81,65); void qaDecoded; } _%>"
+    }
+  }
+}

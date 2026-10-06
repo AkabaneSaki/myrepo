@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const appSource = await readFile(resolve('src/pages/home/app.ts'), 'utf8');
+const appSource = await readFile(resolve('src/pages/home/app/auth-flow.ts'), 'utf8');
 const authSource = await readFile(resolve('src/endpoints/auth.ts'), 'utf8');
 const hostSource = await readFile(resolve('../src/CreativeWorkshop/bridge/host.ts'), 'utf8');
 

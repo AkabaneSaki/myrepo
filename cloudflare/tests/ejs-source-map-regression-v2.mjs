@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {parseRegex} from '../src/utils/ejs-checker/syntax.mjs';
+const source='<button onclick="first()" onclick="second()">x</button>';
+const parsed=parseRegex(source);
+assert.deepEqual(parsed.internalErrors,[]);
+assert.deepEqual(parsed.errors,[]);
+assert.equal(parsed.units.length,1);
+const call=parsed.units[0].wrapperFunction.body.body.find(n=>n.type==='ExpressionStatement'&&n.expression.type==='CallExpression').expression;
+assert.equal(call.callee.name,'first');
+assert.equal(parsed.units[0].sourceMap.map(call.start),source.indexOf('first'));
+const broken=parseRegex('<button onclick="first(" onclick>x</button>');
+assert.deepEqual(broken.internalErrors,[]);
+assert.equal(broken.errors.length,1);
+console.log('HTML duplicate attributes use the first value and matching original location: ok');

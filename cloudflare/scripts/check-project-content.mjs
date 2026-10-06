@@ -72,6 +72,58 @@ const normalEjsInspection = inspectProjectEntry({ content: '<%_ const value = 1;
 assert.equal(normalEjsInspection.hasEjs, true);
 assert.equal(normalEjsInspection.hasCharacterArtwork, false);
 
+const workshopMetadataBlock = `<%# poem-workshop-meta:v1-start
+{"cw_project_id":"p1","cw_project_name_display":"https://metadata.example/not-content","cw_project_version":"1.0.0","cw_entry_key":"p1:uid:1","cw_name_format_version":4}
+poem-workshop-meta:v1-end %>`;
+const workshopMetadataOnly = workshopMetadataBlock + '普通正文';
+const workshopMetadataInspection = inspectProjectEntry({ content: workshopMetadataOnly }, 'worldbook');
+assert.equal(workshopMetadataInspection.hasEjs, false, 'Workshop-owned metadata comments must not count as creator EJS');
+assert.deepEqual(workshopMetadataInspection.externalLinks, [], 'links inside Workshop metadata are not creator content');
+
+const workshopMetadataInMiddleInspection = inspectProjectEntry(
+  { content: '普通开头\n' + workshopMetadataBlock + '\n普通结尾' },
+  'worldbook',
+);
+assert.equal(workshopMetadataInMiddleInspection.hasEjs, false, 'Workshop metadata is position-independent');
+
+const workshopMetadataAtBottomInspection = inspectProjectEntry(
+  { content: '普通正文\n' + workshopMetadataBlock },
+  'worldbook',
+);
+assert.equal(workshopMetadataAtBottomInspection.hasEjs, false, 'Workshop metadata at the bottom is still ignored');
+
+const duplicateWorkshopMetadataInspection = inspectProjectEntry(
+  { content: workshopMetadataBlock + '\n普通正文\n' + workshopMetadataBlock },
+  'worldbook',
+);
+assert.equal(duplicateWorkshopMetadataInspection.hasEjs, false, 'multiple valid Workshop-owned blocks still are not creator EJS');
+
+const workshopMetadataWithCreatorEjs = inspectProjectEntry(
+  { content: workshopMetadataBlock + '<%_ const creatorValue = 1; _%>普通正文' },
+  'worldbook',
+);
+assert.equal(workshopMetadataWithCreatorEjs.hasEjs, true, 'creator EJS after Workshop metadata must still be detected');
+
+const charInfoBeforeWorkshopInspection = inspectProjectEntry(
+  {
+    content:
+      '<%# char-info-ejs-builder:start:v2 %>\n' +
+      '<%_ const profile = {}; _%>\n' +
+      '<%# char-info-ejs-builder:end:v2 %>\n' +
+      workshopMetadataBlock +
+      '\n普通正文',
+  },
+  'worldbook',
+);
+assert.equal(charInfoBeforeWorkshopInspection.hasEjs, true, 'CharInfo EJS above Workshop metadata must remain visible to inspection');
+assert.equal(charInfoBeforeWorkshopInspection.hasCharacterArtwork, true);
+
+const brokenWorkshopMetadataInspection = inspectProjectEntry(
+  { content: '<%# poem-workshop-meta:v1-start\n{"cw_project_id":"broken"} %>' },
+  'worldbook',
+);
+assert.equal(brokenWorkshopMetadataInspection.hasEjs, true, 'incomplete Workshop metadata must fail closed and remain inspectable');
+
 const artworkContent = `<%# char-info-ejs-builder:start:v2 %>
 <%_
 {

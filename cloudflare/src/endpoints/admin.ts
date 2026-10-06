@@ -2,10 +2,13 @@ import { Num, OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
 import { validateProjectContentPolicy } from '../config/project-content-policy';
 import type { AppContext } from '../types';
-import { projectDb, userDb } from '../utils/db';
+import { projectDb, userDb, acceptedCodeCheckKey } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
+import { attachWorldbookEjsLengthEstimates } from '../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
+import { analyzeProjectCodeCached } from '../utils/ejs-checker/cache.mjs';
+import { buildAuditSnapshot, applyAuditBaseline, buildReviewToken } from '../utils/ejs-checker/audit.mjs';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
 
 import { r2Storage } from '../utils/r2';
@@ -59,22 +62,30 @@ async function validateReviewPayloads(
     projectType?: unknown;
     project_type?: unknown;
     tags?: string[];
+    draftRevision: number;
   },
-): Promise<{ valid: true } | { valid: false; error: string }> {
+): Promise<{ valid: true; snapshot: Record<string, unknown>; reviewToken: string; codeFiles: Array<{ type: ProjectEntryKind; text: string }> } | { valid: false; error: string }> {
   const presence = { worldbook: false, regex: false };
+  const codeCheckInputs: Array<{ fileName: string; type: ProjectEntryKind; text: string }> = [];
 
   for (const kind of ['worldbook', 'regex'] as const) {
     const object = await readReviewContent(c, project.id, project.publishedProjectId, kind);
     if (!object) continue;
 
     const text = await object.text();
-    if (isEmptyProjectContentText(text, kind)) continue;
-
-    const validation = validateProjectContentText(text, kind);
-    if (validation.valid === false) {
-      return { valid: false, error: validation.error };
+    const empty = isEmptyProjectContentText(text, kind);
+    if (!empty) {
+      const validation = validateProjectContentText(text, kind);
+      if (validation.valid === false) {
+        return { valid: false, error: validation.error };
+      }
     }
-    presence[kind] = true;
+    presence[kind] = !empty;
+    codeCheckInputs.push({
+      fileName: kind === 'worldbook' ? `project-${project.id}.json` : `regex-${project.id}.json`,
+      type: kind,
+      text,
+    });
   }
 
   const policyValidation = validateProjectContentPolicy(project, presence);
@@ -82,7 +93,15 @@ async function validateReviewPayloads(
     return { valid: false, error: policyValidation.error };
   }
 
-  return { valid: true };
+  const codeCheck = await analyzeProjectCodeCached(codeCheckInputs);
+  if (codeCheck.gate === 'reject') {
+    const firstBlocker = codeCheck.findings.find(finding => finding.severity === 'high');
+    const label = firstBlocker ? `[${firstBlocker.ruleId}] ${firstBlocker.title}` : '脚本未通过自动检查';
+    return { valid: false, error: `项目仍有自动检查阻断项：${label}。请在审核详情查看后要求 Creator 修改。` };
+  }
+
+  const snapshot = await buildAuditSnapshot(codeCheckInputs, codeCheck);
+  return { valid: true, snapshot, reviewToken: await buildReviewToken(snapshot, project.draftRevision), codeFiles: codeCheckInputs };
 }
 
 /**
@@ -146,6 +165,75 @@ export class AdminPendingList extends OpenAPIRoute {
 }
 
 /**
+ * 清理已经被新通过版本取代的旧审核请求 (仅管理员)
+ */
+export class AdminPendingCleanup extends OpenAPIRoute {
+  schema = {
+    tags: ['Admin'],
+    summary: 'Cleanup Outdated Pending Drafts (Admin Only)',
+    request: {
+      headers: z.object({
+        authorization: z.string().describe('Session ID'),
+      }),
+    },
+    responses: {
+      '200': {
+        description: 'Returns the number of outdated drafts retired',
+      },
+      '403': {
+        description: 'Admin only',
+      },
+    },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload || !payload.isAdmin) {
+      return c.json({ error: 'Admin only' }, 403);
+    }
+
+    const cleanedCount = await projectDb.rejectOutdatedDrafts(c);
+    if (cleanedCount > 0) {
+      await projectDb.logAdminAction(c, {
+        action: 'outdated_review_drafts_cleaned',
+        targetType: 'project_draft',
+        actorId: payload.userId,
+        actorName: payload.globalName || payload.username,
+        detail: { cleanedCount },
+      });
+    }
+
+    return {
+      success: true,
+      cleanedCount,
+    };
+  }
+}
+
+export class AdminPublicCountsRecount extends OpenAPIRoute {
+  schema = {
+    tags: ['Admin'],
+    summary: 'Recount public projects (Admin Only)',
+    request: { headers: z.object({ authorization: z.string() }) },
+    responses: { '200': { description: 'Updated public project counts' }, '403': { description: 'Admin only' } },
+  };
+
+  async handle(c: AppContext) {
+    const payload = await getCurrentUserFromRequest(c);
+    if (!payload?.isAdmin) return c.json({ error: '只有管理员可以重新统计项目数量' }, 403);
+    const counts = await projectDb.recountPublicCounts(c);
+    await projectDb.logAdminAction(c, {
+      action: 'public_project_counts_recounted',
+      targetType: 'project',
+      actorId: payload.userId,
+      actorName: payload.globalName || payload.username,
+      detail: { total: counts.total },
+    });
+    return { success: true, publicCounts: { total: counts.total, byType: counts.byType } };
+  }
+}
+
+/**
  * 审核项目 (仅管理员)
  */
 export class AdminReviewDetail extends OpenAPIRoute {
@@ -193,8 +281,23 @@ export class AdminReviewDetail extends OpenAPIRoute {
       isUpdate ? readDirectReviewContentText(c, project.publishedProjectId, 'regex') : Promise.resolve(null),
     ]);
 
-    const worldbookEntriesPreview = currentWorldbookText ? parseWorldbookEntriesPreview(currentWorldbookText) : [];
+    const worldbookEntriesPreview = currentWorldbookText
+      ? attachWorldbookEjsLengthEstimates(
+          parseWorldbookEntriesPreview(currentWorldbookText),
+          project.worldbookEjsLengthEstimates || {},
+        )
+      : [];
     const regexEntriesPreview = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
+    const codeCheckInputs = [
+      ...(currentWorldbookText
+        ? [{ fileName: `project-${project.id}.json`, type: 'worldbook', text: currentWorldbookText }]
+        : []),
+      ...(currentRegexText ? [{ fileName: `regex-${project.id}.json`, type: 'regex', text: currentRegexText }] : []),
+    ];
+    const rawCodeCheck = await analyzeProjectCodeCached(codeCheckInputs);
+    const snapshot = rawCodeCheck.gate === 'reject' ? null : await buildAuditSnapshot(codeCheckInputs, rawCodeCheck);
+    const baseline = project[acceptedCodeCheckKey] ? JSON.parse(project[acceptedCodeCheckKey]) : null;
+    const codeCheck = snapshot ? applyAuditBaseline(rawCodeCheck, snapshot, baseline) : rawCodeCheck;
     const reviewDiff = buildProjectReviewDiff({
       previousWorldbookText,
       currentWorldbookText,
@@ -220,6 +323,8 @@ export class AdminReviewDetail extends OpenAPIRoute {
       worldbookEntriesPreview,
       regexEntriesPreview,
       reviewDiff,
+      codeCheck,
+      reviewToken: snapshot ? await buildReviewToken(snapshot, project.draftRevision) : null,
     };
   }
 }
@@ -242,6 +347,7 @@ export class AdminReview extends OpenAPIRoute {
               action: z.enum(['approve', 'reject']),
               rejectReason: Str({ required: false }),
               expectedRevision: z.number().int().min(1).optional(),
+              reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
             }),
           },
         },
@@ -265,7 +371,7 @@ export class AdminReview extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { projectId } = data.params;
-    const { action, rejectReason, expectedRevision } = data.body;
+    const { action, rejectReason, expectedRevision, reviewToken } = data.body;
 
     // 检查项目是否存在
     const project = await projectDb.get(c, projectId);
@@ -285,23 +391,29 @@ export class AdminReview extends OpenAPIRoute {
       return c.json({ error: 'Reject reason required' }, 400);
     }
 
+    let acceptedSnapshot: Record<string, unknown> | undefined;
+    let reviewedCodeFiles: Array<{ type: ProjectEntryKind; text: string }> | undefined;
     if (action === 'approve') {
       const contentValidation = await validateReviewPayloads(c, project);
       if (contentValidation.valid === false) {
         return c.json({ error: contentValidation.error }, 409);
       }
+      if (!reviewToken || reviewToken !== contentValidation.reviewToken) {
+        return c.json({ error: '文件内容或检查依据已变化，请重新打开审核详情，确认后再通过。' }, 409);
+      }
+      acceptedSnapshot = contentValidation.snapshot;
+      reviewedCodeFiles = contentValidation.codeFiles;
     }
 
     let approvedVersion: string | null = null;
     let publishedVersionBeforeApproval: string | null = null;
-    let publishedDraftProjectIdBeforeApproval: string | null = null;
+    let supersededDraftCount = 0;
     if (action === 'approve' && project.reviewTarget === 'draft' && project.publishedProjectId) {
       const published = await projectDb.get(c, project.publishedProjectId);
       if (!published) {
         return c.json({ error: 'Published project not found for draft' }, 409);
       }
       publishedVersionBeforeApproval = published.version;
-      publishedDraftProjectIdBeforeApproval = published.draftProjectId || null;
       const expectedTargetVersion = bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       if (project.version !== expectedTargetVersion) {
         return c.json(
@@ -323,6 +435,7 @@ export class AdminReview extends OpenAPIRoute {
       action,
       rejectReason,
       expectedRevision,
+      acceptedSnapshot,
     );
     if (!reviewedAt) {
       return c.json({ error: 'Review conflict: project was changed or already reviewed. Refresh and retry.' }, 409);
@@ -336,6 +449,7 @@ export class AdminReview extends OpenAPIRoute {
           projectId,
           project.publishedProjectId,
           project.coverImage || undefined,
+          reviewedCodeFiles,
         );
 
         try {
@@ -343,6 +457,7 @@ export class AdminReview extends OpenAPIRoute {
             name: project.name,
             description: project.description || '',
             precautions: project.precautions ?? null,
+            discordThreadUrl: project.discordThreadUrl ?? null,
             version: approvedVersion || project.version,
             versionLabel: project.versionLabel ?? null,
             characterReferenceId: project.characterReferenceId ?? null,
@@ -355,6 +470,8 @@ export class AdminReview extends OpenAPIRoute {
             compatibilityUpdatedAt: project.compatibilityUpdatedAt ?? null,
             conflictsWithOriginal: project.conflictsWithOriginal,
             originalConflictReferenceItemIds: project.originalConflictReferenceItemIds,
+            originalConflictEntryNames: project.originalConflictEntryNames,
+            worldbookEjsLengthEstimates: project.worldbookEjsLengthEstimates,
             projectType: project.projectType,
             extensionType: project.extensionType,
             facets: project.facets,
@@ -370,11 +487,11 @@ export class AdminReview extends OpenAPIRoute {
             hasEjs: project.hasEjs,
             hasCharacterArtwork: project.hasCharacterArtwork,
             status: 'approved',
-            draftProjectId:
-              publishedDraftProjectIdBeforeApproval === projectId ? null : publishedDraftProjectIdBeforeApproval,
+            draftProjectId: null,
             visibility: project.visibility,
             isPublished: true,
             latestApprovedAt: reviewedAt,
+            acceptedCodeCheck: JSON.stringify({ ...acceptedSnapshot, reviewerId: payload.userId, reviewedAt, revision: expectedRevision }),
           });
         } catch (error) {
           try {
@@ -396,6 +513,7 @@ export class AdminReview extends OpenAPIRoute {
           expectedRevision,
           reviewedAt,
           project.latestApprovedAt ?? null,
+          project[acceptedCodeCheckKey],
         );
         if (!restored) {
           console.error('Failed to restore draft review state after publication failure', {
@@ -405,6 +523,23 @@ export class AdminReview extends OpenAPIRoute {
           });
         }
         throw error;
+      }
+
+      try {
+        supersededDraftCount = await projectDb.rejectSupersededSiblingDrafts(
+          c,
+          project.publishedProjectId,
+          projectId,
+          project.latestApprovedAt ?? null,
+          payload.userId,
+          reviewedAt,
+        );
+      } catch (error) {
+        console.error('Failed to auto-reject superseded sibling drafts after approval', {
+          projectId,
+          publishedProjectId: project.publishedProjectId,
+          error,
+        });
       }
 
       await projectDb.delete(c, projectId);
@@ -425,6 +560,7 @@ export class AdminReview extends OpenAPIRoute {
           expectedRevision,
           reviewedAt,
           project.latestApprovedAt ?? null,
+          project[acceptedCodeCheckKey],
         );
         throw error;
       }
@@ -450,12 +586,14 @@ export class AdminReview extends OpenAPIRoute {
         publishedProjectId: project.publishedProjectId || null,
         projectCreatedAt: project.createdAt,
         projectUpdatedAt: project.updatedAt,
+        supersededDraftCount,
       },
     });
 
     return {
       success: true,
       message: action === 'approve' ? 'Project approved successfully' : 'Project rejected',
+      supersededDraftCount,
     };
   }
 }

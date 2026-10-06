@@ -2,6 +2,19 @@ import { homeScript } from './home/app';
 import { homeShellStyles } from './home/shell-styles';
 import { homeStyles } from './home/styles';
 
+function getHomeScriptRevision(source: string): string {
+  let left = 2166136261;
+  let right = 5381;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    left = Math.imul(left ^ code, 16777619);
+    right = Math.imul(right, 33) ^ code;
+  }
+  return `${(left >>> 0).toString(36)}-${(right >>> 0).toString(36)}-${source.length.toString(36)}`;
+}
+
+export const HOME_SCRIPT_REVISION = getHomeScriptRevision(homeScript);
+
 export const homePage = (): string => {
   return `<!DOCTYPE html>
 <html lang="zh">
@@ -18,7 +31,7 @@ export const homePage = (): string => {
 </head>
 <body>
   <div class="container" id="app"></div>
-  <script src="/assets/home.js"></script>
+  <script src="/assets/home.js?v=${HOME_SCRIPT_REVISION}"></script>
 </body>
 </html>`;
 };

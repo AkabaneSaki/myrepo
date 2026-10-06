@@ -1,5 +1,7 @@
 import type { AppContext, ProjectCompatibilityStatus, ProjectReviewTarget, ProjectStatus } from '../types';
 import {
+  LEGACY_BASE_TAG_BY_PROJECT_TYPE,
+  PROJECT_TYPES,
   MAX_DISPLAY_TAGS,
   getProjectFacetTagValues,
   normalizeCustomTags,
@@ -12,9 +14,19 @@ import {
   type ProjectType,
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
-import { getReadyProjectRankingBoard } from './project-daily-rankings';
+import { generateProjectRankingDay, getReadyProjectRankingBoard } from './project-daily-rankings';
+import {
+  normalizeWorldbookEjsLengthEstimates,
+  parseWorldbookEjsLengthEstimates,
+  type WorldbookEjsLengthEstimates,
+} from './project-entry-estimates';
 import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
+
+const MAX_DAILY_COUNTED_DOWNLOADS = 15_000;
+// Symbol properties survive internal object spreads but never appear in JSON
+// responses. Review evidence must not leak through the public Project shape.
+export const acceptedCodeCheckKey = Symbol('acceptedCodeCheck');
 
 /**
  * 生成 UUID
@@ -224,6 +236,7 @@ export const projectDb = {
       name: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -236,6 +249,9 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
+      acceptedCodeCheck?: string | null;
       authorId: string;
       authorName: string;
       authorAvatar: string;
@@ -269,13 +285,13 @@ export const projectDb = {
       .prepare(
         `
 			INSERT INTO projects (
-				id, name, description, precautions, version, version_label, author_id, author_name, author_avatar,
+				id, name, description, precautions, discord_thread_url, version, version_label, author_id, author_name, author_avatar,
 				status, download_url, file_size, has_ejs, has_character_artwork, project_type, extension_type, facets, custom_tags, display_tags, tags, cover_image, cover_position_x, cover_position_y, cover_zoom, root_project_id, published_project_id,
 				draft_project_id, review_target, draft_revision, visibility, is_published, latest_approved_at,
 				character_reference_id, built_for_reference_version_id, tested_through_reference_version_id,
 				compatibility_status, compatibility_known_incompatible, compatibility_note, compatibility_grace_until, compatibility_updated_at,
-				conflicts_with_original, original_conflict_reference_item_ids, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				conflicts_with_original, original_conflict_reference_item_ids, original_conflict_entry_names, worldbook_ejs_length_estimates, accepted_code_check, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
       )
       .bind(
@@ -283,6 +299,7 @@ export const projectDb = {
         project.name,
         project.description || null,
         project.precautions || null,
+        project.discordThreadUrl || null,
         project.version,
         project.versionLabel || null,
         project.authorId,
@@ -321,6 +338,9 @@ export const projectDb = {
         project.compatibilityUpdatedAt || null,
         project.conflictsWithOriginal ? 1 : 0,
         JSON.stringify(project.originalConflictReferenceItemIds || []),
+        JSON.stringify(project.originalConflictEntryNames || []),
+        JSON.stringify(normalizeWorldbookEjsLengthEstimates(project.worldbookEjsLengthEstimates)),
+        project.acceptedCodeCheck ?? null,
         now(),
         now(),
       )
@@ -437,6 +457,7 @@ export const projectDb = {
       name?: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version?: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -449,6 +470,8 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -471,6 +494,7 @@ export const projectDb = {
       visibility?: boolean;
       isPublished?: boolean;
       latestApprovedAt?: string | null;
+      acceptedCodeCheck?: string | null;
     },
   ): Promise<void> => {
     const db = c.env.DB;
@@ -488,6 +512,10 @@ export const projectDb = {
     if (updates.precautions !== undefined) {
       setClauses.push('precautions = ?');
       values.push(updates.precautions);
+    }
+    if (updates.discordThreadUrl !== undefined) {
+      setClauses.push('discord_thread_url = ?');
+      values.push(updates.discordThreadUrl);
     }
     if (updates.version !== undefined) {
       setClauses.push('version = ?');
@@ -536,6 +564,14 @@ export const projectDb = {
     if (updates.originalConflictReferenceItemIds !== undefined) {
       setClauses.push('original_conflict_reference_item_ids = ?');
       values.push(JSON.stringify(updates.originalConflictReferenceItemIds));
+    }
+    if (updates.originalConflictEntryNames !== undefined) {
+      setClauses.push('original_conflict_entry_names = ?');
+      values.push(JSON.stringify(updates.originalConflictEntryNames));
+    }
+    if (updates.worldbookEjsLengthEstimates !== undefined) {
+      setClauses.push('worldbook_ejs_length_estimates = ?');
+      values.push(JSON.stringify(normalizeWorldbookEjsLengthEstimates(updates.worldbookEjsLengthEstimates)));
     }
     if (updates.projectType !== undefined) {
       setClauses.push('project_type = ?');
@@ -626,21 +662,60 @@ export const projectDb = {
       setClauses.push('latest_approved_at = ?');
       values.push(updates.latestApprovedAt);
     }
+    if (updates.acceptedCodeCheck !== undefined) {
+      setClauses.push('accepted_code_check = ?');
+      values.push(updates.acceptedCodeCheck);
+    }
 
     values.push(projectId);
 
-    await db
+    const updated = await db
       .prepare(
         `
-			UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?
+			UPDATE projects SET ${setClauses.join(', ')} WHERE id = ? AND content_mutation_token IS NULL RETURNING id
 		`,
       )
       .bind(...values)
-      .run();
+      .first<{ id: string }>();
+    if (!updated) throw new Error('文件正在保存或项目已变化，请稍后刷新再试。');
+  },
+
+  beginContentMutation: async (c: AppContext, project: { id: string; draftRevision: number; status: string }) => {
+    const token = crypto.randomUUID();
+    const result = await c.env.DB.prepare(
+      `UPDATE projects SET content_mutation_token = ?, status = 'drafting', draft_revision = draft_revision + 1,
+         reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND status = ?
+         AND status IN ('pending', 'drafting', 'rejected') AND content_mutation_token IS NULL
+       RETURNING draft_revision`,
+    ).bind(token, now(), project.id, project.draftRevision, project.status).first<{ draft_revision: number }>();
+    return result ? { token, revision: result.draft_revision } : null;
+  },
+
+  finishContentMutation: async (
+    c: AppContext,
+    projectId: string,
+    mutation: { token: string; revision: number },
+    updates: { downloadUrl?: string; fileSize?: number; hasEjs: boolean; hasCharacterArtwork: boolean },
+  ): Promise<boolean> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects SET download_url = COALESCE(?, download_url), file_size = COALESCE(?, file_size),
+         has_ejs = ?, has_character_artwork = ?, status = 'pending', content_mutation_token = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND content_mutation_token = ? RETURNING id`,
+    ).bind(updates.downloadUrl ?? null, updates.fileSize ?? null, updates.hasEjs ? 1 : 0,
+      updates.hasCharacterArtwork ? 1 : 0, now(), projectId, mutation.revision, mutation.token).first<{ id: string }>();
+    return result?.id === projectId;
+  },
+
+  cancelContentMutation: async (c: AppContext, projectId: string, mutation: { token: string; revision: number }): Promise<void> => {
+    await c.env.DB.prepare(
+      `UPDATE projects SET status = 'pending', content_mutation_token = NULL, updated_at = ?
+       WHERE id = ? AND draft_revision = ? AND content_mutation_token = ?`,
+    ).bind(now(), projectId, mutation.revision, mutation.token).run();
   },
 
   bumpDraftRevision: async (c: AppContext, projectId: string): Promise<void> => {
-    await c.env.DB.prepare(
+    const updated = await c.env.DB.prepare(
       `UPDATE projects
        SET draft_revision = draft_revision + 1,
            status = 'pending',
@@ -648,10 +723,11 @@ export const projectDb = {
            reviewed_at = NULL,
            reviewer_id = NULL,
            updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND content_mutation_token IS NULL RETURNING id`,
     )
       .bind(now(), projectId)
-      .run();
+      .first<{ id: string }>();
+    if (!updated) throw new Error('文件正在保存或项目已变化，请稍后刷新再试。');
   },
 
   /**
@@ -688,6 +764,45 @@ export const projectDb = {
   /**
    * 获取项目列表
    */
+  getPublicCounts: async (c: AppContext) => {
+    const rows = await c.env.DB.prepare(
+      'SELECT scope, project_count, revision FROM public_project_counts',
+    ).all<{ scope: string; project_count: number; revision: number }>();
+    const byType = Object.fromEntries(PROJECT_TYPES.map(type => [type, 0])) as Record<ProjectType, number>;
+    let total = 0;
+    let revision = 0;
+    for (const row of rows.results || []) {
+      if (row.scope === '*') {
+        total = Number(row.project_count);
+        revision = Number(row.revision);
+      } else if (PROJECT_TYPES.includes(row.scope as ProjectType)) {
+        byType[row.scope as ProjectType] = Number(row.project_count);
+      }
+    }
+    return { total, byType, revision };
+  },
+
+  recountPublicCounts: async (c: AppContext) => {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO public_project_counts (scope, project_count, revision)
+         SELECT '*', COUNT(*), 1 FROM projects
+         WHERE status = 'approved' AND is_published = 1 AND visibility = 1
+         ON CONFLICT(scope) DO UPDATE SET
+           project_count = excluded.project_count,
+           revision = public_project_counts.revision + 1`,
+      ),
+      c.env.DB.prepare("DELETE FROM public_project_counts WHERE scope <> '*'"),
+      c.env.DB.prepare(
+        `INSERT INTO public_project_counts (scope, project_count)
+         SELECT project_type, COUNT(*) FROM projects
+         WHERE status = 'approved' AND is_published = 1 AND visibility = 1
+         GROUP BY project_type`,
+      ),
+    ]);
+    return projectDb.getPublicCounts(c);
+  },
+
   list: async (
     c: AppContext,
     options: {
@@ -699,6 +814,8 @@ export const projectDb = {
       tag?: string;
       tags?: string[];
       search?: string;
+      minLikes?: number;
+      minDownloads?: number;
       sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads';
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
@@ -729,15 +846,16 @@ export const projectDb = {
       values.push(options.projectType);
     }
 
-    const tagFilters = Array.from(new Set([
-      ...(Array.isArray(options.tags) ? options.tags : []),
-      ...(options.tag ? [options.tag] : []),
-    ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
-    tagFilters.forEach(tag => {
-      conditions.push('(p.facets LIKE ? OR p.custom_tags LIKE ? OR p.tags LIKE ? OR p.extension_type = ?)');
-      const tagPattern = `%"${tag}"%`;
-      values.push(tagPattern, tagPattern, tagPattern, tag);
-    });
+    const minLikes = Math.max(0, Math.floor(Number(options.minLikes || 0)));
+    if (minLikes > 0) {
+      conditions.push('p.likes_count >= ?');
+      values.push(minLikes);
+    }
+    const minDownloads = Math.max(0, Math.floor(Number(options.minDownloads || 0)));
+    if (minDownloads > 0) {
+      conditions.push('p.downloads_count >= ?');
+      values.push(minDownloads);
+    }
 
     const rawSearchTerm = options.search?.trim();
     const normalizedSearchTerm = rawSearchTerm
@@ -748,32 +866,76 @@ export const projectDb = {
           .trim()
       : '';
     const searchTerm = Array.from(normalizedSearchTerm).slice(0, 20).join('');
+    const hasIndexedTextSearch = Array.from(searchTerm).length >= 3;
+    const hasIndexedShortSearch = !hasIndexedTextSearch && /^[\p{L}\p{N}]{1,2}$/u.test(searchTerm);
     if (searchTerm) {
-      conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
-      const searchPattern = `%${searchTerm}%`;
-      values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      if (hasIndexedTextSearch) {
+        conditions.push('project_search MATCH ?');
+        values.push(`"${searchTerm.replace(/"/g, '""')}"`);
+      } else {
+        if (hasIndexedShortSearch) {
+          conditions.push('project_search_short MATCH ?');
+          values.push(`"${Array.from(searchTerm).join(' ')}"`);
+        }
+        // The short index may also find characters across field boundaries.
+        // Check the original fields to preserve substring search behavior.
+        conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
+        const searchPattern = `%${searchTerm}%`;
+        values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      }
     }
+
+    const tagFilters = Array.from(new Set([
+      ...(Array.isArray(options.tags) ? options.tags : []),
+      ...(options.tag ? [options.tag] : []),
+    ].map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12);
+    const legacyTagTypes = new Map(Object.entries(LEGACY_BASE_TAG_BY_PROJECT_TYPE)
+      .map(([projectType, legacyTag]) => [legacyTag, projectType]));
+    const firstExactTag = tagFilters.find(tag => !legacyTagTypes.has(tag));
+    tagFilters.forEach(tag => {
+      const legacyType = legacyTagTypes.get(tag);
+      if (legacyType) {
+        conditions.push('p.project_type = ?');
+        values.push(legacyType);
+      } else {
+        conditions.push(tag === firstExactTag && !hasIndexedTextSearch && !hasIndexedShortSearch
+          ? 'tag_candidate.tag = ?'
+          : 'p.id IN (SELECT project_id FROM project_search_tags WHERE tag = ?)');
+        values.push(tag);
+      }
+    });
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const listWhereClause = whereClause;
+    const listSource = hasIndexedTextSearch
+      ? 'project_search CROSS JOIN projects p ON p.rowid = project_search.rowid'
+      : hasIndexedShortSearch
+        ? 'project_search_short CROSS JOIN projects p ON p.rowid = project_search_short.rowid'
+        : firstExactTag
+          ? 'project_search_tags tag_candidate CROSS JOIN projects p ON p.id = tag_candidate.project_id'
+          : 'projects p';
 
 
 
 
 
     const sortMode = options.sort || 'published';
-    const hasRankingSearchFilters = Boolean(options.authorId || searchTerm || tagFilters.length > 0);
-    const rankingKind: 'discover' | 'rating' | null =
-      options.approvedOnly !== false && !hasRankingSearchFilters && (sortMode === 'discover' || sortMode === 'rating')
-        ? sortMode
+    const hasRankingSearchFilters = Boolean(options.authorId || searchTerm || tagFilters.length > 0 || minLikes > 0 || minDownloads > 0);
+    const rankingKind: 'discover' | null =
+      options.approvedOnly !== false && !hasRankingSearchFilters && sortMode === 'discover'
+        ? 'discover'
         : null;
     const orderBy = (() => {
       switch (sortMode) {
         case 'updated':
-          return 'p.updated_at DESC, p.created_at DESC';
+          return 'p.latest_approved_at DESC, p.id DESC';
         case 'downloads':
           return 'p.downloads_count DESC, p.created_at DESC';
         case 'likes':
+          return 'p.likes_count DESC, p.created_at DESC';
+        case 'rating':
+          // Legacy clients may still request the retired computed rating board.
+          // Keep the route compatible without rebuilding rating_rank: use the cheap public like order.
           return 'p.likes_count DESC, p.created_at DESC';
         case 'subscribes':
           // Legacy clients may still request this sort. Subscription is now an install/update-notification state,
@@ -781,14 +943,36 @@ export const projectDb = {
           return 'p.downloads_count DESC, p.created_at DESC';
         case 'published':
         default:
-          return 'p.latest_approved_at DESC, p.updated_at DESC';
+          return 'p.created_at DESC, p.id DESC';
       }
     })();
+    const shouldHintMetricFilterOrder = Boolean(
+      options.approvedOnly !== false
+      && !options.authorId
+      && !options.projectType
+      && !searchTerm
+      && tagFilters.length === 0
+      && (minLikes > 0 || minDownloads > 0),
+    );
+    const listIndexHint = shouldHintMetricFilterOrder
+      ? ({
+          published: 'INDEXED BY idx_projects_public_created',
+          updated: 'INDEXED BY idx_projects_public_latest_approved',
+          downloads: 'INDEXED BY idx_projects_public_downloads',
+          likes: 'INDEXED BY idx_projects_public_likes',
+          rating: 'INDEXED BY idx_projects_public_likes',
+          subscribes: 'INDEXED BY idx_projects_public_downloads',
+        } as Record<string, string>)[sortMode] || ''
+      : '';
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
 
     if (rankingKind) {
-      const board = await getReadyProjectRankingBoard(c);
+      let board = await getReadyProjectRankingBoard(c);
+      if (!board) {
+        await generateProjectRankingDay(c);
+        board = await getReadyProjectRankingBoard(c);
+      }
       if (board) {
         const totalCount = options.projectType
           ? Number(board.typeCounts[options.projectType] || 0)
@@ -804,9 +988,7 @@ export const projectDb = {
           };
         }
 
-        const rankColumn = rankingKind === 'discover'
-          ? options.projectType ? 'discover_type_rank' : 'discover_rank'
-          : options.projectType ? 'rating_type_rank' : 'rating_rank';
+        const rankColumn = options.projectType ? 'discover_type_rank' : 'discover_rank';
         const typeClause = options.projectType ? 'AND r.project_type = ?' : '';
         const rankValues: unknown[] = [board.rankingDay];
         if (options.projectType) rankValues.push(options.projectType);
@@ -839,14 +1021,13 @@ export const projectDb = {
       }
     }
 
-    // Search/tag/author filters intentionally bypass the ranking board. Keeping
-    // wildcard filtering off the rank hot path prevents a ranked page request
-    // from turning into a whole-board scan.
+    // Search/tag/author filters bypass the ranking board so its default page
+    // keeps the bounded rank-range query.
     const results = await db
       .prepare(
         `
           SELECT p.*, u.global_name
-          FROM projects p
+          FROM ${listSource} ${listIndexHint}
           LEFT JOIN users u ON p.author_id = u.id
           ${listWhereClause}
           ORDER BY ${orderBy}
@@ -878,30 +1059,83 @@ export const projectDb = {
     action: 'approve' | 'reject',
     rejectReason: string | undefined,
     expectedRevision: number,
+    acceptedSnapshot?: Record<string, unknown>,
   ): Promise<string | null> => {
     const db = c.env.DB;
     const reviewedAt = now();
+    if (action === 'approve' && !acceptedSnapshot) throw new Error('Approval requires a reviewed code snapshot');
+    const acceptance = action === 'approve'
+      ? JSON.stringify({ ...acceptedSnapshot, reviewerId, reviewedAt, revision: expectedRevision })
+      : null;
 
     const result = action === 'approve'
       ? await db
           .prepare(
             `UPDATE projects
              SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
-                 latest_approved_at = ?, updated_at = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+                 latest_approved_at = ?, updated_at = ?, accepted_code_check = ?
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
           )
-          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, projectId, expectedRevision)
-          .run()
+          .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, acceptance, projectId, expectedRevision)
+          .first<{ id: string }>()
       : await db
           .prepare(
             `UPDATE projects
              SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ?`,
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
           )
           .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
-          .run();
+          .first<{ id: string }>();
 
-    return Number(result.meta?.changes || 0) === 1 ? reviewedAt : null;
+    return result?.id === projectId ? reviewedAt : null;
+  },
+
+  rejectSupersededSiblingDrafts: async (
+    c: AppContext,
+    publishedProjectId: string,
+    approvedDraftId: string,
+    baseLatestApprovedAt: string | null,
+    reviewerId: string,
+    reviewedAt: string,
+  ): Promise<number> => {
+    const result = await c.env.DB.prepare(
+      `UPDATE projects
+       SET status = 'rejected', reviewed_at = ?, reviewer_id = ?,
+           reject_reason = '已被其他已通过版本取代', updated_at = ?
+       WHERE published_project_id = ?
+         AND review_target = 'draft'
+         AND id <> ?
+         AND COALESCE(latest_approved_at, '') = COALESCE(?, '')
+         AND status IN ('pending', 'drafting')`,
+    )
+      .bind(reviewedAt, reviewerId, reviewedAt, publishedProjectId, approvedDraftId, baseLatestApprovedAt)
+      .run();
+
+    return Number(result.meta?.changes || 0);
+  },
+
+  rejectOutdatedDrafts: async (c: AppContext): Promise<number> => {
+    const timestamp = now();
+    const result = await c.env.DB.prepare(
+      `UPDATE projects
+       SET status = 'rejected', reviewed_at = ?, reviewer_id = NULL,
+           reject_reason = '已被其他已通过版本取代', updated_at = ?
+       WHERE review_target = 'draft'
+         AND status IN ('pending', 'drafting')
+         AND published_project_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM projects AS published
+           WHERE published.id = projects.published_project_id
+             AND published.status = 'approved'
+             AND published.is_published = 1
+             AND COALESCE(published.latest_approved_at, '') <> COALESCE(projects.latest_approved_at, '')
+         )`,
+    )
+      .bind(timestamp, timestamp)
+      .run();
+
+    return Number(result.meta?.changes || 0);
   },
 
   restoreApprovedReviewToPending: async (
@@ -911,17 +1145,18 @@ export const projectDb = {
     expectedRevision: number,
     reviewedAt: string,
     previousLatestApprovedAt: string | null,
+    previousAcceptedCodeCheck: string | null,
   ): Promise<boolean> => {
     const result = await c.env.DB.prepare(
       `UPDATE projects
        SET status = 'pending', reviewed_at = NULL, reviewer_id = NULL, reject_reason = NULL,
-           latest_approved_at = ?, updated_at = ?
-       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ?`,
+           latest_approved_at = ?, updated_at = ?, accepted_code_check = ?
+       WHERE id = ? AND status = 'approved' AND draft_revision = ? AND reviewer_id = ? AND reviewed_at = ? RETURNING id`,
     )
-      .bind(previousLatestApprovedAt, now(), projectId, expectedRevision, reviewerId, reviewedAt)
-      .run();
+      .bind(previousLatestApprovedAt, now(), previousAcceptedCodeCheck, projectId, expectedRevision, reviewerId, reviewedAt)
+      .first<{ id: string }>();
 
-    return Number(result.meta?.changes || 0) === 1;
+    return result?.id === projectId;
   },
 
   /**
@@ -1066,6 +1301,19 @@ export const projectDb = {
 
   toggleLike: async (c: AppContext, projectId: string, userId: string) => {
     const db = c.env.DB;
+    const allowed = await db.prepare(
+      `INSERT INTO project_like_daily_usage (user_id, day_key, toggle_count)
+       VALUES (?, date('now'), 1)
+       ON CONFLICT(user_id) DO UPDATE SET
+         day_key = excluded.day_key,
+         toggle_count = CASE WHEN project_like_daily_usage.day_key = excluded.day_key
+           THEN project_like_daily_usage.toggle_count + 1 ELSE 1 END
+       WHERE project_like_daily_usage.day_key <> excluded.day_key
+          OR project_like_daily_usage.toggle_count < 100
+       RETURNING toggle_count`,
+    ).bind(userId).first<{ toggle_count: number }>();
+    if (!allowed) return null;
+
     const existing = await db
       .prepare(`SELECT 1 as liked FROM project_likes WHERE project_id = ? AND user_id = ?`)
       .bind(projectId, userId)
@@ -1075,7 +1323,7 @@ export const projectDb = {
       await db.prepare(`DELETE FROM project_likes WHERE project_id = ? AND user_id = ?`).bind(projectId, userId).run();
     } else {
       await db
-        .prepare(`INSERT INTO project_likes (project_id, user_id, created_at) VALUES (?, ?, ?)`)
+        .prepare(`INSERT OR IGNORE INTO project_likes (project_id, user_id, created_at) VALUES (?, ?, ?)`)
         .bind(projectId, userId, now())
         .run();
     }
@@ -1086,6 +1334,23 @@ export const projectDb = {
       .first<{ count: number }>();
 
     return { liked: !existing, count: Number(counter?.count || 0) };
+  },
+
+  getLikedProjectIds: async (c: AppContext, projectIds: string[], userId: string) => {
+    const uniqueProjectIds = Array.from(new Set(projectIds.filter(Boolean))).slice(0, 50);
+    if (!userId || uniqueProjectIds.length === 0) return new Set<string>();
+
+    const likes = await c.env.DB.prepare(
+      `
+        SELECT project_id
+        FROM project_likes
+        WHERE user_id = ?2 AND project_id IN (SELECT value FROM json_each(?1))
+      `,
+    )
+      .bind(JSON.stringify(uniqueProjectIds), userId)
+      .all<{ project_id: string }>();
+
+    return new Set((likes.results || []).map(row => row.project_id));
   },
 
   getSubscribedProjectIds: async (c: AppContext, userId: string) => {
@@ -1137,6 +1402,7 @@ export const projectDb = {
       name?: string;
       description?: string;
       precautions?: string | null;
+      discordThreadUrl?: string | null;
       version?: string;
       versionLabel?: string | null;
       characterReferenceId?: string | null;
@@ -1149,6 +1415,8 @@ export const projectDb = {
       compatibilityUpdatedAt?: string | null;
       conflictsWithOriginal?: boolean;
       originalConflictReferenceItemIds?: string[];
+      originalConflictEntryNames?: string[];
+      worldbookEjsLengthEstimates?: WorldbookEjsLengthEstimates;
       projectType?: ProjectType;
       extensionType?: ExtensionType | null;
       facets?: ProjectFacets;
@@ -1160,16 +1428,28 @@ export const projectDb = {
       coverPositionY?: number;
       coverZoom?: number;
     },
-  ) => {
+    attempt: number = 0,
+  ): Promise<string | null> => {
+    if (attempt >= 3) return null;
+
     const published = await projectDb.get(c, publishedProjectId);
     if (!published) return null;
     const existingDraft = published.draftProjectId ? await projectDb.get(c, published.draftProjectId) : null;
+    if (published.draftProjectId && !existingDraft) {
+      await c.env.DB.prepare(
+        `UPDATE projects SET draft_project_id = NULL, updated_at = ? WHERE id = ? AND draft_project_id = ?`,
+      )
+        .bind(now(), publishedProjectId, published.draftProjectId)
+        .run();
+      return projectDb.createDraftFromPublished(c, publishedProjectId, updates, attempt + 1);
+    }
     if (existingDraft) {
       const nextVersion = updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch');
       await projectDb.update(c, existingDraft.id, {
         name: updates.name ?? existingDraft.name,
         description: updates.description ?? existingDraft.description ?? '',
         precautions: updates.precautions !== undefined ? updates.precautions : existingDraft.precautions,
+        discordThreadUrl: updates.discordThreadUrl !== undefined ? updates.discordThreadUrl : existingDraft.discordThreadUrl,
         version: nextVersion,
         versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : existingDraft.versionLabel,
         characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : existingDraft.characterReferenceId,
@@ -1182,6 +1462,8 @@ export const projectDb = {
         compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : existingDraft.compatibilityUpdatedAt,
         conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : existingDraft.conflictsWithOriginal,
         originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : existingDraft.originalConflictReferenceItemIds,
+        originalConflictEntryNames: updates.originalConflictEntryNames !== undefined ? updates.originalConflictEntryNames : existingDraft.originalConflictEntryNames,
+        worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : existingDraft.worldbookEjsLengthEstimates,
         projectType: updates.projectType ?? existingDraft.projectType,
         extensionType: updates.extensionType !== undefined ? updates.extensionType : existingDraft.extensionType,
         facets: updates.facets ?? existingDraft.facets,
@@ -1203,6 +1485,7 @@ export const projectDb = {
       name: updates.name ?? published.name,
       description: updates.description ?? published.description ?? undefined,
       precautions: updates.precautions !== undefined ? updates.precautions : published.precautions,
+      discordThreadUrl: updates.discordThreadUrl !== undefined ? updates.discordThreadUrl : published.discordThreadUrl,
       version: updates.version ?? bumpProjectVersionWithLegacyFallback(published.version, 'patch'),
       versionLabel: updates.versionLabel !== undefined ? updates.versionLabel : published.versionLabel,
       characterReferenceId: updates.characterReferenceId !== undefined ? updates.characterReferenceId : published.characterReferenceId,
@@ -1215,6 +1498,9 @@ export const projectDb = {
       compatibilityUpdatedAt: updates.compatibilityUpdatedAt !== undefined ? updates.compatibilityUpdatedAt : published.compatibilityUpdatedAt,
       conflictsWithOriginal: updates.conflictsWithOriginal !== undefined ? updates.conflictsWithOriginal : published.conflictsWithOriginal,
       originalConflictReferenceItemIds: updates.originalConflictReferenceItemIds !== undefined ? updates.originalConflictReferenceItemIds : published.originalConflictReferenceItemIds,
+      originalConflictEntryNames: updates.originalConflictEntryNames !== undefined ? updates.originalConflictEntryNames : published.originalConflictEntryNames,
+      worldbookEjsLengthEstimates: updates.worldbookEjsLengthEstimates !== undefined ? updates.worldbookEjsLengthEstimates : published.worldbookEjsLengthEstimates,
+      acceptedCodeCheck: published[acceptedCodeCheckKey],
       authorId: published.authorId,
       authorName: published.authorName,
       authorAvatar: published.authorAvatar || '',
@@ -1239,9 +1525,26 @@ export const projectDb = {
       visibility: published.visibility,
       isPublished: false,
       latestApprovedAt: published.latestApprovedAt || published.reviewedAt,
+      status: 'drafting',
     });
-    await projectDb.update(c, publishedProjectId, { draftProjectId: draftId });
-    return draftId;
+
+    const claimResult = await c.env.DB.prepare(
+      `UPDATE projects
+       SET draft_project_id = ?, updated_at = ?
+       WHERE id = ? AND draft_project_id IS NULL RETURNING id`,
+    )
+      .bind(draftId, now(), publishedProjectId)
+      .first<{ id: string }>();
+
+    if (claimResult?.id === publishedProjectId) {
+      await projectDb.update(c, draftId, { status: 'pending' });
+      return draftId;
+    }
+
+    // Another request claimed the published project first. Delete only this
+    // unclaimed candidate, then retry so this request reuses the winner.
+    await projectDb.delete(c, draftId);
+    return projectDb.createDraftFromPublished(c, publishedProjectId, updates, attempt + 1);
   },
 
   setVisibility: async (c: AppContext, projectId: string, visibility: boolean): Promise<void> => {
@@ -1296,19 +1599,21 @@ export const projectDb = {
   },
 
   incrementDownloads: async (c: AppContext, projectId: string): Promise<void> => {
-    try {
-      await c.env.DB.prepare(
-        `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
-      )
-        .bind(projectId)
-        .run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('no such column: downloads_count')) {
-        throw error;
-      }
-      console.warn('downloads_count column missing, skip incrementDownloads');
-    }
+    const allowed = await c.env.DB.prepare(
+      `INSERT INTO download_daily_usage (counter_id, day_key, counted_downloads)
+       VALUES (1, date('now'), 1)
+       ON CONFLICT(counter_id) DO UPDATE SET
+         day_key = excluded.day_key,
+         counted_downloads = CASE WHEN download_daily_usage.day_key = excluded.day_key
+           THEN download_daily_usage.counted_downloads + 1 ELSE 1 END
+       WHERE download_daily_usage.day_key <> excluded.day_key
+          OR download_daily_usage.counted_downloads < ?
+       RETURNING counted_downloads`,
+    ).bind(MAX_DAILY_COUNTED_DOWNLOADS).first<{ counted_downloads: number }>();
+    if (!allowed) return;
+    await c.env.DB.prepare(
+      `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
+    ).bind(projectId).run();
   },
 };
 
@@ -1404,7 +1709,7 @@ async function enrichProject(
 /**
  * 解析项目数据库行
  */
-function parseProjectRow(row: Record<string, unknown>) {
+export function parseProjectRow(row: Record<string, unknown>) {
   let parsedTags: string[] = [];
   try {
     const rawTags = row.tags;
@@ -1462,6 +1767,7 @@ function parseProjectRow(row: Record<string, unknown>) {
   const rawPublishedVersion = typeof row.published_version === 'string' ? row.published_version.trim() : '';
 
   return {
+    [acceptedCodeCheckKey]: typeof row.accepted_code_check === 'string' ? row.accepted_code_check : null,
     id: row.id as string,
     rootProjectId: ((row.root_project_id as string | null) || (row.id as string)) as string,
     publishedProjectId: row.published_project_id as string | null,
@@ -1469,6 +1775,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     name: row.name as string,
     description: row.description as string | null,
     precautions: row.precautions as string | null,
+    discordThreadUrl: row.discord_thread_url as string | null,
     version,
     versionLabel,
     publishedVersion: rawPublishedVersion ? normalizeProjectVersionBase(rawPublishedVersion) : null,
@@ -1496,7 +1803,7 @@ function parseProjectRow(row: Record<string, unknown>) {
     regexEntriesPreview: [],
     likesCount: Number(row.likes_count ?? 0),
     subscribesCount: Number(row.subscribes_count ?? 0),
-    userLiked: false,
+    userLiked: Number(row.user_liked ?? 0) === 1,
     userSubscribed: false,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -1526,5 +1833,14 @@ function parseProjectRow(row: Record<string, unknown>) {
         return [];
       }
     })(),
+    originalConflictEntryNames: (() => {
+      try {
+        const value = JSON.parse(String(row.original_conflict_entry_names || '[]'));
+        return Array.isArray(value) ? value.map(String).map(name => name.trim()).filter(Boolean).slice(0, 500) : [];
+      } catch {
+        return [];
+      }
+    })(),
+    worldbookEjsLengthEstimates: parseWorldbookEjsLengthEstimates(row.worldbook_ejs_length_estimates),
   };
 }

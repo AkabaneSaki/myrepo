@@ -10,23 +10,25 @@ const SNAPSHOT_DATE = '2026-09-15';
 const SNAPSHOT_FILE = 'creative_workshop.sql';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const EXPLORER_API = `${ORIGIN}/cdn-cgi/local/explorer/api`;
-const DEFAULT_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 600, maxRowsWritten: 0 });
-const RANKING_REBUILD_BUDGET = Object.freeze({ maxQueries: 20, maxRowsWritten: 25_000 });
-const RANKING_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
+const DEFAULT_BUDGET = Object.freeze({ maxQueries: 2, maxRowsRead: 600, maxRowsWritten: 0 });
+const PUBLIC_COUNT_LOOKUP_MAX_ROWS = 8;
+const DISCOVERY_ROTATION_BUDGET = Object.freeze({ maxQueries: 16, maxRowsWritten: 100 });
+const DISCOVERY_FAST_PATH_BUDGET = Object.freeze({ maxQueries: 1, maxRowsRead: 5, maxRowsWritten: 0 });
 const REPAIR_RESOLVE_BUDGET = Object.freeze({ maxQueries: 3, maxRowsRead: 250, maxRowsWritten: 3 });
 const CATASTROPHIC_ROWS_READ = 100_000;
 const wranglerBin = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 
 const scenarios = [
-  { name: '首页 · 发现推荐', params: { page: 0, pageSize: 30, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
-  { name: '分类 · 角色发现', params: { page: 0, pageSize: 12, sort: 'discover', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
-  { name: '深分页 · 发现第 11 页', params: { page: 10, pageSize: 12, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
+  { name: '首页 · 随机发现', params: { page: 0, pageSize: 10, sort: 'discover' }, budget: { maxQueries: 3, maxRowsRead: 80 }, requireDiscoveryRotation: true },
   { name: '首页 · 最新发布', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 最新发布 · 缓存命中', params: { page: 0, pageSize: 20, sort: 'published' }, budget: { maxQueries: 1, maxRowsRead: PUBLIC_COUNT_LOOKUP_MAX_ROWS }, expectCacheHit: true },
   { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
-  { name: '首页 · 玩家好评', params: { page: 0, pageSize: 12, sort: 'rating' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
-  { name: '分类 · 角色玩家好评', params: { page: 0, pageSize: 12, sort: 'rating', projectType: '角色' }, budget: { maxQueries: 3, maxRowsRead: 200 }, requireDailyRanking: true },
   { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
+  { name: '首页 · 点赞最多', params: { page: 0, pageSize: 20, sort: 'likes' }, budget: { maxRowsRead: 80 } },
+  { name: '兼容 · 旧客户端玩家好评', params: { page: 0, pageSize: 12, sort: 'rating' }, budget: { maxRowsRead: 80 }, forbidDiscoveryBoard: true },
   { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' }, budget: { maxRowsRead: 80 } },
+  { name: '筛选 · 最低点赞', params: { page: 0, pageSize: 20, sort: 'published', minLikes: 5 }, budget: { maxRowsRead: 600 } },
+  { name: '筛选 · 最低下载', params: { page: 0, pageSize: 20, sort: 'published', minDownloads: 10 }, budget: { maxRowsRead: 600 } },
   { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' }, budget: { maxRowsRead: 120 } },
   { name: '全文搜索', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' }, budget: { maxRowsRead: 400 } },
   { name: '深分页 · 最新第 11 页', params: { page: 10, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 600 } },
@@ -342,17 +344,27 @@ async function runRepairResolveLockScenario() {
   return { cost, reasons };
 }
 
-async function resetCurrentRankingDay() {
-  const rankingDay = new Date().toISOString().slice(0, 10);
+function getDiscoveryRotationKey(nowMs = Date.now()) {
+  const rotationMs = 6 * 60 * 60 * 1000;
+  const utc8OffsetMs = 8 * 60 * 60 * 1000;
+  const firstSlotOffsetMs = 4 * 60 * 60 * 1000;
+  const utc8Ms = nowMs + utc8OffsetMs;
+  const shifted = utc8Ms - firstSlotOffsetMs;
+  const slotLocalMs = Math.floor(shifted / rotationMs) * rotationMs + firstSlotOffsetMs;
+  return new Date(slotLocalMs).toISOString().slice(0, 13);
+}
+
+async function resetDiscoveryFixtureState() {
   const sql = [
-    `DELETE FROM discovery_feature_history WHERE ranking_day = '${rankingDay}'`,
-    `DELETE FROM project_daily_rankings WHERE ranking_day = '${rankingDay}'`,
-    `DELETE FROM project_ranking_builds WHERE ranking_day = '${rankingDay}'`,
+    'DELETE FROM discovery_feature_history',
+    'DELETE FROM project_daily_rankings',
+    'DELETE FROM project_ranking_builds',
+    "UPDATE public_project_counts SET revision = revision + 1 WHERE scope = '*'",
   ].join('; ');
   await runWrangler([
     'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
     '--persist-to', persistDir, '--command', sql,
-  ], 'D1 daily ranking reset');
+  ], 'D1 discovery fixture reset');
 }
 
 async function triggerConcurrentScheduledRanking(name, budget) {
@@ -435,7 +447,21 @@ async function runScenario(scenario) {
   if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
   if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
   if (cost.rowsRead >= CATASTROPHIC_ROWS_READ) reasons.push(`CATASTROPHIC rows_read >= ${CATASTROPHIC_ROWS_READ}`);
-  if (scenario.requireDailyRanking) {
+  const sqlTexts = cost.details.map(query => String(query.sql || ''));
+  const publicCountQueries = cost.details.filter(query => /\bFROM\s+public_project_counts\b/i.test(String(query.sql || '')));
+  if (publicCountQueries.length !== 1) {
+    reasons.push(`public_project_counts lookups ${publicCountQueries.length} != 1`);
+  } else if (Number(publicCountQueries[0].rows_read || 0) > PUBLIC_COUNT_LOOKUP_MAX_ROWS) {
+    reasons.push(`public_project_counts rows_read ${publicCountQueries[0].rows_read} > ${PUBLIC_COUNT_LOOKUP_MAX_ROWS}`);
+  }
+  if (scenario.expectCacheHit) {
+    const nonCountQueries = cost.details.filter(query => !/\bFROM\s+public_project_counts\b/i.test(String(query.sql || '')));
+    if (nonCountQueries.length > 0) reasons.push('cache hit still queried project list data');
+  }
+  if (scenario.forbidDiscoveryBoard && sqlTexts.some(sql => sql.includes('project_daily_rankings'))) {
+    reasons.push('legacy rating request unexpectedly used the discovery board');
+  }
+  if (scenario.requireDiscoveryRotation) {
     const sqlTexts = cost.details.map(query => String(query.sql || ''));
     const rankingSql = sqlTexts.find(sql => sql.includes('FROM project_daily_rankings r')) || '';
     if (!rankingSql) reasons.push('ranking request did not read project_daily_rankings (fallback path detected)');
@@ -452,21 +478,24 @@ let failed = false;
 try {
   await ensureSnapshotState();
   const eligibleProjectCount = await readEligibleProjectCount();
-  const rankingRebuildBudget = {
-    ...RANKING_REBUILD_BUDGET,
-    maxRowsRead: 3 * eligibleProjectCount + 502,
+  const discoveryRotationBudget = {
+    ...DISCOVERY_ROTATION_BUDGET,
+    maxRowsRead: eligibleProjectCount + 150,
   };
-  await resetCurrentRankingDay();
+  await resetDiscoveryFixtureState();
   await assertPortAvailable();
   startServer();
   await waitForServer();
-  console.log(`D1 cost gate: daily ranking + ${scenarios.length} local browse scenarios on production snapshot ${path.basename(path.dirname(snapshotSql))}`);
+  const rotationKey = getDiscoveryRotationKey();
+  console.log(`D1 cost gate: 6-hour random discovery + ${scenarios.length} local browse scenarios on production snapshot ${path.basename(path.dirname(snapshotSql))}`);
   console.log(`Default browse budget: <=${DEFAULT_BUDGET.maxQueries} queries, <=${DEFAULT_BUDGET.maxRowsRead} rows read, ${DEFAULT_BUDGET.maxRowsWritten} rows written`);
-  console.log(`Daily rebuild budget: N=${eligibleProjectCount}, <=${rankingRebuildBudget.maxQueries} queries, <=3N+500=${rankingRebuildBudget.maxRowsRead} rows read, <=${rankingRebuildBudget.maxRowsWritten} rows written`);
-  console.log(`Shared local state: ${persistDir}\n`);
+  console.log(`Discovery rotation budget: N=${eligibleProjectCount}, <=${discoveryRotationBudget.maxQueries} queries, <=N+150=${discoveryRotationBudget.maxRowsRead} rows read, <=${discoveryRotationBudget.maxRowsWritten} rows written`);
+  console.log(`Rotation key: ${rotationKey} (UTC+8 slots 04:00 / 10:00 / 16:00 / 22:00)`);
+  console.log(`Shared local state: ${persistDir} (ranking tables reset before measurement)
+`);
 
-  printCostResult('排行榜 · 并发双触发完整重建', await triggerConcurrentScheduledRanking('排行榜 · 并发双触发完整重建', rankingRebuildBudget));
-  printCostResult('排行榜 · 同日重复触发', await triggerScheduledRanking('排行榜 · 同日重复触发', RANKING_FAST_PATH_BUDGET));
+  printCostResult('随机发现 · 并发双触发', await triggerConcurrentScheduledRanking('随机发现 · 并发双触发', discoveryRotationBudget));
+  printCostResult('随机发现 · 同轮重复触发', await triggerScheduledRanking('随机发现 · 同轮重复触发', DISCOVERY_FAST_PATH_BUDGET));
 
   const scenarioResults = new Map();
   for (const scenario of scenarios) {
@@ -479,17 +508,31 @@ try {
   printCostResult('DLC Repair · daily lock', await runRepairResolveLockScenario());
 
   const publishedIds = scenarioResults.get('首页 · 最新发布')?.projectIds || [];
-  for (const rankedName of ['首页 · 发现推荐', '首页 · 玩家好评']) {
-    const rankedIds = scenarioResults.get(rankedName)?.projectIds || [];
-    if (rankedIds.length === 0) {
-      failed = true;
-      console.log(`[FAIL] ${rankedName}: ranking result is empty on the production snapshot fixture`);
-      continue;
-    }
-    if (JSON.stringify(rankedIds) === JSON.stringify(publishedIds)) {
-      failed = true;
-      console.log(`[FAIL] ${rankedName}: ranking order collapsed to 最新发布`);
-    }
+  const randomIds = scenarioResults.get('首页 · 随机发现')?.projectIds || [];
+  if (randomIds.length !== 10) {
+    failed = true;
+    console.log(`[FAIL] 首页 · 随机发现: expected 10 projects, got ${randomIds.length}`);
+  }
+  if (randomIds.length > 0 && JSON.stringify(randomIds) === JSON.stringify(publishedIds.slice(0, randomIds.length))) {
+    failed = true;
+    console.log('[FAIL] 首页 · 随机发现: random picks collapsed to 最新发布');
+  }
+
+  await stopServerTree();
+  await resetDiscoveryFixtureState();
+  await assertPortAvailable();
+  startServer();
+  await waitForServer();
+  const bootstrapResult = await runScenario({
+    name: '随机发现 · 空板请求自举',
+    params: { page: 0, pageSize: 10, sort: 'discover' },
+    budget: { maxQueries: 20, maxRowsRead: eligibleProjectCount + 220, maxRowsWritten: 100 },
+    requireDiscoveryRotation: true,
+  });
+  printCostResult('随机发现 · 空板请求自举', bootstrapResult);
+  if (bootstrapResult.projectIds.length !== 10) {
+    failed = true;
+    console.log(`[FAIL] 随机发现 · 空板请求自举: expected 10 projects, got ${bootstrapResult.projectIds.length}`);
   }
 
   if (failed) {

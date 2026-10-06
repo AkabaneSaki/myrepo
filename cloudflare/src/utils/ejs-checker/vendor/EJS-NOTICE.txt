@@ -1,0 +1,12 @@
+EJS Embedded JavaScript templates, version 3.1.9
+Copyright 2112 Matthew Eernisse (mde@fleegix.org)
+Upstream: https://github.com/mde/ejs/tree/v3.1.9
+Source: https://github.com/mde/ejs/blob/v3.1.9/lib/ejs.js
+License: Apache License 2.0; see EJS-LICENSE.txt.
+
+Only the default-delimiter tokenizer (_REGEX_STRING and parseTemplateText)
+is adapted. The adaptation adds source offsets and exports a pure ESM function.
+It excludes EJS compilation, rendering, cache, include and filesystem code.
+
+Nested-delimiter grouping in source-units.mjs is independently implemented
+for the documented ST-Prompt-Template behavior; no AGPL implementation is copied.

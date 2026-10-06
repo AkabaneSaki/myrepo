@@ -16,14 +16,83 @@ export type ProjectEntryInspection = {
 export const CHARACTER_ARTWORK_START = '<%# char-info-ejs-builder:start:v2 %>';
 export const CHARACTER_ARTWORK_END = '<%# char-info-ejs-builder:end:v2 %>';
 export const CHARACTER_ARTWORK_INCOMPLETE_WARNING = 'character_artwork_marker_incomplete';
+const WORKSHOP_METADATA_START = '<%# poem-workshop-meta:v1-start\n';
+const WORKSHOP_METADATA_END = '\npoem-workshop-meta:v1-end %>';
 
 const EJS_TAG_PATTERN = /<%[\s\S]*?%>/;
 const HTTP_URL_PATTERN = /https?:\/\/[^\s<>"'`，。；：！？、（）【】《》“”‘’]+/giu;
 
+function isValidWorkshopMetadataPayload(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    if (typeof parsed.cw_project_id !== 'string' || !parsed.cw_project_id) return false;
+    if (typeof parsed.cw_entry_key !== 'string' || !parsed.cw_entry_key) return false;
+    if (typeof parsed.cw_project_name_display !== 'string') return false;
+    if (
+      parsed.cw_project_version !== null &&
+      parsed.cw_project_version !== undefined &&
+      typeof parsed.cw_project_version !== 'string'
+    ) return false;
+    if (
+      parsed.cw_remote_version !== null &&
+      parsed.cw_remote_version !== undefined &&
+      typeof parsed.cw_remote_version !== 'string'
+    ) return false;
+    return typeof parsed.cw_name_format_version === 'string' ||
+      (typeof parsed.cw_name_format_version === 'number' && Number.isFinite(parsed.cw_name_format_version));
+  } catch {
+    return false;
+  }
+}
+
+export function stripWorkshopMetadataBlocks(content: string): string {
+  const validRanges: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+
+  while (cursor < content.length) {
+    const start = content.indexOf(WORKSHOP_METADATA_START, cursor);
+    if (start < 0) break;
+
+    const payloadStart = start + WORKSHOP_METADATA_START.length;
+    const endMarkerStart = content.indexOf(WORKSHOP_METADATA_END, payloadStart);
+    if (endMarkerStart < 0) {
+      cursor = payloadStart;
+      continue;
+    }
+
+    const nestedStart = content.indexOf(WORKSHOP_METADATA_START, payloadStart);
+    if (nestedStart >= 0 && nestedStart < endMarkerStart) {
+      cursor = nestedStart;
+      continue;
+    }
+
+    if (isValidWorkshopMetadataPayload(content.slice(payloadStart, endMarkerStart))) {
+      validRanges.push({
+        start,
+        end: endMarkerStart + WORKSHOP_METADATA_END.length,
+      });
+    }
+    cursor = endMarkerStart + WORKSHOP_METADATA_END.length;
+  }
+
+  if (validRanges.length === 0) return content;
+
+  let output = '';
+  let outputCursor = 0;
+  for (const range of validRanges) {
+    output += content.slice(outputCursor, range.start);
+    outputCursor = range.end;
+  }
+  output += content.slice(outputCursor);
+  return output;
+}
+
 function getInspectableStrings(entry: Record<string, unknown>, kind: ProjectEntryKind): string[] {
   if (kind === 'worldbook') {
     const content = typeof entry.content === 'string' ? entry.content : typeof entry.text === 'string' ? entry.text : '';
-    return content ? [content] : [];
+    const inspectableContent = stripWorkshopMetadataBlocks(content);
+    return inspectableContent ? [inspectableContent] : [];
   }
 
   const replacement =

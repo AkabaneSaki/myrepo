@@ -64,27 +64,19 @@ function createClientConfig({ name, publicPath, entryPath, clientVersion, endpoi
   };
 }
 
-const targets = {
-  stable: createClientConfig({
+module.exports = [
+  createClientConfig({
     name: 'creative-workshop-stable',
     publicPath: workshopConfig.client.publicPath,
     entryPath: 'src/CreativeWorkshop/index.ts',
     clientVersion: workshopConfig.client.stable,
     endpoint: workshopConfig.endpoints.production,
   }),
-  staging: createClientConfig({
+  createClientConfig({
     name: 'creative-workshop-staging',
     publicPath: workshopConfig.client.stagingPublicPath,
     entryPath: 'src/CreativeWorkshop/staging.ts',
     clientVersion: workshopConfig.client.staging,
     endpoint: workshopConfig.endpoints.staging,
   }),
-};
-
-module.exports = env => {
-  const target = String(env?.target || '').trim();
-  if (!Object.prototype.hasOwnProperty.call(targets, target)) {
-    throw new Error('Choose an explicit Workshop build target with --env target=stable or --env target=staging');
-  }
-  return targets[target];
-};
+];

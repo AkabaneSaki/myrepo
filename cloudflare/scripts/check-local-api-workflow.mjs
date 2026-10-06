@@ -220,7 +220,7 @@ try {
   await api(`/api/admin/review/${publishedId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: firstReviewRevision },
+    body: { action: 'approve', expectedRevision: firstReviewRevision, reviewToken: (await api(`/api/admin/review/${publishedId}`, { token: adminToken })).reviewToken },
   });
 
   const approved = await api(`/api/projects/${publishedId}`);
@@ -267,7 +267,7 @@ try {
   await api(`/api/admin/review/${rankingFreshnessId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: rankingFreshnessPending.project.draftRevision },
+    body: { action: 'approve', expectedRevision: rankingFreshnessPending.project.draftRevision, reviewToken: (await api(`/api/admin/review/${rankingFreshnessId}`, { token: adminToken })).reviewToken },
   });
   const rankingFreshnessSearch = await api(
     '/api/projects?page=0&pageSize=50&sort=discover&search=Ranking%20Freshness%20Probe',
@@ -396,18 +396,18 @@ try {
   await api(`/api/admin/review/${draftId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: readyToApprove.project.draftRevision },
+    body: { action: 'approve', expectedRevision: readyToApprove.project.draftRevision, reviewToken: (await api(`/api/admin/review/${draftId}`, { token: adminToken })).reviewToken },
   });
   draftId = null;
 
   const staleFrozenReview = await api(`/api/admin/review/${frozenReviewId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: frozenReviewBeforeContinue.project.draftRevision },
+    body: { action: 'approve', expectedRevision: frozenReviewBeforeContinue.project.draftRevision, reviewToken: (await api(`/api/admin/review/${frozenReviewId}`, { token: adminToken })).reviewToken },
     expected: 409,
   });
   assert.match(String(staleFrozenReview.error), /outdated/i);
-  await api(`/api/admin/review/${frozenReviewId}`, {
+  const duplicateFrozenReject = await api(`/api/admin/review/${frozenReviewId}`, {
     method: 'POST',
     token: adminToken,
     body: {
@@ -415,9 +415,12 @@ try {
       rejectReason: 'Superseded by a newer approved review request',
       expectedRevision: frozenReviewBeforeContinue.project.draftRevision,
     },
+    expected: 409,
   });
+  assert.match(String(duplicateFrozenReject.error), /Review conflict/i);
   const rejectedFrozenReview = await api(`/api/projects/${frozenReviewId}`, { token: creatorToken });
   assert.equal(rejectedFrozenReview.project.status, 'rejected');
+  assert.equal(rejectedFrozenReview.project.rejectReason, '已被其他已通过版本取代');
 
   const finalPublished = await api(`/api/projects/${publishedId}`);
   assert.equal(finalPublished.project.name, 'Local API Draft Name Fixed');

@@ -106,12 +106,12 @@ EJS            首页卡片隐藏，详情显示
 
 ```text
 src/endpoints/admin.ts
-src/pages/home/modals.ts
+src/pages/home/modal/admin-review.ts
 src/pages/home/render/review-diff.ts
 src/utils/project-review-diff.ts
 ```
 
-当前 staging 基线支持：
+审核实现包含：
 
 - pending queue 默认最旧优先，可切最新优先；
 - 按 `projectType` 服务端筛选；
@@ -119,16 +119,9 @@ src/utils/project-review-diff.ts
 - approve / reject 使用 `expectedRevision` 防止审核期间草稿被改；
 - approve 前重新验证世界书 / 正则与项目内容 policy；
 - update draft 批准后才复制内容到 published project；
-- 管理员操作写入 audit log。
-
-当前本地分支 `feature/admin-review-continuous-flow` 还有未进入 staging 的审核 UX follow-up：隐藏普通审核页面里的内部 trace metadata、增加上一个/下一个、approve/reject 后自动进入下一项，并把版本/revision/timestamp 等信息保留到管理员日志的追踪区。
-
-最新执行状态见：
-
-```text
-docs/plans/workshop-p2.md
-.ai-bridge/current-plan.md
-```
+- 管理员操作写入 audit log；
+- 审核详情支持上一项 / 下一项，并在 approve / reject 后继续处理队列；
+- 内部 revision / timestamp 等追踪信息留在管理员日志，不作为普通审核页面的主要信息。
 
 ## 常用开发命令
 
@@ -145,21 +138,11 @@ npm run check:taxonomy-migration
 
 其他脚本以 `package.json` 为准。需要本地 API server 的测试不会自行保证对应端口已启动；例如内容审批工作流测试若依赖本地服务，应先启动配套 test API。
 
-### 当前审核 flow smoke
-
-2026-09-08 的 `feature/admin-review-continuous-flow` 已同步更新 `check:home-js-smoke`：测试现在覆盖上一项/下一项、auto-next、管理员日志追踪区，并确认旧 version/timestamp 审核前台 helper 不再出现。当前该 smoke 已通过。
-
 ## D1
 
 `schema.sql` 是新数据库当前结构；已存在环境通过 `migrations/` 演进。
 
-近期关键 migration：
-
-```text
-0007_project_inspection_summary.sql
-0008_project_taxonomy.sql
-0009_project_display_tags.sql
-```
+Migration 顺序与当前集合直接以 `migrations/` 目录为准，不在 README 维护第二份容易过期的编号清单。
 
 不要为了修改一条产品规则手工直接改线上 D1。需要 schema 变化时新增 migration，并按仓库部署 SOP 让 staging 先验证。
 
@@ -191,9 +174,8 @@ task branch
 ## 进一步资料
 
 ```text
-../docs/plans/workshop-p2.md
+../docs/README.md
+../docs/audits/workshop-architecture.md
 ../docs/plans/workshop-persistent-session.md
-../docs/audits/workshop-policy-architecture-reference-20260908.md
-../docs/audits/creator-capability-audit-20260905.md
-./doc/cover-image-delivery-plan.md
+../docs/plans/cover-image-delivery.md
 ```

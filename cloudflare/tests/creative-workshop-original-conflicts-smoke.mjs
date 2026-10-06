@@ -12,7 +12,13 @@ const compiled = ts.transpileModule(source, {
   },
 }).outputText;
 
-function loadHarness({ entryEnabled = true, entryName = '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街', entryUid = null, referenceDisplayName = '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街', referenceSourceKey = 'index:0' } = {}) {
+const ORIGINAL_ENTRY_NAME = '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街';
+
+function loadHarness({
+  entryEnabled = true,
+  entryName = ORIGINAL_ENTRY_NAME,
+  entryUid = null,
+} = {}) {
   const worldbooks = {
     Original: [
       {
@@ -24,15 +30,6 @@ function loadHarness({ entryEnabled = true, entryName = '[本体][势力][诺斯
     ],
   };
   const records = {};
-  const referenceItems = [
-    {
-      id: 'base-1',
-      referenceVersionId: 'v433',
-      kind: 'worldbook',
-      sourceKey: referenceSourceKey,
-      displayName: referenceDisplayName,
-    },
-  ];
   const module = { exports: {} };
   const context = {
     module,
@@ -42,11 +39,6 @@ function loadHarness({ entryEnabled = true, entryName = '[本体][势力][诺斯
         return {
           getCreativeWorkshopInstallRecord: projectId => records[projectId] || null,
           getCreativeWorkshopInstallRecords: () => records,
-        };
-      }
-      if (specifier === './project-fetch') {
-        return {
-          fetchCreativeWorkshopReferenceVersionItems: async () => referenceItems,
         };
       }
       throw new Error(`Unexpected require: ${specifier}`);
@@ -72,12 +64,11 @@ function loadHarness({ entryEnabled = true, entryName = '[本体][势力][诺斯
   return { api: module.exports, worldbooks, records };
 }
 
-function conflictDetail(conflictsWithOriginal = true) {
+function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENTRY_NAME]) {
   return {
     project: {
-      builtForReferenceVersionId: 'v433',
       conflictsWithOriginal,
-      originalConflictReferenceItemIds: conflictsWithOriginal ? ['base-1'] : [],
+      originalConflictEntryNames: conflictsWithOriginal ? entryNames : [],
     },
     worldbookEntriesPreview: [],
     regexEntriesPreview: [],
@@ -85,9 +76,11 @@ function conflictDetail(conflictsWithOriginal = true) {
 }
 
 {
-  const harness = loadHarness({ entryEnabled: true });
+  const harness = loadHarness({ entryEnabled: true, entryUid: '7' });
   const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true));
   assert.equal(states.length, 1);
+  assert.equal(states[0].displayName, ORIGINAL_ENTRY_NAME);
+  assert.equal(states[0].entryUid, '7', 'local UID may be captured only after the exact-name match succeeds');
   assert.equal(states[0].wasEnabled, true);
   assert.equal(harness.worldbooks.Original[0].enabled, false);
   harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: states };
@@ -128,22 +121,18 @@ function conflictDetail(conflictsWithOriginal = true) {
   assert.equal(harness.worldbooks.Original[0].enabled, true, 'updating a DLC to no longer conflict must restore the entry');
 }
 
-
 {
   const harness = loadHarness({
     entryEnabled: true,
     entryName: '[本体][玩家改名]五馆街',
     entryUid: '7',
-    referenceDisplayName: '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街',
-    referenceSourceKey: 'uid:7',
   });
-  const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true));
-  assert.equal(states[0].entryUid, '7');
-  assert.equal(states[0].displayName, '[本体][玩家改名]五馆街');
-  assert.equal(harness.worldbooks.Original[0].enabled, false, 'UID fallback must disable the resolved local entry even if its name changed');
-  harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: states };
-  await harness.api.restoreCreativeWorkshopOriginalConflicts('A');
-  assert.equal(harness.worldbooks.Original[0].enabled, true, 'UID fallback must restore the same local entry');
+  await assert.rejects(
+    () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true)),
+    /找不到原版内容.*自己关闭/,
+    'player-renamed entries are intentionally not inferred from UID',
+  );
+  assert.equal(harness.worldbooks.Original[0].enabled, true);
 }
 
 {
@@ -151,11 +140,20 @@ function conflictDetail(conflictsWithOriginal = true) {
   harness.worldbooks.Original.push({ ...harness.worldbooks.Original[0] });
   await assert.rejects(
     () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true)),
-    /多个同名条目/,
+    /多个同名原版内容.*自己关闭/,
     'ambiguous duplicate names must fail closed instead of toggling every match',
   );
+  assert.equal(harness.worldbooks.Original.every(entry => entry.enabled === true), true);
 }
 
+{
+  const harness = loadHarness({ entryEnabled: true });
+  await assert.rejects(
+    () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true, [])),
+    /没有可自动匹配的原版条目名称.*自己关闭/,
+    'legacy or incomplete projects without stored names must fail closed',
+  );
+}
 
 {
   const harness = loadHarness({ entryEnabled: true });

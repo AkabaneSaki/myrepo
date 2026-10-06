@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { parseEjs, parseRegex } from '../src/utils/ejs-checker/syntax.mjs';
+import { syntaxFindings } from '../src/utils/ejs-checker/syntax-findings.mjs';
+import { finding, gateStatus, toUploaderCodeCheck } from '../src/utils/ejs-checker/report.mjs';
+
+const rawContent='😀标题\r\n<%# poem-workshop-meta:v1-start\r\n注释\r\npoem-workshop-meta:v1-end %>\r\n<% { const broken = ; } %>';
+const entry={sourceType:'worldbook',content:rawContent,rawContent,id:'0:x:0',fileName:'x.json',name:'x',uid:1,bookOrder:0,entryOrder:0};
+const records=syntaxFindings(entry,parseEjs(rawContent));
+assert.equal(records.length,1);
+const f=finding(records[0].ruleId,records[0].severity,records[0].title,entry,records[0].index,records[0].detail,records[0].suggestion);
+assert.equal(f.ruleId,'EJS-PARSE');
+assert.equal(f.line,5);
+assert.equal(f.column,rawContent.split('\r\n')[4].indexOf(';')+1);
+assert.equal(f.visibility,'uploader_detailed');
+assert.equal(gateStatus([f]),'reject');
+const internal=syntaxFindings(entry,{errors:[],internalErrors:[{cause:'not public'}]});
+assert.equal(internal[0].ruleId,'CHECKER-INTERNAL');
+assert.doesNotMatch(JSON.stringify(internal),/not public/);
+const internalFinding=finding(internal[0].ruleId,internal[0].severity,internal[0].title,entry,0,internal[0].detail,internal[0].suggestion);
+assert.equal(toUploaderCodeCheck({gate:'reject',findings:[internalFinding]}).findings[0].ruleId,'CHECKER-INTERNAL');
+assert.throws(()=>toUploaderCodeCheck(undefined),/代码检查未完成/);
+const regex=syntaxFindings({sourceType:'regex'},parseRegex('<script>const broken = ;</script>'));
+assert.equal(regex[0].ruleId,'JS-PARSE');
+assert.ok(!regex.some(f=>/^L/.test(f.ruleId)));
+console.log('v2 syntax report: mapped author error and separate internal failure: ok');

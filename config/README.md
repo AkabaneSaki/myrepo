@@ -1,30 +1,33 @@
-# Workshop configuration
+# Configuration sources of truth
 
-`config/workshop.json` is the single source of truth for operator-managed Workshop release values.
+This directory contains cross-runtime product configuration that must be shared by the SillyTavern client bundle and the Workshop Worker.
 
-Managed here:
+## `workshop.json`
 
-- `client.stable`
-- `client.minimum`
-- `client.staging`
-- `client.publicPath`
-- `client.stagingPublicPath`
-- `client.legacyShimPath`
-- `client.migrations`
-- production/staging Worker endpoints and staging aliases
-- companion-script release registry
-- release repository/CDN metadata
+This is the single source of truth for:
 
-## Compatibility path
+- `client.stable`: latest released Creative Workshop client tag users may install.
+- `client.minimum`: oldest Creative Workshop client still allowed to use the Workshop.
+- `client.staging`: active staging-client version.
+- `client.publicPath`: stable client bundle path.
+- `client.stagingPublicPath`: staging client bundle path.
+- `client.migrations`: one-time client import-path migrations shown to affected old clients.
+- production/staging Workshop endpoints and staging aliases.
+- known companion-script dependency display names and latest versions.
 
-`client.legacyShimPath` is a historical public compatibility endpoint. Its physical directory name may be `test-dist`, but it is not a test distribution.
+Do not duplicate these values in UI, client, Worker, tests, release docs, or deployment scripts. Import/read this manifest instead.
 
-It must contain only the small migration shim that rewrites an affected TavernHelper script to `client.publicPath`.
+## What does not belong here
 
-Do not delete or repurpose this endpoint while real historical installs still depend on it.
+Do not turn every implementation constant into global config.
 
-## Do not duplicate live values
+Server-only domain configuration already has its own single source:
+- project taxonomy: `cloudflare/src/config/project-taxonomy.ts`
+- project content policy: `cloudflare/src/config/project-content-policy.ts`
+- discovery/ranking parameters: `cloudflare/src/utils/project-ranking.ts`
+- upload/request/banner limits: `cloudflare/src/config/runtime-limits.ts`
+- DLC/project semantic-version helpers and initial machine version: `cloudflare/src/utils/version.js`
 
-UI code, build scripts, QA scripts, docs and deployment logic should read the manifest rather than copying current version numbers, endpoints, bundle paths or companion-script versions.
+Implementation constants such as polling intervals, DOM storage keys, protocol namespaces, cache TTLs, and UI timing values stay near the code unless they are duplicated or become operator-tuned settings.
 
-Normal implementation constants that are not operator-managed release values should stay close to the code that owns them. Do not turn this manifest into a dump of every constant in the repository.
+See `docs/CONFIG-HARDCODE-AUDIT.md` for the latest duplication audit and the rule for deciding whether a literal belongs in configuration.
