@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { normalizeProjectVersionBase } from '../src/utils/version.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
@@ -44,6 +45,9 @@ assert.match(readEndpoint, /if \(!payload\) return c\.json\(\{ error: '请先 Di
 assert.match(readEndpoint, /SELECT id, version, download_url, author_id, status, is_published, visibility/);
 assert.match(readEndpoint, /downloadUrl: null/g);
 assert.match(readEndpoint, /r2Storage\.getProxyUrl/);
+assert.match(readEndpoint, /const currentVersion = normalizeProjectVersionBase\(project\.version\)/);
+assert.match(readEndpoint, /const latestVersion = normalizeProjectVersionBase\(row\.version\)/);
+assert.equal(normalizeProjectVersionBase('4.3'), '1.0.0');
 
 const installInfoStart = readEndpoint.indexOf('export class ProjectInstallInfo');
 const projectFetchStart = readEndpoint.indexOf('export class ProjectFetch', installInfoStart);
