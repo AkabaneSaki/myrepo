@@ -1,7 +1,6 @@
 {
   "client": {
     "stable": "2.2.0",
-    "minimum": "2.1.2",
     "staging": "2.3.0-dev1",
     "publicPath": "dist/CreativeWorkshop/index.js",
     "migrations": [

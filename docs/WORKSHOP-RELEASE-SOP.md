@@ -26,7 +26,6 @@ Before changing any Creative Workshop client version, ask:
 All current client release values live only in `config/workshop.json`:
 
 - `client.stable`
-- `client.minimum`
 - `client.staging`
 - `client.publicPath`
 - `client.stagingPublicPath`
@@ -36,23 +35,10 @@ Code, UI, build scripts and tests must reference that manifest; they must not re
 
 ### Meaning
 
-- `stable`: newest released client tag.
-- `minimum`: oldest client allowed to enter the Workshop.
+- `stable`: newest released client tag required by production.
 - `staging`: active staging-client build line.
 
-A new stable release does **not** automatically require raising `minimum`.
-
-Example:
-
-```json
-{
-  "stable": "3.4.2",
-  "minimum": "3.4.1",
-  "staging": "3.5.0-dev"
-}
-```
-
-In that example, users on 3.4.1 may continue using the Workshop without a forced-update popup.
+Use the exact current client version for the selected site: `stable` for production, `staging` for the staging site and its aliases. Other or unknown versions must update before DLC operations. The update notice and the bridge operation check use the same version rule; dismissing the notice does not allow an old client to proceed. There is no separate minimum version.
 
 ## Branch source rule
 
@@ -89,7 +75,7 @@ client-side change on the active staging line requires new import @version
 → owner PR/main
 → create immutable release tag
 → deploy production Worker if needed
-→ verify stable/minimum/staging values from manifest
+→ verify stable/staging values and exact-client enforcement from manifest
 ```
 
 ### Legacy import-path migration
@@ -102,7 +88,6 @@ Every release/status report must state these separately:
 
 ```text
 Client stable: x.y.z
-Client minimum: x.y.z
 Client staging: x.y.z-dev
 Git source: <sha>
 Worker Version: <cloudflare-version-id>

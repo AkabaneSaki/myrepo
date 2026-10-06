@@ -196,8 +196,7 @@ Creative Workshop client SemVer and Worker/web deployment identity are separate.
 
 The only live client-version source is `config/workshop.json`:
 
-- `client.stable` = newest released client tag.
-- `client.minimum` = oldest client allowed to enter the Workshop.
+- `client.stable` = newest released client tag required by production.
 - `client.staging` = active staging-client line.
 
 Do not write the current numbers again in this SOP. Read the manifest.
@@ -216,7 +215,7 @@ Worker/web/backend change
 → Git SHA
 → Worker deployment
 → Worker Version ID
-→ client stable/minimum/staging unchanged
+→ client stable/staging unchanged
 ```
 
 Examples: web UI, copy, CSS, ranking, admin pages, Worker routes, D1/R2 logic, server-side validation, server-only hotfixes.
@@ -227,7 +226,7 @@ If **yes**:
 - new backwards-compatible client capability → minor,
 - incompatible client / bridge contract → major.
 
-A new `stable` release does not automatically raise `minimum`. Raise `minimum` only when older clients are genuinely unsafe or incompatible.
+Production requires the exact `client.stable` version; the staging site requires the exact `client.staging` version. A different or unknown client version must update before DLC operations. There is no separate minimum version or supported old-client path.
 
 Use exact Git SHA / Worker Version to distinguish Worker builds. Never consume client patch numbers as deployment/build counters.
 

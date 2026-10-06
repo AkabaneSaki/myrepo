@@ -21,9 +21,9 @@ These rules apply to all agents and automated sessions working in this repositor
   - If **no**: do not change client SemVer. Track Worker/web releases by exact Git SHA + Cloudflare Worker Version ID.
   - If **yes**: release a new client version.
 - Current client release values are read only from `config/workshop.json`. Never duplicate the live values in this file, UI code, tests, or deployment scripts.
-- `client.stable` = newest released client tag.
-- `client.minimum` = oldest client still allowed to enter the Workshop. A new stable client does not automatically raise this.
+- `client.stable` = newest released client tag; production requires this exact client version.
 - `client.staging` = active staging-client line.
+- The staging site requires the exact `client.staging` version. Older, newer, missing, or mismatched client versions must update before any DLC bridge operation. Do not add a separate minimum-version setting or an old-client compatibility path.
 - Client version meaning is strict:
   - `X` = incompatible client / bridge generation.
   - `Y` = new backwards-compatible client capability.

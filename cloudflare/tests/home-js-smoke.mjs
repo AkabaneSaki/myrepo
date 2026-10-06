@@ -236,10 +236,11 @@ assert.equal(d4PreviewEntry.order, 99);
 assert.equal(d4PreviewEntry.constant, true);
 
 const workshopConfig = JSON.parse(await readFile(resolve('../config/workshop.json'), 'utf8'));
-assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_STABLE_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.stable/);
-assert.match(fragments.homeLayoutRenderScript, /WORKSHOP_MINIMUM_CLIENT_VERSION = WORKSHOP_CONFIG\.client\.minimum/);
+assert.match(fragments.homeUtilsScript, /WORKSHOP_CONFIG\.client\.stable/);
+assert.match(fragments.homeUtilsScript, /WORKSHOP_CONFIG\.client\.staging/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_MINIMUM_CLIENT_VERSION/);
 assert.match(workshopConfig.client.stable, /^\d+\.\d+\.\d+$/);
-assert.match(workshopConfig.client.minimum, /^\d+\.\d+\.\d+$/);
+assert.equal(Object.hasOwn(workshopConfig.client, 'minimum'), false);
 assert.match(workshopConfig.client.staging, /^\d+\.\d+\.\d+-dev\d+$/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT/);
 assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
@@ -248,7 +249,7 @@ assert.match(fragments.homeModalsScript, /releaseUpdateAcknowledgeBtn[\s\S]*requ
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
 assert.match(fragments.homeModalsScript, /可以唷～那再看一眼/);
 assert.doesNotMatch(fragments.homeModalsScript, /releaseUpdateCode|data-dependency-copy|getScriptDependencySuggestedImport/);
-assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(WORKSHOP_MINIMUM_CLIENT_VERSION\)[\s\S]*openReleaseNoticeModal\(\)/);
+assert.match(fragments.homeTavernBridgeScript, /shouldShowWorkshopReleaseNotice\(\)[\s\S]*openReleaseNoticeModal\(\)/);
 assert.match(fragments.homeTavernBridgeScript, /WORKSHOP_CONFIG\.scriptDependencies/);
 
 assert.match(fragments.homeModalsScript, /id=\"versionLabel\"/);
@@ -882,10 +883,19 @@ assert.match(createProjectFormHtml, /id="fileInput"/);
 assert.match(createProjectFormHtml, /id="versionLabel"/);
 
 const versionState = { tavern: { clientVersion: null, clientVersionResolved: false } };
+const versionMessages = [];
+let versionNoticeCount = 0;
+const versionWindow = {
+  location: { origin: new URL(workshopConfig.endpoints.production).origin },
+  parent: { postMessage: message => versionMessages.push(message) },
+};
 const workshopVersionUi = Function(
   'state',
-  `${fragments.homeUtilsScript}; return { parseWorkshopVersion, compareWorkshopVersions, shouldShowWorkshopReleaseNotice };`,
-)(versionState);
+  'WORKSHOP_CONFIG',
+  'window',
+  'openReleaseNoticeModal',
+  `${fragments.homeUtilsScript}; return { parseWorkshopVersion, compareWorkshopVersions, getRequiredWorkshopClientVersion, shouldShowWorkshopReleaseNotice, requireLatestWorkshopClient };`,
+)(versionState, workshopConfig, versionWindow, () => { versionNoticeCount += 1; });
 assert.deepEqual(workshopVersionUi.parseWorkshopVersion('2.0.13'), [2, 0, 13]);
 assert.deepEqual(workshopVersionUi.parseWorkshopVersion('v2.0.13'), [2, 0, 13]);
 assert.equal(workshopVersionUi.parseWorkshopVersion('2.0'), null);
@@ -894,20 +904,60 @@ assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.12', '2.0.13'), -1);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.13', '2.0.13'), 0);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.14', '2.0.13'), 1);
 assert.equal(workshopVersionUi.compareWorkshopVersions('2.0.9', '2.0.12'), -1);
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), false);
+assert.throws(() => workshopVersionUi.requireLatestWorkshopClient(), { code: 'CLIENT_UPDATE_REQUIRED' });
 versionState.tavern.clientVersionResolved = true;
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
-versionState.tavern.clientVersion = '2.0.12';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
-versionState.tavern.clientVersion = '2.0.13';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
-versionState.tavern.clientVersion = '2.0.14';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
-versionState.tavern.clientVersion = '2.0.15';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), true);
+versionState.tavern.clientVersion = '2.1.3';
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), true, 'previously allowed client must now update');
+versionState.tavern.clientVersion = workshopConfig.client.stable;
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), false);
+assert.doesNotThrow(() => workshopVersionUi.requireLatestWorkshopClient());
+versionState.tavern.clientVersion = '99.0.0';
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), true, 'a newer mismatched client is not the released client');
 versionState.tavern.clientVersion = 'not-a-version';
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('2.0.14'), true);
-assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice('broken-release'), false);
+assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), true);
+
+const versionBridgeUi = Function(
+  'state', 'WORKSHOP_CONFIG', 'window', 'crypto',
+  'requireLatestWorkshopClient', 'shouldShowWorkshopReleaseNotice', 'openReleaseNoticeModal',
+  'setTavernConnectionStatus', 'setTavernClientVersion', 'renderApp',
+  `${fragments.homeTavernBridgeScript}; return { postBridgeMessage, handleBridgeMessage, requestCloseWorkshop };`,
+)(versionState, workshopConfig, versionWindow, { randomUUID: () => 'version-check-request' },
+  workshopVersionUi.requireLatestWorkshopClient, workshopVersionUi.shouldShowWorkshopReleaseNotice,
+  () => { versionNoticeCount += 1; }, () => {},
+  version => { versionState.tavern.clientVersion = version; versionState.tavern.clientVersionResolved = true; },
+  () => {});
+const versionHandshake = version => versionBridgeUi.handleBridgeMessage({ data: {
+  namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', payload: { clientVersion: version },
+} });
+versionHandshake('2.1.3');
+assert.ok(versionNoticeCount > 0);
+assert.equal(versionMessages.length, 0, 'outdated handshake must not scan installed DLC');
+for (const type of ['bridge:install-project', 'bridge:confirm-project-update', 'bridge:uninstall-project',
+  'bridge:repair:project', 'bridge:repair:scan', 'bridge:get-project-diff']) {
+  assert.throws(() => versionBridgeUi.postBridgeMessage(type, {}), { code: 'CLIENT_UPDATE_REQUIRED' }, type);
+}
+assert.equal(versionMessages.length, 0, 'blocked operations must never reach the client');
+versionBridgeUi.requestCloseWorkshop();
+assert.equal(versionMessages.pop().type, 'bridge:close-workshop', 'outdated client can still close the Workshop');
+versionHandshake(workshopConfig.client.stable);
+assert.deepEqual(versionMessages.splice(0).map(message => message.type),
+  ['bridge:list-installed-projects', 'bridge:list-script-dependencies']);
+versionBridgeUi.postBridgeMessage('bridge:install-project', { projectId: 'latest-client-project' });
+assert.equal(versionMessages.pop().payload.projectId, 'latest-client-project');
+
+for (const origin of [workshopConfig.endpoints.staging, ...(workshopConfig.endpoints.stagingAliases || [])]) {
+  versionWindow.location.origin = new URL(origin).origin;
+  assert.equal(workshopVersionUi.getRequiredWorkshopClientVersion(), workshopConfig.client.staging);
+  versionState.tavern.clientVersion = workshopConfig.client.stable;
+  assert.throws(() => versionBridgeUi.postBridgeMessage('bridge:install-project', {}), { code: 'CLIENT_UPDATE_REQUIRED' });
+  versionState.tavern.clientVersion = workshopConfig.client.staging + '-old';
+  assert.equal(workshopVersionUi.shouldShowWorkshopReleaseNotice(), true, 'staging builds must match exactly');
+  versionState.tavern.clientVersion = workshopConfig.client.staging;
+  assert.doesNotThrow(() => versionBridgeUi.postBridgeMessage('bridge:install-project', {}));
+  versionMessages.length = 0;
+}
 
 const dateUi = Function(`${fragments.homeUtilsScript}; return { getProjectPublishedAt };`)();
 assert.equal(dateUi.getProjectPublishedAt({ latestApprovedAt: '2026-09-04', reviewedAt: '2026-09-03', createdAt: '2026-09-02' }), '2026-09-04');

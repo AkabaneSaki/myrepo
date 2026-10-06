@@ -27,14 +27,13 @@ function compareStable(left, right) {
 }
 
 assert.ok(manifest?.client, 'Missing client config');
+assert.ok(!Object.hasOwn(manifest.client, 'minimum'), 'Workshop clients must match the latest channel version; minimum is no longer supported');
 assert.match(manifest.client.stable, stableSemver);
-assert.match(manifest.client.minimum, stableSemver);
 assert.match(manifest.client.staging, stagingSemver);
 assert.match(manifest.client.publicPath, publicBundlePath, 'client.publicPath must be a JS file under dist/');
 assert.match(manifest.client.stagingPublicPath, publicBundlePath, 'client.stagingPublicPath must be a JS file under dist/');
 assert.match(manifest.client.legacyShimPath, /^test-dist\/[A-Za-z0-9._/-]+\.js$/, 'client.legacyShimPath must be the compatibility shim under test-dist/');
 assert.notEqual(manifest.client.publicPath, manifest.client.stagingPublicPath, 'stable and staging public paths must differ');
-assert.ok(compareStable(manifest.client.minimum, manifest.client.stable) <= 0, 'client.minimum cannot be newer than client.stable');
 
 const migrations = Array.isArray(manifest.client.migrations) ? manifest.client.migrations : [];
 for (const migration of migrations) {
@@ -81,6 +80,7 @@ const files = {
   bundleCheck: await read('scripts/check-workshop-bundles.mjs'),
   homeApp: await read('cloudflare/src/pages/home/app.ts'),
   layout: await read('cloudflare/src/pages/home/render/layout.ts'),
+  homeUtils: await read('cloudflare/src/pages/home/utils.ts'),
   modal: await read('cloudflare/src/pages/home/modal/core.ts'),
   bridge: await read('cloudflare/src/pages/home/tavern-bridge.ts'),
   workerIndex: await read('cloudflare/src/index.ts'),
@@ -116,8 +116,9 @@ assert.match(files.bundleCheck, /manifest\.client\.publicPath/);
 assert.match(files.bundleCheck, /manifest\.client\.stagingPublicPath/);
 assert.match(files.bundleCheck, /manifest\.client\.legacyShimPath/);
 assert.match(files.homeApp, /config\/workshop\.json/);
-assert.match(files.layout, /WORKSHOP_CONFIG\.client\.stable/);
-assert.match(files.layout, /WORKSHOP_CONFIG\.client\.minimum/);
+assert.match(files.homeUtils, /WORKSHOP_CONFIG\.client\.stable/);
+assert.match(files.homeUtils, /WORKSHOP_CONFIG\.client\.staging/);
+assert.doesNotMatch(files.layout, /WORKSHOP_CONFIG\.client\.minimum/);
 assert.match(files.modal, /WORKSHOP_CONFIG\.client\.migrations/);
 assert.match(files.bridge, /WORKSHOP_CONFIG\.scriptDependencies/);
 assert.match(files.workerIndex, /workshopConfig\.endpoints\.staging/);
@@ -138,7 +139,6 @@ assert.doesNotMatch(files.types, /default\(['"]1\.0\.0['"]\)/);
 
 const forbiddenValues = [
   manifest.client.stable,
-  manifest.client.minimum,
   manifest.client.staging,
   manifest.client.publicPath,
   manifest.client.stagingPublicPath,

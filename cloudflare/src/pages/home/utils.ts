@@ -311,14 +311,27 @@ function compareWorkshopVersions(a, b) {
   return 0;
 }
 
-function shouldShowWorkshopReleaseNotice(releaseVersion) {
-  if (!state.tavern.clientVersionResolved) return false;
-  if (!parseWorkshopVersion(releaseVersion)) {
-    console.warn('[CreativeWorkshop] invalid advertised release version', releaseVersion);
-    return false;
-  }
-  if (!parseWorkshopVersion(state.tavern.clientVersion)) return true;
-  return compareWorkshopVersions(state.tavern.clientVersion, releaseVersion) < 0;
+function getRequiredWorkshopClientVersion() {
+  const stagingOrigins = [WORKSHOP_CONFIG.endpoints.staging, ...(WORKSHOP_CONFIG.endpoints.stagingAliases || [])]
+    .map(value => new URL(value).origin);
+  return stagingOrigins.includes(window.location.origin)
+    ? WORKSHOP_CONFIG.client.staging
+    : WORKSHOP_CONFIG.client.stable;
+}
+
+function shouldShowWorkshopReleaseNotice() {
+  return state.tavern.clientVersionResolved
+    && state.tavern.clientVersion !== getRequiredWorkshopClientVersion();
+}
+
+function requireLatestWorkshopClient() {
+  if (state.tavern.clientVersionResolved && !shouldShowWorkshopReleaseNotice()) return;
+  if (state.tavern.clientVersionResolved) openReleaseNoticeModal();
+  const error = new Error(state.tavern.clientVersionResolved
+    ? '请先把工坊脚本更新到 ' + getRequiredWorkshopClientVersion() + '，保存并刷新酒馆页面后再试。'
+    : '正在确认工坊脚本版本，请稍后再试。');
+  error.code = 'CLIENT_UPDATE_REQUIRED';
+  throw error;
 }
 
 function getProjectPublishedAt(project) {

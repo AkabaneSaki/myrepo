@@ -55,7 +55,6 @@ assert.deepEqual(
 
 console.log(
   'Workshop bundles verified: stable=' + manifest.client.stable
-    + ', minimum=' + manifest.client.minimum
     + ', staging=' + manifest.client.staging
     + ', stablePath=' + manifest.client.publicPath
     + ', legacyShim=' + manifest.client.legacyShimPath,

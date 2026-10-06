@@ -6,9 +6,9 @@ This directory contains cross-runtime product configuration that must be shared 
 
 This is the single source of truth for:
 
-- `client.stable`: latest released Creative Workshop client tag users may install.
-- `client.minimum`: oldest Creative Workshop client still allowed to use the Workshop.
+- `client.stable`: latest released Creative Workshop client tag; production requires this exact version.
 - `client.staging`: active staging-client version.
+- The staging site and its aliases require this exact staging version. Other or unknown versions must update before DLC operations; no separate minimum version is supported.
 - `client.publicPath`: stable client bundle path.
 - `client.stagingPublicPath`: staging client bundle path.
 - `client.migrations`: one-time client import-path migrations shown to affected old clients.
