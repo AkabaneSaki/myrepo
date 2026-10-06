@@ -54,7 +54,12 @@ function getRepairItem(candidateId) {
 
 function initializeRepairItems(report) {
   const problemCandidates = (Array.isArray(report?.candidates) ? report.candidates : [])
-    .filter(candidate => Array.isArray(candidate?.problems) && candidate.problems.length > 0);
+    .filter(candidate =>
+      candidate?.identityStatus === 'legacy'
+      || candidate?.identityStatus === 'partial'
+      || candidate?.identityStatus === 'malformed'
+      || (Array.isArray(candidate?.problems) && candidate.problems.length > 0),
+    );
   dlcRepairUiState.items = new Map(problemCandidates.map(candidate => [
     candidate.candidateId,
     {
@@ -74,22 +79,6 @@ function closeDlcRepairModal() {
   dlcRepairUiState.items = new Map();
   dlcRepairUiState.busy = false;
   if (overlay?.isConnected) overlay.remove();
-}
-
-function buildRepairIntegrityFieldsHtml(report) {
-  const fields = Array.isArray(report?.repairIntegrityFields) ? report.repairIntegrityFields : [];
-  if (!fields.length) return '';
-  return '<details class="repair-details" open><summary>工坊精灵资料检查</summary>'
-    + '<div class="repair-metadata-grid">' + fields.map(item => {
-      const icon = item.status === 'ok' ? '✓' : item.status === 'missing' ? '✕' : '⚠';
-      const actual = item.actual === null || item.actual === undefined ? '缺失' : String(item.actual);
-      return '<div class="repair-metadata-row repair-metadata-' + escapeHtml(item.status) + '">'
-        + '<span class="repair-metadata-icon">' + icon + '</span>'
-        + '<code>' + escapeHtml(getRepairMetadataLabel(item.field)) + '</code>'
-        + '<span>' + escapeHtml(item.status === 'ok' ? '正常' : item.status === 'missing' ? '缺失' : '异常') + '</span>'
-        + '<span class="repair-metadata-values">现在：' + escapeHtml(actual) + '<br>应为：' + escapeHtml(String(item.expected || '')) + '</span>'
-        + '</div>';
-    }).join('') + '</div></details>';
 }
 
 function openDlcRepairRestartNotice() {
@@ -151,9 +140,14 @@ function buildRepairCandidateHtml(item, repairLocked = false) {
   matchingEvidence.push('name=' + candidate.name);
   const displayName = matchProject?.name || candidate.name || '未命名 DLC';
   const missingCount = Array.isArray(candidate.missingEntryKeys) ? candidate.missingEntryKeys.length : 0;
+  const identityStatus = String(candidate.identityStatus || 'healthy');
   const issueSummary = missingCount > 0
-    ? '<div class="repair-simple-issue"><i class="fas fa-puzzle-piece"></i><span>发现 <strong>' + escapeHtml(String(missingCount)) + '</strong> 个已安装条目缺失；修复会自动补回最新版。</span></div>'
-    : '<div class="repair-simple-issue"><i class="fas fa-wand-magic-sparkles"></i><span>这是旧版或资料不完整的 DLC；修复会自动补齐 Workshop 身份资料。</span></div>';
+    ? '<div class="repair-simple-issue"><i class="fas fa-puzzle-piece"></i><span>发现 <strong>' + escapeHtml(String(missingCount)) + '</strong> 个已安装条目缺失；会从 Workshop 重新下载当前版本并替换本地 DLC。</span></div>'
+    : identityStatus === 'malformed'
+      ? '<div class="repair-simple-issue"><i class="fas fa-triangle-exclamation"></i><span>EJS 身份标记已损坏；会从 Workshop 重新下载当前版本并替换本地 DLC。</span></div>'
+      : identityStatus === 'legacy' || identityStatus === 'partial'
+        ? '<div class="repair-simple-issue"><i class="fas fa-arrow-up-from-bracket"></i><span>这是旧版身份格式；可以直接按普通更新方式从 Workshop 重新下载并替换，完成 EJS 身份升级。</span></div>'
+        : '<div class="repair-simple-issue"><i class="fas fa-screwdriver-wrench"></i><span>发现需要处理的 DLC；会从 Workshop 重新下载当前版本并替换本地内容。</span></div>';
   let matchHtml = '';
   if (!safe) {
     matchHtml = '<div class="repair-blocked"><i class="fas fa-shield-halved"></i> 无法安全确认旧内容，已停止自动处理。</div>';
@@ -216,12 +210,7 @@ function buildDlcRepairReportText() {
   }
   lines.push('Unreadable worldbooks: ' + (unreadable.length ? unreadable.join(', ') : 'none'));
   lines.push('Pending repairs: ' + (Array.isArray(report.pending) ? report.pending.length : 0));
-  lines.push('Repair integrity: ' + (report.repairIntegrityStatus || 'unknown') + (report.repairIntegrityLocked ? ' LOCKED' : ''));
   lines.push('Repair restart required: ' + (report.repairRestartRequired ? 'yes' : 'no'));
-  if (report.repairIntegrityReason) lines.push('Repair integrity reason: ' + report.repairIntegrityReason);
-  (Array.isArray(report.repairIntegrityFields) ? report.repairIntegrityFields : []).forEach(item => {
-    lines.push('Repair sentinel ' + item.field + ': ' + item.status + ' actual=' + (item.actual ?? 'missing') + ' expected=' + (item.expected ?? ''));
-  });
   lines.push('');
 
   dlcRepairUiState.items.forEach(item => {
@@ -236,6 +225,7 @@ function buildDlcRepairReportText() {
     lines.push('Detected project IDs: ' + ((candidate.detectedProjectIds || []).join(', ') || 'none'));
     lines.push('Legacy project name: ' + (candidate.legacyProjectName || 'none'));
     lines.push('Local version: ' + (candidate.localVersion || 'unknown'));
+    lines.push('Identity status: ' + (candidate.identityStatus || 'unknown'));
     (candidate.metadata || []).forEach(meta => {
       lines.push('Metadata ' + meta.field + ': ' + meta.status + ' ' + meta.presentCount + '/' + meta.totalCount + ' values=' + ((meta.values || []).join(', ') || 'none'));
     });
@@ -279,7 +269,7 @@ function renderDlcRepairModal() {
   const needsAttention = selectedItems.filter(item => item.match?.status !== 'unique' || !isRepairCandidateSafe(item.candidate));
   const candidateHtml = allItems.length
     ? allItems.map(item => buildRepairCandidateHtml(item, repairUnavailable)).join('')
-    : '<div class="repair-empty"><i class="fas fa-circle-check"></i><strong>没有发现需要修复的 DLC</strong><p>已经自动检查当前正在使用的世界书。</p></div>';
+    : '<div class="repair-empty"><i class="fas fa-circle-check"></i><strong>没有发现需要处理的 DLC</strong><p>已经自动检查当前正在使用的世界书。</p></div>';
   const scannedLabel = scannedWorldbooks.length ? scannedWorldbooks.join('、') : '没有可扫描的世界书';
   const otherWorldbookOptions = availableWorldbooks.slice().sort((a, b) => String(a).localeCompare(String(b))).map(name => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('');
   const footerText = !allItems.length
@@ -287,7 +277,7 @@ function renderDlcRepairModal() {
     : needsAttention.length
       ? '还有 ' + needsAttention.length + ' 个需要你确认'
       : '已自动确认 ' + readyItems.length + ' 个 DLC';
-  const repairButtonLabel = readyItems.length === 1 ? '修复这个 DLC' : '修复 ' + readyItems.length + ' 个 DLC';
+  const repairButtonLabel = readyItems.length === 1 ? '处理这个 DLC' : '处理 ' + readyItems.length + ' 个 DLC';
   const officialBaselineSkipped = Number(report.officialBaselineSkippedCount || 0);
   const modifiedOfficialBaseline = Array.isArray(report.modifiedOfficialBaselineEntries) ? report.modifiedOfficialBaselineEntries : [];
   const baselineInfoHtml = officialBaselineSkipped || modifiedOfficialBaseline.length
@@ -309,7 +299,7 @@ function renderDlcRepairModal() {
   root.innerHTML = buildPendingRepairHtml(report, repairUnavailable)
     + repairLockHtml
     + repairRestartHtml
-    + '<div class="repair-toolbar"><div><strong>' + (allItems.length ? '发现 ' + allItems.length + ' 个需要修复的 DLC' : '自动检查完成') + '</strong></div></div>'
+    + '<div class="repair-toolbar"><div><strong>' + (allItems.length ? '发现 ' + allItems.length + ' 个需要处理的 DLC' : '自动检查完成') + '</strong></div></div>'
     + '<div class="repair-candidate-list">' + candidateHtml + '</div>'
     + advancedHtml
     + '<div class="repair-footer"><div><strong>' + escapeHtml(footerText) + '</strong></div>'

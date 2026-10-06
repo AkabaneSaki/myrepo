@@ -21,8 +21,6 @@ import {
   getCreativeWorkshopWorldbookMetadataBlockStatus,
   getCreativeWorkshopWorldbookMetadataString,
   type CreativeWorkshopRegexIdentity,
-  injectCreativeWorkshopWorldbookMetadata,
-  stripCreativeWorkshopWorldbookMetadata,
 } from './install-identity';
 import {
   applyPreparedCreativeWorkshopProject,
@@ -31,16 +29,10 @@ import {
 } from './worldbook';
 
 const CREATIVE_WORKSHOP_REPAIR_QUEUE_KEY = 'creative_workshop_repair_queue';
-const CREATIVE_WORKSHOP_REPAIR_SENTINEL_KEY = 'creative_workshop_repair_integrity_sentinels';
 const CREATIVE_WORKSHOP_REPAIR_RESTART_KEY = 'creative_workshop_repair_restart_required';
 const REPAIR_RUNTIME_INSTANCE_ID = globalThis.crypto?.randomUUID?.() || `runtime-${Date.now()}`;
-const REPAIR_INTEGRITY_SENTINEL_NAME = '[工坊精灵]我是好人请不要打开我也不要刪掉我喵';
-const REPAIR_INTEGRITY_SENTINEL_CONTENT = 'creative-workshop-repair-integrity-sentinel:v1';
-const REPAIR_INTEGRITY_SENTINEL_PROJECT_ID = '__cw_repair_integrity_sentinel__';
-const REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME = 'Creative Workshop Repair Integrity Sentinel';
-const REPAIR_INTEGRITY_SENTINEL_VERSION = '1';
-const REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY = `${REPAIR_INTEGRITY_SENTINEL_PROJECT_ID}:sentinel`;
-const REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION = '4';
+const LEGACY_REPAIR_SENTINEL_NAME = '[工坊精灵]我是好人请不要打开我也不要刪掉我喵';
+const LEGACY_REPAIR_SENTINEL_KEY = 'creative_workshop_repair_integrity_sentinels';
 const WORKSHOP_METADATA_FIELDS = [
   'cw_project_id',
   'cw_project_name_display',
@@ -95,6 +87,7 @@ export type CreativeWorkshopRepairCandidate = {
   metadata: CreativeWorkshopRepairMetadataFieldReport[];
   missingEntryKeys: string[];
   registryBacked: boolean;
+  identityStatus: 'healthy' | 'legacy' | 'partial' | 'malformed';
   missingIdentityBlockCount: number;
   malformedIdentityBlockCount: number;
   problems: string[];
@@ -182,115 +175,6 @@ function writeRepairRegistry(registry: CreativeWorkshopRepairRegistry) {
   );
 }
 
-export type CreativeWorkshopRepairIntegrityFieldReport = {
-  field: string;
-  status: 'ok' | 'missing' | 'mismatch';
-  expected: string;
-  actual: string | null;
-};
-
-type CreativeWorkshopRepairIntegrityCheck = {
-  locked: boolean;
-  reason: string | null;
-  entries: WorldbookEntry[];
-  status: 'created' | 'healthy' | 'locked';
-  fields: CreativeWorkshopRepairIntegrityFieldReport[];
-  sentinelCount: number;
-};
-
-function isRepairIntegritySentinelEntry(entry: WorldbookEntry): boolean {
-  const raw = entry as any;
-  return String(raw.name || raw.comment || '') === REPAIR_INTEGRITY_SENTINEL_NAME;
-}
-
-function getRepairIntegrityFieldReport(entry: WorldbookEntry | null): CreativeWorkshopRepairIntegrityFieldReport[] {
-  const raw = entry as any;
-  const checks: Array<[string, string, unknown]> = [
-    ['name', REPAIR_INTEGRITY_SENTINEL_NAME, raw?.name ?? raw?.comment],
-    [
-      'content',
-      REPAIR_INTEGRITY_SENTINEL_CONTENT,
-      stripCreativeWorkshopWorldbookMetadata(typeof raw?.content === 'string' ? raw.content : ''),
-    ],
-    ['enabled', 'false', raw?.enabled],
-    ['cw_project_id', REPAIR_INTEGRITY_SENTINEL_PROJECT_ID, entry ? getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') : null],
-    ['cw_project_name_display', REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME, entry ? getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_name_display') : null],
-    ['cw_project_version', REPAIR_INTEGRITY_SENTINEL_VERSION, entry ? getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version') : null],
-    ['cw_entry_key', REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY, entry ? getCreativeWorkshopWorldbookMetadataString(entry, 'cw_entry_key') : null],
-    ['cw_name_format_version', REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION, entry ? getCreativeWorkshopWorldbookMetadataString(entry, 'cw_name_format_version') : null],
-  ];
-  return checks.map(([field, expected, rawActual]) => {
-    const actual = rawActual === undefined || rawActual === null || rawActual === '' ? null : String(rawActual);
-    return {
-      field,
-      status: actual === null ? 'missing' : actual === expected ? 'ok' : 'mismatch',
-      expected,
-      actual,
-    };
-  });
-}
-
-function isRepairIntegritySentinelHealthy(entry: WorldbookEntry): boolean {
-  return getRepairIntegrityFieldReport(entry).every(item => item.status === 'ok');
-}
-
-function createRepairIntegritySentinel(): WorldbookEntry {
-  return {
-    name: REPAIR_INTEGRITY_SENTINEL_NAME,
-    comment: REPAIR_INTEGRITY_SENTINEL_NAME,
-    content: injectCreativeWorkshopWorldbookMetadata(REPAIR_INTEGRITY_SENTINEL_CONTENT, {
-      cw_project_id: REPAIR_INTEGRITY_SENTINEL_PROJECT_ID,
-      cw_project_name_display: REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME,
-      cw_project_version: REPAIR_INTEGRITY_SENTINEL_VERSION,
-      cw_remote_version: REPAIR_INTEGRITY_SENTINEL_VERSION,
-      cw_entry_key: REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY,
-      cw_name_format_version: REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION,
-    }),
-    enabled: false,
-    extra: {
-      cw_project_id: REPAIR_INTEGRITY_SENTINEL_PROJECT_ID,
-      cw_project_name_display: REPAIR_INTEGRITY_SENTINEL_DISPLAY_NAME,
-      cw_project_version: REPAIR_INTEGRITY_SENTINEL_VERSION,
-      cw_entry_key: REPAIR_INTEGRITY_SENTINEL_ENTRY_KEY,
-      cw_name_format_version: REPAIR_INTEGRITY_SENTINEL_NAME_FORMAT_VERSION,
-    },
-  } as unknown as WorldbookEntry;
-}
-
-function readRepairSentinelRegistry(): Record<string, string> {
-  const variables = getVariables({ type: 'script', script_id: getScriptId() });
-  const raw = _.get(variables, CREATIVE_WORKSHOP_REPAIR_SENTINEL_KEY);
-  if (!_.isObject(raw)) return {};
-  return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>)
-      .filter(([, value]) => _.isString(value))
-      .map(([key, value]) => [key, String(value)]),
-  );
-}
-
-function writeRepairSentinelRegistry(registry: Record<string, string>) {
-  updateVariablesWith(
-    variables => {
-      _.set(variables, CREATIVE_WORKSHOP_REPAIR_SENTINEL_KEY, registry);
-      return variables;
-    },
-    { type: 'script', script_id: getScriptId() },
-  );
-}
-
-function markRepairSentinelInitialized(worldbookName: string) {
-  const registry = readRepairSentinelRegistry();
-  registry[worldbookName] = REPAIR_INTEGRITY_SENTINEL_VERSION;
-  writeRepairSentinelRegistry(registry);
-}
-
-function clearRepairSentinelInitialized(worldbookName: string) {
-  const registry = readRepairSentinelRegistry();
-  if (!(worldbookName in registry)) return;
-  delete registry[worldbookName];
-  writeRepairSentinelRegistry(registry);
-}
-
 function readRepairRestartRegistry(): Record<string, string> {
   const variables = getVariables({ type: 'script', script_id: getScriptId() });
   const raw = _.get(variables, CREATIVE_WORKSHOP_REPAIR_RESTART_KEY);
@@ -332,94 +216,6 @@ function isRepairRestartRequired(worldbookName: string): boolean {
 function wasRepairRestartSatisfied(worldbookName: string): boolean {
   const marker = readRepairRestartRegistry()[worldbookName];
   return Boolean(marker && marker !== REPAIR_RUNTIME_INSTANCE_ID);
-}
-
-async function ensureRepairIntegritySentinel(worldbookName: string): Promise<CreativeWorkshopRepairIntegrityCheck> {
-  const before = await getWorldbook(worldbookName);
-  const sentinels = before.filter(isRepairIntegritySentinelEntry);
-  const initialized = readRepairSentinelRegistry()[worldbookName] === REPAIR_INTEGRITY_SENTINEL_VERSION;
-
-  if (sentinels.length === 0) {
-    if (initialized) {
-      return {
-        locked: true,
-        reason: `世界书「${worldbookName}」的工坊精灵不见了；本地数据完整性无法确认`,
-        entries: before,
-        status: 'locked',
-        fields: getRepairIntegrityFieldReport(null),
-        sentinelCount: 0,
-      };
-    }
-    await updateWorldbookWith(worldbookName, worldbook => {
-      if (!worldbook.some(isRepairIntegritySentinelEntry)) worldbook.push(createRepairIntegritySentinel());
-      return worldbook;
-    });
-    const after = await getWorldbook(worldbookName);
-    const created = after.filter(isRepairIntegritySentinelEntry);
-    if (created.length !== 1 || !isRepairIntegritySentinelHealthy(created[0])) {
-      return {
-        locked: true,
-        reason: `世界书「${worldbookName}」无法建立完整的工坊精灵`,
-        entries: after,
-        status: 'locked',
-        fields: getRepairIntegrityFieldReport(created[0] || null),
-        sentinelCount: created.length,
-      };
-    }
-    markRepairSentinelInitialized(worldbookName);
-    return {
-      locked: false,
-      reason: null,
-      entries: after,
-      status: 'created',
-      fields: getRepairIntegrityFieldReport(created[0]),
-      sentinelCount: 1,
-    };
-  }
-
-  if (sentinels.length !== 1) {
-    return {
-      locked: true,
-      reason: `世界书「${worldbookName}」的工坊精灵数量异常`,
-      entries: before,
-      status: 'locked',
-      fields: getRepairIntegrityFieldReport(sentinels[0] || null),
-      sentinelCount: sentinels.length,
-    };
-  }
-  const fields = getRepairIntegrityFieldReport(sentinels[0]);
-  if (fields.some(item => item.status !== 'ok')) {
-    return {
-      locked: true,
-      reason: `世界书「${worldbookName}」的工坊精灵资料损坏`,
-      entries: before,
-      status: 'locked',
-      fields,
-      sentinelCount: 1,
-    };
-  }
-  if (!initialized) markRepairSentinelInitialized(worldbookName);
-  return {
-    locked: false,
-    reason: null,
-    entries: before,
-    status: 'healthy',
-    fields,
-    sentinelCount: 1,
-  };
-}
-
-async function assertRepairIntegritySentinel(worldbookName: string) {
-  const integrity = await ensureRepairIntegritySentinel(worldbookName);
-  if (!integrity.locked) return;
-  const brokenFields = integrity.fields
-    .filter(item => item.status !== 'ok')
-    .map(item => `${item.field}=${item.status}`)
-    .join(', ');
-  throw new Error(
-    `DLC 修复已锁定：${integrity.reason || '工坊精灵完整性检查失败'}`
-      + `${brokenFields ? `（${brokenFields}）` : ''}。请不要继续重装或手动删除条目，截图并去 DC 找我处理。`,
-  );
 }
 
 function writeRepairRecord(record: CreativeWorkshopRepairRecord) {
@@ -512,6 +308,21 @@ function readUid(entry: WorldbookEntry): string | number | null {
   return null;
 }
 
+function isLegacyRepairSentinelEntry(entry: WorldbookEntry): boolean {
+  const raw = entry as any;
+  return String(raw.name || raw.comment || '') === LEGACY_REPAIR_SENTINEL_NAME;
+}
+
+function clearLegacyRepairSentinelRegistry() {
+  updateVariablesWith(
+    variables => {
+      delete (variables as Record<string, any>)[LEGACY_REPAIR_SENTINEL_KEY];
+      return variables;
+    },
+    { type: 'script', script_id: getScriptId() },
+  );
+}
+
 function makeMetadataReport(entries: WorldbookEntry[]): CreativeWorkshopRepairMetadataFieldReport[] {
   return WORKSHOP_METADATA_FIELDS.map(field => {
     const values = entries.map(entry => readStringMetadata(entry, field)).filter((value): value is string => Boolean(value));
@@ -537,21 +348,8 @@ function candidateIdFor(worldbookName: string, projectName: string) {
 
 function describeCandidateProblems(candidate: Omit<CreativeWorkshopRepairCandidate, 'problems'>): string[] {
   const problems: string[] = [];
-  const projectIdReport = candidate.metadata.find(item => item.field === 'cw_project_id');
-  const versionReport = candidate.metadata.find(item => item.field === 'cw_project_version');
-  const entryKeyReport = candidate.metadata.find(item => item.field === 'cw_entry_key');
-  if (projectIdReport?.status === 'missing') problems.push('缺少 cw_project_id，无法仅靠工坊 metadata 识别项目');
-  else if (projectIdReport?.status === 'partial') problems.push('只有部分条目具有 cw_project_id');
-  else if (projectIdReport?.status === 'conflict') problems.push('cw_project_id 存在冲突，同一 DLC 组出现多个项目 ID');
-  if (versionReport?.status === 'missing') problems.push('缺少 cw_project_version，无法确认本地版本');
-  else if (versionReport?.status === 'conflict') problems.push('本地条目的 cw_project_version 不一致');
-  if (entryKeyReport?.status === 'missing') problems.push('缺少 cw_entry_key，不能依赖工坊条目键进行更新');
-  else if (entryKeyReport?.status === 'partial') problems.push('只有部分条目具有 cw_entry_key');
-  if (candidate.unaddressableEntryCount > 0) problems.push(`${candidate.unaddressableEntryCount} 个条目没有本地 UID，自动删除不安全`);
-  if (candidate.dlcHeaderCount === 0) problems.push('没有发现 [DLC] 命名头，仅依赖旧 metadata 识别');
-  if (candidate.workshopSourceMarkerCount === 0) problems.push('没有发现 [WS] 工坊来源标记');
-  if (candidate.missingIdentityBlockCount > 0) problems.push(`${candidate.missingIdentityBlockCount} 个条目缺少 Workshop 身份块`);
-  if (candidate.malformedIdentityBlockCount > 0) problems.push(`${candidate.malformedIdentityBlockCount} 个条目的 Workshop 身份块已损坏`);
+  if (candidate.unaddressableEntryCount > 0) problems.push(`${candidate.unaddressableEntryCount} 个条目没有本地 UID，自动替换不安全`);
+  if (candidate.malformedIdentityBlockCount > 0) problems.push(`${candidate.malformedIdentityBlockCount} 个条目的 Workshop EJS 身份块已损坏`);
   return problems;
 }
 
@@ -567,12 +365,6 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   officialBaselineVersion: string;
   officialBaselineSkippedCount: number;
   modifiedOfficialBaselineEntries: CreativeWorkshopModifiedOfficialBaselineEntry[];
-  repairIntegrityLocked: boolean;
-  repairIntegrityReason: string | null;
-  repairIntegrityWorldbookName: string | null;
-  repairIntegrityStatus: 'created' | 'healthy' | 'locked';
-  repairIntegrityFields: CreativeWorkshopRepairIntegrityFieldReport[];
-  repairIntegritySentinelCount: number;
   repairRestartRequired: boolean;
   repairRestartWorldbookNames: string[];
 }> {
@@ -586,8 +378,6 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
         .filter(name => availableWorldbookNameSet.has(name))
     : enabledWorldbookNames;
 
-  // Scan is read-only. Do not inject the Repair sentinel into every active worldbook.
-  // The sentinel is created/validated only in the actual target worldbook immediately before a repair.
   const rows = await Promise.all(
     requestedWorldbookNames.map(async worldbookName => {
       try {
@@ -621,7 +411,7 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
 
   for (const row of rows.filter(row => row.readable)) {
     for (const entry of row.entries) {
-      if (isRepairIntegritySentinelEntry(entry)) continue;
+      if (isLegacyRepairSentinelEntry(entry)) continue;
       const header = parseDlcEntryName(entry.name);
       const currentProjectId = readStringMetadata(entry, 'cw_project_id');
       const legacyProjectName = readStringMetadata(entry, 'fate_project_name');
@@ -700,6 +490,14 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
     const identityBlockStatuses = entries.map(entry => getCreativeWorkshopWorldbookMetadataBlockStatus(String((entry as any).content || '')));
     const missingIdentityBlockCount = identityBlockStatuses.filter(status => status === 'missing').length;
     const malformedIdentityBlockCount = identityBlockStatuses.filter(status => status === 'malformed').length;
+    const healthyIdentityBlockCount = identityBlockStatuses.filter(status => status === 'healthy').length;
+    const identityStatus: CreativeWorkshopRepairCandidate['identityStatus'] = malformedIdentityBlockCount > 0
+      ? 'malformed'
+      : missingIdentityBlockCount === entries.length
+        ? 'legacy'
+        : missingIdentityBlockCount > 0 && healthyIdentityBlockCount > 0
+          ? 'partial'
+          : 'healthy';
 
     const base = {
       candidateId,
@@ -724,6 +522,7 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       metadata,
       missingEntryKeys: [],
       registryBacked: false,
+      identityStatus,
       missingIdentityBlockCount,
       malformedIdentityBlockCount,
     } satisfies Omit<CreativeWorkshopRepairCandidate, 'problems'>;
@@ -789,33 +588,22 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
       metadata: makeMetadataReport([]),
       missingEntryKeys,
       registryBacked: true,
+      identityStatus: 'healthy',
       missingIdentityBlockCount: 0,
       malformedIdentityBlockCount: 0,
       problems: [problem],
     });
   }
 
-  const workshopWorldbookNames = new Set(candidates.map(candidate => candidate.worldbookName).filter(Boolean));
-  for (const row of rows) {
-    if (!row.readable) continue;
-    const hasWorkshopContent = row.entries.some(entry =>
-      !isRepairIntegritySentinelEntry(entry)
-      && Boolean(readStringMetadata(entry, 'cw_project_id')),
-    );
-    if (hasWorkshopContent) workshopWorldbookNames.add(row.worldbookName);
-  }
+  // Remove the retired Repair sentinel wherever an earlier staging build created it.
   await Promise.all(rows
-    .filter(row =>
-      row.readable
-      && row.entries.some(isRepairIntegritySentinelEntry)
-      && !workshopWorldbookNames.has(row.worldbookName),
-    )
+    .filter(row => row.readable && row.entries.some(isLegacyRepairSentinelEntry))
     .map(async row => {
       await updateWorldbookWith(row.worldbookName, worldbook =>
-        worldbook.filter(entry => !isRepairIntegritySentinelEntry(entry)),
+        worldbook.filter(entry => !isLegacyRepairSentinelEntry(entry)),
       );
-      clearRepairSentinelInitialized(row.worldbookName);
     }));
+  clearLegacyRepairSentinelRegistry();
 
   return {
     candidates: candidates.sort((a, b) => a.worldbookName.localeCompare(b.worldbookName) || a.name.localeCompare(b.name)),
@@ -827,12 +615,6 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
     officialBaselineVersion: OFFICIAL_WORLDBOOK_BASELINE_VERSION,
     officialBaselineSkippedCount,
     modifiedOfficialBaselineEntries,
-    repairIntegrityLocked: false,
-    repairIntegrityReason: null,
-    repairIntegrityWorldbookName: null,
-    repairIntegrityStatus: 'healthy',
-    repairIntegrityFields: [],
-    repairIntegritySentinelCount: 0,
     repairRestartRequired: repairRestartWorldbookNames.length > 0,
     repairRestartWorldbookNames,
   };
@@ -958,7 +740,6 @@ async function verifyCreativeWorkshopRepair(
 
 export async function repairCreativeWorkshopProject(rawTarget: CreativeWorkshopRepairTarget) {
   const target = normalizeRepairTarget(rawTarget);
-  await assertRepairIntegritySentinel(target.worldbookName);
   const repairId = `${target.candidateId}::${target.projectId}`;
   const startedAt = Date.now();
   writeRepairRecord({ repairId, target, status: 'preparing', error: null, startedAt, updatedAt: startedAt });

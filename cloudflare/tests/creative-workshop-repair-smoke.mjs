@@ -292,9 +292,10 @@ officialBaseline.entries = [
   const entryKeyMeta = candidate.metadata.find(item => item.field === 'cw_entry_key');
   assert.equal(projectIdMeta.status, 'missing');
   assert.equal(entryKeyMeta.status, 'partial');
-  assert.ok(candidate.problems.some(problem => problem.includes('缺少 cw_project_id')));
+  assert.equal(candidate.identityStatus, 'legacy');
+  assert.deepEqual(Array.from(candidate.problems), [], 'missing legacy extra fields alone must not be treated as a Repair bug');
   const sentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
-  assert.equal(sentinel, undefined, 'repair scan must stay read-only and must not inject the integrity sentinel');
+  assert.equal(sentinel, undefined, 'repair scan must never inject the retired integrity sentinel');
 }
 
 
@@ -319,9 +320,10 @@ officialBaseline.entries = [
   assert.equal(report.candidates.length, 1, 'extra metadata must not hide a missing embedded Workshop identity block');
   const candidate = report.candidates[0];
   assert.equal(candidate.detectedProjectId, projectId);
+  assert.equal(candidate.identityStatus, 'legacy');
   assert.equal(candidate.missingIdentityBlockCount, 1);
   assert.equal(candidate.malformedIdentityBlockCount, 0);
-  assert.ok(candidate.problems.some(problem => problem.includes('缺少 Workshop 身份块')));
+  assert.deepEqual(Array.from(candidate.problems), [], 'missing EJS block is a legacy migration state, not a broken DLC');
 }
 
 {
@@ -456,15 +458,17 @@ officialBaseline.entries = [
     sourceProjectIds: [projectId],
   });
   assert.equal(repaired.success, true, 'registry-backed fully missing DLC must be reinstallable without deleting unrelated entries');
-  assert.equal(harness.worldbooks.DLC.some(entry => entry.extra?.cw_project_id === projectId), true);
+  assert.equal(harness.worldbooks.DLC.some(entry => identityApi.getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') === projectId), true);
   assert.deepEqual(
     harness.installRecords.get(projectId)?.worldbookEntryKeys,
     [`${projectId}:latest-entry`],
     'successful repair must refresh the expected Worldbook manifest',
   );
-  const targetSentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
-  assert.ok(targetSentinel, 'actual repair must create the integrity sentinel in the target worldbook only');
-  assert.equal(targetSentinel.enabled, false);
+  assert.equal(
+    harness.worldbooks.DLC.some(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵'),
+    false,
+    'repair must not create the retired integrity sentinel',
+  );
 }
 
 {
@@ -531,52 +535,60 @@ officialBaseline.entries = [
 }
 
 {
-  const projectId = '55555555-5555-4555-8555-555555555555';
-  const harness = createHarness({
-    worldbooks: { DLC: [] },
-    initialInstallRecords: {
-      [projectId]: {
-        projectId,
-        worldbookName: 'DLC',
-        installedVersion: '1.0.0',
-        worldbookEntryKeys: [`${projectId}:old-entry`],
-        installedAt: Date.now(),
-      },
+  const canonicalProjectId = '55555555-5555-4555-8555-555555555555';
+  const staleExtraProjectId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const healthyContent = identityApi.injectCreativeWorkshopWorldbookMetadata('正文', {
+    cw_project_id: canonicalProjectId,
+    cw_project_name_display: 'EJS Canonical',
+    cw_project_version: '2.0.0',
+    cw_remote_version: '2.0.0',
+    cw_entry_key: canonicalProjectId + ':entry-a',
+    cw_name_format_version: '4',
+  });
+  const entry = {
+    uid: 551,
+    name: '[WS][DLC][事件]EJS Canonical',
+    content: healthyContent,
+    extra: {
+      cw_project_id: staleExtraProjectId,
+      cw_project_name_display: 'stale extra',
+      cw_project_version: '0.0.1',
+      cw_entry_key: staleExtraProjectId + ':wrong',
+      cw_name_format_version: '3',
     },
-  });
-  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
-  const candidate = report.candidates.find(item => item.detectedProjectId === projectId);
-  assert.ok(candidate);
-
-  await harness.api.repairCreativeWorkshopProject({
-    candidateId: candidate.candidateId,
-    projectId,
-    worldbookName: 'DLC',
-    entryUids: [],
-    regexIds: [],
-    expectedEntryCount: 0,
-    expectedRegexCount: 0,
-    sourceProjectIds: [projectId],
-  });
-  const sentinel = harness.worldbooks.DLC.find(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
-  assert.ok(sentinel, 'a real repair must create the target-worldbook integrity sentinel');
-  sentinel.extra.cw_entry_key = '';
-  sentinel.content = identityApi.stripCreativeWorkshopWorldbookMetadata(sentinel.content);
-
-  await assert.rejects(
-    () => harness.api.repairCreativeWorkshopProject({
-      candidateId: candidate.candidateId,
-      projectId,
-      worldbookName: 'DLC',
-      entryUids: [999],
-      regexIds: [],
-      expectedEntryCount: 1,
-      expectedRegexCount: 0,
-      sourceProjectIds: [projectId],
-    }),
-    /DLC 修复已锁定/,
-    'backend repair must fail closed when the target-worldbook integrity sentinel is damaged',
+  };
+  assert.equal(
+    identityApi.getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id'),
+    canonicalProjectId,
+    'healthy EJS identity must win over stale extra.cw_* metadata',
   );
+
+  const withoutExtra = { ...entry, extra: {} };
+  assert.equal(
+    identityApi.getCreativeWorkshopWorldbookMetadataString(withoutExtra, 'cw_project_id'),
+    canonicalProjectId,
+    'healthy EJS identity must remain valid when extra.cw_* disappears entirely',
+  );
+
+  const malformed = {
+    ...entry,
+    content: `<%# poem-workshop-meta:v1-start
+{"cw_project_id":"broken"}
+poem-workshop-meta:v1-end %>正文`,
+  };
+  assert.equal(identityApi.getCreativeWorkshopWorldbookMetadataBlockStatus(malformed.content), 'malformed');
+  assert.equal(
+    identityApi.getCreativeWorkshopWorldbookMetadataString(malformed, 'cw_project_id'),
+    null,
+    'malformed EJS identity must not silently fall back to extra.cw_*',
+  );
+
+  const harness = createHarness({ worldbooks: { DLC: [entry] } });
+  const report = await harness.api.scanCreativeWorkshopRepairCandidates();
+  assert.equal(report.candidates.length, 1);
+  assert.equal(report.candidates[0].detectedProjectId, canonicalProjectId);
+  assert.equal(report.candidates[0].identityStatus, 'healthy');
+  assert.deepEqual(Array.from(report.candidates[0].problems), []);
 }
 
 {
@@ -692,7 +704,7 @@ officialBaseline.entries = [
   });
   assert.equal(result.success, true);
   assert.deepEqual(harness.worldbooks.DLC.map(entry => entry.uid).filter(uid => uid !== undefined).sort((a, b) => a - b), [777, 999]);
-  assert.equal(harness.worldbooks.DLC.some(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵'), true, 'repair sentinel must survive repair');
+  assert.equal(harness.worldbooks.DLC.some(entry => entry.name === '[工坊精灵]我是好人请不要打开我也不要刪掉我喵'), false, 'repair must not create the retired sentinel');
   assert.equal(harness.worldbooks.DLC.some(entry => entry.uid === 101 || entry.uid === 102), false, 'selected old entries must be removed by UID even when metadata is broken');
   assert.equal(harness.worldbooks.DLC.some(entry => entry.uid === 777), true, 'unselected player content must survive');
   assert.deepEqual(
@@ -702,7 +714,7 @@ officialBaseline.entries = [
   assert.equal(harness.api.getCreativeWorkshopPendingRepairs().length, 0);
   assert.equal(harness.installRecords.get('new-project-id')?.installedVersion, '9.9.9');
   const sameRuntimeReport = await harness.api.scanCreativeWorkshopRepairCandidates();
-  assert.equal(sameRuntimeReport.repairRestartRequired, true, 'successful repair must require a Tavern restart before passing integrity check');
+  assert.equal(sameRuntimeReport.repairRestartRequired, true, 'successful repair must require a Tavern restart before rechecking Repair');
 
   const restartedHarness = createHarness({
     worldbooks: harness.worldbooks,
@@ -711,7 +723,6 @@ officialBaseline.entries = [
   });
   const restartedReport = await restartedHarness.api.scanCreativeWorkshopRepairCandidates();
   assert.equal(restartedReport.repairRestartRequired, false, 'a fresh runtime must satisfy the restart guard');
-  assert.equal(restartedReport.repairIntegrityStatus, 'healthy', 'healthy sentinel after restart must pass the device integrity check');
 }
 
 {
@@ -730,8 +741,7 @@ officialBaseline.entries = [
   };
 
   await assert.rejects(() => harness.api.repairCreativeWorkshopProject(target), /simulated install interruption/);
-  assert.equal(harness.worldbooks.DLC.length, 1, 'only the disabled repair sentinel should remain after selected old entries were removed');
-  assert.equal(harness.worldbooks.DLC[0].name, '[工坊精灵]我是好人请不要打开我也不要刪掉我喵');
+  assert.equal(harness.worldbooks.DLC.length, 0, 'failed replacement should leave no hidden sentinel behind after selected old entries were removed');
   const pendingAfterFailure = harness.api.getCreativeWorkshopPendingRepairs();
   assert.equal(pendingAfterFailure.length, 1);
   assert.equal(pendingAfterFailure[0].status, 'failed');
@@ -739,7 +749,7 @@ officialBaseline.entries = [
   const retryResult = await harness.api.repairCreativeWorkshopProject(target);
   assert.equal(retryResult.success, true, 'retry must succeed even when the old UIDs were already deleted by the interrupted attempt');
   assert.equal(harness.applyAttempts(), 2);
-  assert.equal(harness.worldbooks.DLC.filter(entry => entry.extra?.cw_project_id === 'retry-project-id').length, 1);
+  assert.equal(harness.worldbooks.DLC.filter(entry => identityApi.getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') === 'retry-project-id').length, 1);
   assert.equal(harness.api.getCreativeWorkshopPendingRepairs().length, 0);
 }
 
@@ -777,7 +787,7 @@ officialBaseline.entries = [
   const correctedResult = await harness.api.repairCreativeWorkshopProject(correctedTarget);
   assert.equal(correctedResult.success, true);
   assert.equal(harness.api.getCreativeWorkshopPendingRepairs().length, 0, 'a corrected mapping must replace the stale pending record for the same local candidate');
-  assert.equal(harness.worldbooks.DLC.filter(entry => entry.extra?.cw_project_id === 'correct-project-id').length, 1);
+  assert.equal(harness.worldbooks.DLC.filter(entry => identityApi.getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') === 'correct-project-id').length, 1);
 }
 
 const handshakeCaseStart = bridgeSource.indexOf("case 'bridge:handshake':");
@@ -797,7 +807,8 @@ assert.match(repairUiSource, /for \(const item of runnable\)/, 'Workshop matchin
 assert.match(repairUiSource, /复制诊断资料/);
 assert.match(repairUiSource, /UID 可定位/);
 assert.match(repairUiSource, /已自动找到/);
-assert.match(repairUiSource, /candidate\.problems\.length > 0/, 'repair UI must hide healthy DLCs');
+assert.match(repairUiSource, /candidate\?\.identityStatus === 'legacy'/, 'repair UI must surface legacy EJS migration candidates even when they are not broken');
+assert.match(repairUiSource, /candidate\.problems\.length > 0/, 'repair UI must still surface genuine Repair problems');
 assert.match(repairUiSource, /好啦修理成功喵！現在重开酒馆，然后再來工坊DLC检查多次看看吧!/, 'first successful repair must ask for a Tavern restart');
 assert.match(repairUiSource, /知道了喵/);
 assert.match(repairUiSource, /不行，再看一眼/);

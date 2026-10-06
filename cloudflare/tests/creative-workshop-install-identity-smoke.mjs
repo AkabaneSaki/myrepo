@@ -200,8 +200,28 @@ assert.equal(
 
 const contentOnlyEntry = { content: injected };
 assert.equal(api.getCreativeWorkshopWorldbookMetadataString(contentOnlyEntry, 'cw_project_id'), metadata.cw_project_id);
-const extraWinsEntry = { content: injected, extra: { cw_project_id: 'extra-project' } };
-assert.equal(api.getCreativeWorkshopWorldbookMetadataString(extraWinsEntry, 'cw_project_id'), 'extra-project');
+const staleExtraEntry = { content: injected, extra: { cw_project_id: 'extra-project' } };
+assert.equal(
+  api.getCreativeWorkshopWorldbookMetadataString(staleExtraEntry, 'cw_project_id'),
+  metadata.cw_project_id,
+  'healthy EJS metadata is canonical and must override stale extra.cw_* values',
+);
+const legacyExtraEntry = { content: 'legacy content without EJS block', extra: { cw_project_id: 'extra-project' } };
+assert.equal(
+  api.getCreativeWorkshopWorldbookMetadataString(legacyExtraEntry, 'cw_project_id'),
+  'extra-project',
+  'extra.cw_* remains a legacy fallback only while the EJS block is missing',
+);
+const malformedWithExtra = {
+  content: `${api.CREATIVE_WORKSHOP_WORLD_BOOK_META_START}{"cw_project_id":"broken"}${api.CREATIVE_WORKSHOP_WORLD_BOOK_META_END}`,
+  extra: { cw_project_id: 'extra-project' },
+};
+assert.equal(api.getCreativeWorkshopWorldbookMetadataBlockStatus(malformedWithExtra.content), 'malformed');
+assert.equal(
+  api.getCreativeWorkshopWorldbookMetadataString(malformedWithExtra, 'cw_project_id'),
+  null,
+  'malformed EJS metadata must not be hidden by legacy extra.cw_* fallback',
+);
 
 const regexId = api.buildCreativeWorkshopRegexId(
   metadata.cw_project_id,

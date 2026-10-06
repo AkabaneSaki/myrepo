@@ -279,15 +279,24 @@ export function getCreativeWorkshopWorldbookMetadataValue(
   field: string,
 ): unknown {
   const raw = entry as Record<string, any>;
-  const extra = asRecord(raw.extra);
-  const direct = meaningfulMetadataValue(extra?.[field]);
-  if (direct !== undefined && direct !== null) return direct;
+  const content = typeof raw.content === 'string' ? raw.content : '';
+  const blockStatus = getCreativeWorkshopWorldbookMetadataBlockStatus(content);
 
-  const embedded = readCreativeWorkshopWorldbookMetadata(
-    typeof raw.content === 'string' ? raw.content : '',
-  ) as Record<string, any> | null;
-  const fallback = meaningfulMetadataValue(embedded?.[field]);
-  return fallback === undefined ? null : fallback;
+  if (blockStatus === 'healthy') {
+    const embedded = readCreativeWorkshopWorldbookMetadata(content) as Record<string, any> | null;
+    const canonical = meaningfulMetadataValue(embedded?.[field]);
+    return canonical === undefined ? null : canonical;
+  }
+
+  // A malformed embedded identity must stay visible as a repair problem.
+  // Never let legacy extra metadata silently override or hide it.
+  if (blockStatus === 'malformed') return null;
+
+  // Legacy migration fallback only. Once an EJS identity block exists,
+  // extra.cw_* is no longer authoritative and may disappear safely.
+  const extra = asRecord(raw.extra);
+  const legacy = meaningfulMetadataValue(extra?.[field]);
+  return legacy === undefined ? null : legacy;
 }
 
 export function getCreativeWorkshopWorldbookMetadataString(
