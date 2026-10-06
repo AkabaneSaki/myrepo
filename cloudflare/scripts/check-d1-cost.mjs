@@ -30,7 +30,8 @@ const scenarios = [
   { name: '筛选 · 最低点赞', params: { page: 0, pageSize: 20, sort: 'published', minLikes: 5 }, budget: { maxRowsRead: 600 } },
   { name: '筛选 · 最低下载', params: { page: 0, pageSize: 20, sort: 'published', minDownloads: 10 }, budget: { maxRowsRead: 600 } },
   { name: '标签搜索', params: { page: 0, pageSize: 20, sort: 'published', tag: '角色' }, budget: { maxRowsRead: 120 } },
-  { name: '全文搜索', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' }, budget: { maxRowsRead: 400 } },
+  { name: '搜索 · 1–2 字', params: { page: 0, pageSize: 20, sort: 'published', search: '系统' }, budget: { maxRowsRead: 400 } },
+  { name: '搜索 · 3 字以上', params: { page: 0, pageSize: 20, sort: 'published', search: '世界书' }, budget: { maxRowsRead: 400 } },
   { name: '深分页 · 最新第 11 页', params: { page: 10, pageSize: 20, sort: 'published' }, budget: { maxRowsRead: 600 } },
 ];
 

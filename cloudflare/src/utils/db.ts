@@ -877,11 +877,12 @@ export const projectDb = {
           conditions.push('project_search_short MATCH ?');
           values.push(`"${Array.from(searchTerm).join(' ')}"`);
         }
-        // The short index may also find characters across field boundaries.
-        // Check the original fields to preserve substring search behavior.
-        conditions.push('(p.name LIKE ? OR p.description LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.custom_tags LIKE ? OR p.facets LIKE ? OR p.tags LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ?)');
+        // Short search indexes structured discovery fields only. Creator
+        // descriptions are display copy and intentionally do not participate.
+        // Use normalized tag values rather than matching raw JSON blobs.
+        conditions.push('(p.name LIKE ? OR p.project_type LIKE ? OR p.extension_type LIKE ? OR p.author_name LIKE ? OR u.global_name LIKE ? OR EXISTS (SELECT 1 FROM project_search_tags short_tag WHERE short_tag.project_id = p.id AND short_tag.tag LIKE ?))');
         const searchPattern = `%${searchTerm}%`;
-        values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
       }
     }
 
