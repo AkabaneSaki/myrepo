@@ -243,7 +243,7 @@ assert.match(workshopConfig.client.stable, /^\d+\.\d+\.\d+$/);
 assert.equal(Object.hasOwn(workshopConfig.client, 'minimum'), false);
 assert.match(workshopConfig.client.staging, /^\d+\.\d+\.\d+-dev\d+$/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /WORKSHOP_RELEASE_IMPORT/);
-assert.match(fragments.homeModalsScript, /宝宝们，记得自己改版本号～知道了吗？/);
+assert.match(fragments.homeModalsScript, /宝宝们，记得按上面的步骤更新脚本～知道了吗？/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateAcknowledgeBtn\"/);
 assert.match(fragments.homeModalsScript, /releaseUpdateAcknowledgeBtn[\s\S]*requestCloseWorkshop\(\)/);
 assert.match(fragments.homeModalsScript, /id=\"releaseUpdateLookAgainBtn\"/);
