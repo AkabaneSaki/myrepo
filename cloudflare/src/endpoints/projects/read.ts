@@ -9,6 +9,7 @@ import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-est
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
 import { readProjectContentForEdit } from './content';
 import { r2Storage } from '../../utils/r2';
+import { normalizeProjectVersionBase } from '../../utils/version.js';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 
@@ -278,7 +279,7 @@ export class ProjectVersionCheck extends OpenAPIRoute {
 
     const updates = (result.results || []).flatMap(row => {
       const installedVersion = byId.get(String(row.id)) || null;
-      const latestVersion = String(row.version || '').trim();
+      const latestVersion = normalizeProjectVersionBase(row.version);
       if (installedVersion && latestVersion && installedVersion === latestVersion) return [];
       return [{
         id: String(row.id),
@@ -535,7 +536,7 @@ export class ProjectInstallInfo extends OpenAPIRoute {
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    const currentVersion = String(project.version || '').trim();
+    const currentVersion = normalizeProjectVersionBase(project.version);
     if (expectedVersion && currentVersion && expectedVersion !== currentVersion) {
       return c.json({
         error: '项目版本已更新，请重新打开项目后再试',
