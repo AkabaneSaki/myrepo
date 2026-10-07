@@ -21,14 +21,30 @@ assert.match(
 );
 assert.match(
   readSource,
-  /return applyProjectListViewerLikes\(c, payload\?\.userId, cachedResponse\);/,
-  'cached public responses must restore the current viewer like state before returning',
+  /return applyProjectListViewerState\(c, payload, cachedResponse\);/,
+  'cached public responses must apply viewer-specific state before returning',
+);
+
+assert.match(
+  readSource,
+  /PRIVATE_PROJECT_REVIEW_FIELDS[\s\S]*'draftProjectId'[\s\S]*'rejectReason'[\s\S]*'hasPendingDraft'/,
+  'public project responses must hide review-workflow state from unrelated viewers',
+);
+assert.match(
+  readSource,
+  /viewer\?\.isAdmin \|\| \(viewer\?\.userId && project\.authorId === viewer\.userId\)/,
+  'authors and admins must retain access to project review state',
+);
+assert.match(
+  readSource,
+  /hideProjectReviewStateForViewer\(project, payload\)/,
+  'project batch and detail responses must use the same review-state visibility rule',
 );
 
 const cacheWriteIndex = readSource.indexOf('caches.default.put');
-const personalizedReturnIndex = readSource.indexOf('return applyProjectListViewerLikes(c, payload?.userId, response);');
+const personalizedReturnIndex = readSource.indexOf('return applyProjectListViewerState(c, payload, response);');
 assert.ok(cacheWriteIndex >= 0, 'shared cache write must exist');
-assert.ok(personalizedReturnIndex > cacheWriteIndex, 'viewer likes must be applied only after the shared response is cached');
+assert.ok(personalizedReturnIndex > cacheWriteIndex, 'viewer-specific likes and review visibility must be applied only after the shared response is cached');
 
 assert.match(
   dbSource,

@@ -13,22 +13,51 @@ import { normalizeProjectVersionBase } from '../../utils/version.js';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
 
-async function applyProjectListViewerLikes<T extends {
-  projects: Array<{ id: string; userLiked: boolean }>;
+const PRIVATE_PROJECT_REVIEW_FIELDS = [
+  'publishedProjectId',
+  'draftProjectId',
+  'publishedVersion',
+  'status',
+  'reviewedAt',
+  'reviewerId',
+  'rejectReason',
+  'reviewTarget',
+  'visibility',
+  'isPublished',
+  'hasPendingDraft',
+  'draftRevision',
+] as const;
+
+function hideProjectReviewStateForViewer<T extends { authorId?: string }>(
+  project: T,
+  viewer: { userId: string; isAdmin: boolean } | null | undefined,
+): T {
+  if (viewer?.isAdmin || (viewer?.userId && project.authorId === viewer.userId)) return project;
+
+  const sanitized = { ...(project as unknown as Record<string, unknown>) };
+  for (const field of PRIVATE_PROJECT_REVIEW_FIELDS) delete sanitized[field];
+  return sanitized as T;
+}
+
+async function applyProjectListViewerState<T extends {
+  projects: Array<{ id: string; authorId?: string; userLiked: boolean }>;
 }>(
   c: AppContext,
-  userId: string | undefined,
+  viewer: { userId: string; isAdmin: boolean } | null | undefined,
   response: T,
 ): Promise<T> {
-  if (!userId || response.projects.length === 0) return response;
+  const projects = response.projects.map(project => hideProjectReviewStateForViewer(project, viewer));
+  if (!viewer?.userId || projects.length === 0) {
+    return { ...response, projects } as T;
+  }
   const likedProjectIds = await projectDb.getLikedProjectIds(
     c,
-    response.projects.map(project => project.id),
-    userId,
+    projects.map(project => project.id),
+    viewer.userId,
   );
   return {
     ...response,
-    projects: response.projects.map(project => ({
+    projects: projects.map(project => ({
       ...project,
       userLiked: likedProjectIds.has(project.id),
     })),
@@ -124,10 +153,10 @@ export class ProjectList extends OpenAPIRoute {
       const cached = await caches.default.match(cacheRequest);
       if (cached) {
         const cachedResponse = await cached.json() as {
-          projects: Array<{ id: string; userLiked: boolean }>;
+          projects: Array<{ id: string; authorId?: string; userLiked: boolean }>;
           [key: string]: unknown;
         };
-        return applyProjectListViewerLikes(c, payload?.userId, cachedResponse);
+        return applyProjectListViewerState(c, payload, cachedResponse);
       }
     }
     const tagFilters = String(tags || '')
@@ -173,7 +202,7 @@ export class ProjectList extends OpenAPIRoute {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
       }));
     }
-    return applyProjectListViewerLikes(c, payload?.userId, response);
+    return applyProjectListViewerState(c, payload, response);
   }
 }
 
@@ -213,13 +242,16 @@ export class ProjectBatchFetch extends OpenAPIRoute {
 
     return {
       success: true,
-      projects: visibleProjects.map(project => ({
-        ...project,
-        downloadUrl: null,
-        authorAvatar: project.authorAvatar
-          ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
-          : null,
-      })),
+      projects: visibleProjects.map(project => {
+        const viewerProject = hideProjectReviewStateForViewer(project, payload);
+        return {
+          ...viewerProject,
+          downloadUrl: null,
+          authorAvatar: project.authorAvatar
+            ? `https://cdn.discordapp.com/avatars/${project.authorId}/${project.authorAvatar}.webp?size=100`
+            : null,
+        };
+      }),
     };
   }
 }
@@ -606,10 +638,12 @@ export class ProjectFetch extends OpenAPIRoute {
       readPrivateProjectRatingState(c, project, payload),
     ]);
 
+    const viewerProject = hideProjectReviewStateForViewer(project, payload);
+
     return {
       success: true,
       project: {
-        ...project,
+        ...viewerProject,
         downloadUrl: null,
         ...preview,
         privateRating,

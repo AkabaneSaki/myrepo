@@ -202,19 +202,19 @@ Do not write the current numbers again in this SOP. Read the manifest.
 
 #### Planned feature release
 
-Choose the staging release boundary in advance. If production is `2.2.0` and staging is `2.3.0-devN`, the accepted staging line is the future `2.3.0`.
+Choose the staging release boundary in advance. The accepted staging line releases the base SemVer of `client.staging` (the same version without its `-devN` suffix).
 
-When that staging line is promoted to production, always build/release/tag `2.3.0`. Do not inspect the final diff and guess whether enough ST-side code changed to justify the tag. The tag is both the client import version and the support baseline for that production release.
+When that staging line is promoted to production, always build/release/tag that planned base version. Do not inspect the final diff and guess whether enough ST-side code changed to justify the tag. The tag is both the client import version and the support baseline for that production release.
 
 ```text
-production 2.2.0
-→ develop/test future 2.3.0 on staging
+current client.stable
+→ develop/test client.staging on staging
 → accepted staging code
 → owner production integration
 → production Worker
-→ final client 2.3.0
-→ immutable tag 2.3.0
-→ client.stable = 2.3.0
+→ final client = base version of client.staging
+→ immutable tag for that final client
+→ client.stable moves to that tag
 → next staging line begins
 ```
 
@@ -229,9 +229,9 @@ A live bug belongs to the production line. Start from the exact production sourc
   - forward-port the logical fix into `origin/staging`.
 - SillyTavern-client hotfix:
   - fix/test the production client,
-  - release the next patch on the current production line, for example `2.2.0 → 2.2.1`,
+  - release the next patch on the current production line,
   - deploy production Worker too if required,
-  - forward-port the same logical fix into staging so future `2.3.0` contains it.
+  - forward-port the same logical fix into staging so the planned next release contains it.
 
 If the production hotfix branch conflicts with current staging, recreate the equivalent fix against staging instead of merging the old branch wholesale. Release tags are immutable.
 
