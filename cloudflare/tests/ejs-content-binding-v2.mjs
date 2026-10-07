@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 
-// #42 content binding: a device verdict may only approve the exact content, the exact
-// draft revision and the exact checker build it was produced for. Every case here is
-// a cheap string compare on the Worker side; none of them executes rule analysis.
+// #42 content binding: a trusted reviewer's submitted result may only be used for the
+// exact content, exact draft revision and exact checker build. This suite verifies
+// binding/staleness only; it does not remotely attest honest browser execution.
+// Every case here is a cheap Worker-side compare; none executes rule analysis.
 import {
   CONTENT_BINDING_VERSION,
   contentFilesHash,
