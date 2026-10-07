@@ -74,7 +74,6 @@ origin/staging = abc1234
 
 Cloudflare
 staging Worker deployed Git SHA = abc1234
-Worker Version = <cloudflare-version-id>
 staging site verification = passed
 
 Production
@@ -192,57 +191,70 @@ Do not force-push either main branch merely to make history look clean.
 
 ### Release version policy
 
-Creative Workshop client SemVer and Worker/web deployment identity are separate.
+Creative Workshop has one user-facing version line: the SillyTavern client import tag. Workers have only two environments: staging and production.
 
-The only live client-version source is `config/workshop.json`:
+The live client-version source is `config/workshop.json`:
 
-- `client.stable` = newest released client tag required by production.
-- `client.staging` = active staging-client line.
+- `client.stable` = latest released production client tag and support baseline.
+- `client.staging` = active staging build line for the next planned feature release.
 
 Do not write the current numbers again in this SOP. Read the manifest.
 
-#### Mandatory version decision
+#### Planned feature release
 
-Before touching client SemVer, ask:
+Choose the staging release boundary in advance. If production is `2.2.0` and staging is `2.3.0-devN`, the accepted staging line is the future `2.3.0`.
 
-> Does this change require a SillyTavern user to change the `@version` in their Creative Workshop import in order to receive the change?
-
-If **no**:
+When that staging line is promoted to production, always build/release/tag `2.3.0`. Do not inspect the final diff and guess whether enough ST-side code changed to justify the tag. The tag is both the client import version and the support baseline for that production release.
 
 ```text
-Worker/web/backend change
-→ tests
-→ Git SHA
-→ Worker deployment
-→ Worker Version ID
-→ client stable/staging unchanged
+production 2.2.0
+→ develop/test future 2.3.0 on staging
+→ accepted staging code
+→ owner production integration
+→ production Worker
+→ final client 2.3.0
+→ immutable tag 2.3.0
+→ client.stable = 2.3.0
+→ next staging line begins
 ```
 
-Examples: web UI, copy, CSS, ranking, admin pages, Worker routes, D1/R2 logic, server-side validation, server-only hotfixes.
+#### Production hotfix while a newer line is in staging
 
-If **yes**:
+A live bug belongs to the production line. Start from the exact production source.
 
-- client bugfix → patch,
-- new backwards-compatible client capability → minor,
-- incompatible client / bridge contract → major.
+- Worker/web-only hotfix:
+  - fix/test/deploy production Worker,
+  - do not create a client tag,
+  - record the bug/fix,
+  - forward-port the logical fix into `origin/staging`.
+- SillyTavern-client hotfix:
+  - fix/test the production client,
+  - release the next patch on the current production line, for example `2.2.0 → 2.2.1`,
+  - deploy production Worker too if required,
+  - forward-port the same logical fix into staging so future `2.3.0` contains it.
 
-Production requires the exact `client.stable` version; the staging site requires the exact `client.staging` version. A different or unknown client version must update before DLC operations. There is no separate minimum version or supported old-client path.
+If the production hotfix branch conflicts with current staging, recreate the equivalent fix against staging instead of merging the old branch wholesale. Release tags are immutable.
 
-Use exact Git SHA / Worker Version to distinguish Worker builds. Never consume client patch numbers as deployment/build counters.
+#### Support baseline
 
-#### Production hotfix while a newer client line is in staging
+Before investigating a bug from an older client tag, first update/reproduce against current `client.stable`.
 
-Keep the production and staging source lines separate, but decide the client bump from the artifact change:
+If the bug is already fixed on the latest production client, treat it as an outdated-client report. Old immutable tags remain release history and rollback artifacts; they are not the default support baseline forever.
 
-1. Start from the exact current production source.
-2. If the fix is Worker/web-only, keep all client versions unchanged.
-3. If the fix changes the production client artifact and users must update their import, create the next appropriate client release.
-4. Validate the production fix on the correct preview/hotfix path when needed; do not roll the normal staging Worker backward.
-5. Forward-port the logical fix into `origin/staging`.
-6. If cherry-pick conflicts, recreate the equivalent fix instead of merging the old production branch wholesale.
-7. Release tags are immutable.
+There is no general-purpose minimum-supported-version setting. A migration-specific `beforeVersion` applies only to that historical migration.
 
-See `docs/WORKSHOP-RELEASE-SOP.md` for the complete client-release decision tree and reporting format.
+#### Worker identity
+
+Do not assign `2.x.x` versions to Workers. The Worker model is only:
+
+```text
+staging Worker
+production Worker
+```
+
+Deployment tooling may retain exact Git SHA or Cloudflare deployment identity for verification/rollback. That metadata is operational evidence, not a product version and not a reason to consume client SemVer.
+
+See `docs/WORKSHOP-RELEASE-SOP.md` for the complete release decision tree.
 
 ## 7. Normal feature / staging-fix workflow
 
@@ -337,7 +349,6 @@ After deploy record:
 ```text
 origin/staging SHA:
 staging Worker:
-Worker Version ID:
 staging site:
 live verification:
 production changed: no
@@ -558,7 +569,6 @@ owner main = ... / unchanged
 Cloudflare staging
 staging Worker = ...
 deployed Git SHA = ...
-Worker Version = ...
 staging site verification = passed/failed/not-yet-run
 
 Production
@@ -566,7 +576,7 @@ owner main contains change = yes/no
 production deployed = yes/no
 ```
 
-For production work add the exact production Worker version/deployment identity.
+For production work add whether the production Worker was deployed and the exact deployed Git SHA when needed for verification.
 
 Never let the phrase "staging done" substitute for this separation.
 

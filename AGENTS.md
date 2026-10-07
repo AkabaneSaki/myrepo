@@ -16,23 +16,22 @@ These rules apply to all agents and automated sessions working in this repositor
 
 ### Release version policy
 
-- Creative Workshop SemVer belongs to the **SillyTavern client artifact**, not to the Worker/web deployment.
-- Before changing any client version, ask: **does the user need to change the `@version` in their Creative Workshop import to receive this change?**
-  - If **no**: do not change client SemVer. Track Worker/web releases by exact Git SHA + Cloudflare Worker Version ID.
-  - If **yes**: release a new client version.
-- Current client release values are read only from `config/workshop.json`. Never duplicate the live values in this file, UI code, tests, or deployment scripts.
-- `client.stable` = newest released client tag; production requires this exact client version.
-- `client.staging` = active staging-client line.
-- The staging site requires the exact `client.staging` version. Older, newer, missing, or mismatched client versions must update before any DLC bridge operation. Do not add a separate minimum-version setting or an old-client compatibility path.
-- Client version meaning is strict:
-  - `X` = incompatible client / bridge generation.
-  - `Y` = new backwards-compatible client capability.
-  - `Z` = client-side bugfix only.
-- Worker logic, web UI, copy, CSS, ranking, admin UI, D1/R2/backend fixes and other server-only changes do **not** consume patch/minor versions while the old client remains compatible.
+- Creative Workshop has one user-facing version line: the **SillyTavern client import tag**. Workers have only two runtime environments: **staging** and **production**; do not assign Worker SemVer.
+- `client.stable` = latest released production client tag and current support baseline.
+- `client.staging` = active staging client line for the next planned feature release.
+- A planned staging feature line chooses its release boundary in advance. Example: production `2.2.0` + staging `2.3.0-devN` means the accepted staging line will release/tag `2.3.0`.
+- When staging is promoted to production, **always release the planned client tag** even if many changes in that staging cycle were Worker/web-only. Do not re-decide the tag by inspecting whether the final diff happened to touch enough client code.
+- Production hotfixes are the exception:
+  - Worker/web-only production hotfix → fix/deploy production, create no client tag, record the bug/fix, then forward-port the logical fix into `origin/staging`.
+  - SillyTavern-client production hotfix → release the next patch tag on the current production line (for example `2.2.0 → 2.2.1`), then forward-port the same logical fix into staging.
+- Before investigating a bug reported from an old client tag, update/reproduce against the current `client.stable`. If the bug is already fixed there, treat it as an outdated-client report rather than a new production bug.
+- Current client release values are read only from `config/workshop.json`. Never duplicate live version numbers in this file, UI code, tests, or deployment scripts.
+- Do not add a general-purpose minimum-supported-version concept. A historical migration may have its own `beforeVersion` cutoff, but that is not the production support baseline.
 - Historical release tags remain immutable backups; temporary hotfix/release branches are workspaces, not archives.
+- Exact Git SHA / Cloudflare deployment identity may be recorded internally for deployment verification and rollback, but it is not a product version and is not required as Master's Worker version.
 - Run `pnpm check:workshop-config` before client builds/releases and before production integration touching Workshop release configuration.
 
-See `docs/GIT-WORKFLOW.md` for the complete hotfix and forward-port flow.
+See `docs/WORKSHOP-RELEASE-SOP.md` and `docs/GIT-WORKFLOW.md` for the complete release, hotfix, and forward-port flow.
 
 Before the first Git remote operation in every session, verify both actual remote URLs. Never infer ownership from a remote name alone.
 
@@ -126,7 +125,7 @@ Never report vague phrases such as "staging is updated", "changed on staging", o
 
 ```text
 origin/staging = abc1234
-staging Worker = abc1234 (Worker version ...)
+staging Worker = deployed from abc1234
 production = unchanged
 ```
 
@@ -236,7 +235,7 @@ Before declaring a task finished, report:
 - current local branch/worktree
 - commit SHA(s) created
 - `origin/staging` exact SHA, if staging work occurred
-- staging Worker exact deployed Git SHA and Worker version, if staging work occurred
+- staging Worker exact deployed Git SHA, if staging work occurred
 - where each commit was pushed
 - whether owner `main` contains the change
 - production deployment status, if applicable
