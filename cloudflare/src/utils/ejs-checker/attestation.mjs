@@ -1,9 +1,9 @@
 // Cheap, isomorphic content binding for #42.
 //
 // This module must never import the EJS / Acorn / parse5 checker engine. It only
-// hashes bytes and verifies HMACs, so the Worker can authoritatively bind a
-// device-produced checker result to exact content without ever executing the
-// heavy rule analysis itself.
+// hashes bytes and verifies HMACs, so the Worker can authoritatively bind submitted
+// device results to exact content without ever executing the heavy rule analysis
+// itself. Reviewer verdict honesty is a human trust boundary, not remote attestation.
 
 export const CONTENT_BINDING_VERSION = 'PW-CONTENT-BINDING-2026-10-07.1';
 export const CREATOR_ATTESTATION_TTL_MS = 30 * 60 * 1000;
@@ -196,8 +196,10 @@ function isPlainObject(value) {
 }
 
 /**
- * Cheap structural and binding validation of a reviewer-device result. Every check
- * here is a string compare or an array walk; no rule analysis is performed.
+ * Cheap structural and binding validation of a trusted reviewer's submitted result.
+ * This proves which content/revision/checker build the result belongs to; it does not
+ * prove that browser code was unmodified. Every check here is a string compare or an
+ * array walk; no rule analysis is performed.
  */
 export async function verifyReviewerResult(
   secret,
