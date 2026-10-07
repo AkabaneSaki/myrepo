@@ -13,6 +13,10 @@ assert.match(recommendations, /0 AS user_liked/);
 assert.doesNotMatch(recommendations, /viewer_like/);
 assert.match(recommendations, /applyDlcKitchenViewerLikes\(c, publicResponse, currentUser\?\.userId\)/);
 assert.match(recommendations, /projectDb\.getLikedProjectIds/);
+assert.match(recommendations, /import \{ r2Storage \} from '\.\.\/utils\/r2'/);
+assert.match(recommendations, /normalizeDlcKitchenCoverImage\(c, parsedProject\.coverImage\)/);
+assert.match(recommendations, /coverImage\.includes\('\/api\/files\/'\)/);
+assert.match(recommendations, /r2Storage\.getProxyUrl\(c, key\)/);
 
 const revisionBumps = recommendations.match(/await bumpDlcKitchenRevision\(c, payload\.userId\)/g) || [];
 assert.equal(revisionBumps.length, 3, 'profile save, recommendation save, and recommendation delete must bump the cache revision');
