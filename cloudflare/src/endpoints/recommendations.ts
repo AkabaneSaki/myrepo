@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../types';
 import { parseProjectRow, projectDb } from '../utils/db';
 import { getCurrentUserFromRequest } from '../utils/jwt';
+import { r2Storage } from '../utils/r2';
 
 type RecommendationRow = Record<string, unknown> & {
   curator_id: string;
@@ -46,6 +47,13 @@ function parseReactionPresets(value: unknown): string[] {
 
 function normalizeReactionPresets(items: string[]): string[] {
   return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, 12);
+}
+
+function normalizeDlcKitchenCoverImage(c: AppContext, coverImage: string | null): string | null {
+  if (!coverImage) return null;
+  if (/^https?:\/\//i.test(coverImage) && !coverImage.includes('/api/files/')) return coverImage;
+  const key = coverImage.replace(/^.*\/api\/files\//, '').replace(/^\/+/, '');
+  return r2Storage.getProxyUrl(c, key);
 }
 
 const DLC_KITCHEN_CACHE_TTL_SECONDS = 5 * 60;
@@ -156,7 +164,12 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
     const curators = new Map<string, any>();
 
     for (const row of rows) {
-      const project = { ...parseProjectRow(row), downloadUrl: null };
+      const parsedProject = parseProjectRow(row);
+      const project = {
+        ...parsedProject,
+        downloadUrl: null,
+        coverImage: normalizeDlcKitchenCoverImage(c, parsedProject.coverImage),
+      };
       if (!curators.has(row.curator_id)) {
         curators.set(row.curator_id, {
           id: row.curator_id,
