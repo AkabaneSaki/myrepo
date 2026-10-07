@@ -10,8 +10,12 @@ import {
   type ProjectEntryKind,
 } from '../../utils/project-content';
 import { r2Storage } from '../../utils/r2';
-import { formatUploaderCodeCheckError, toUploaderCodeCheck } from '../../utils/ejs-preflight.mjs';
-import { analyzeProjectCodeCached } from '../../utils/ejs-checker/cache.mjs';
+import {
+  hashContentText,
+  issueCreatorAttestation,
+  verifyCreatorAttestation,
+} from '../../utils/ejs-checker/attestation.mjs';
+import { CHECKER_VERSION } from '../../utils/ejs-checker/index.mjs';
 import { bumpProjectVersionWithLegacyFallback } from '../../utils/version.js';
 import { computeProjectInspectionSummary, readProjectContentForEdit } from './content';
 
@@ -19,6 +23,35 @@ const MAX_UPLOAD_SIZE = WORKSHOP_LIMITS.projectUploadBytes;
 const MAX_COVER_REQUEST_SIZE = MAX_UPLOAD_SIZE + WORKSHOP_LIMITS.coverRequestOverheadBytes;
 const UPLOAD_SIZE_ERROR = `文件过大，最大 ${WORKSHOP_LIMITS.projectUploadLabel}`;
 const CONTENT_CHANGED_ERROR = '文件正在保存或项目已变化，请稍后刷新再试。';
+const ATTESTATION_ERROR = '这份文件的本地检查结果已经失效，请重新选择文件并等待本地检查通过后再提交。';
+
+/** Advertised checker revision the device bundles were built from. A receipt issued
+ * for a different build must not authorise an upload. */
+const DEVICE_CHECKER_REVISION = `${CHECKER_VERSION.engine}:${CHECKER_VERSION.policyVersion}`;
+
+/**
+ * #42: the Worker performs only cheap authoritative validation here. The complete
+ * rule analysis lives on the creator device, and its verdict never reaches this
+ * function — only a server-stamped receipt over the exact uploaded bytes.
+ */
+async function validateAttestedUpload(
+  c: AppContext,
+  userId: string,
+  kind: ProjectEntryKind,
+  text: string,
+  attestation: unknown,
+): Promise<{ valid: true; contentHash: string } | { valid: false; error: string }> {
+  const contentHash = await hashContentText(text);
+  const verified = await verifyCreatorAttestation(c.env.JWT_SECRET, String(attestation ?? ''), {
+    userId,
+    kind,
+    checkerRevision: DEVICE_CHECKER_REVISION,
+    contentHash,
+  });
+  if (!verified.ok) return { valid: false, error: ATTESTATION_ERROR };
+  return { valid: true, contentHash };
+}
+
 
 async function writeProjectContent(
   c: AppContext,
@@ -98,20 +131,21 @@ export class ProjectUploadPreflight extends OpenAPIRoute {
       return c.json({ error: validation.error }, 400);
     }
 
-    const fileName = kind === 'worldbook' ? '上传的世界书.json' : '上传的正则.json';
-    const codeCheck = await analyzeProjectCodeCached([{ fileName, type: kind, text }]);
-    const uploaderCodeCheck = toUploaderCodeCheck(codeCheck);
-    if (codeCheck.gate === 'reject') {
-      return c.json(
-        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: uploaderCodeCheck },
-        422,
-      );
-    }
-
+    // Cheap authoritative validation only: the complete rule analysis already ran on
+    // the creator device. The receipt is stamped from these exact bytes, so a later
+    // upload of different content cannot reuse it.
+    const contentHash = await hashContentText(text);
     return {
       success: true,
-      message: '自动检查通过，可以继续。',
-      codeCheck: uploaderCodeCheck,
+      message: '文件完整性检查通过，可以继续。',
+      contentHash,
+      checkerRevision: DEVICE_CHECKER_REVISION,
+      attestation: await issueCreatorAttestation(c.env.JWT_SECRET, {
+        userId: payload.userId,
+        kind,
+        checkerRevision: DEVICE_CHECKER_REVISION,
+        contentHash,
+      }),
     };
   }
 }
@@ -227,17 +261,22 @@ export class ProjectUpload extends OpenAPIRoute {
 
     const worldbookText = new TextDecoder().decode(arrayBuffer);
     const validation = validateProjectContentText(worldbookText, 'worldbook');
-    const codeCheck = validation.valid === false
-      ? null
-      : await analyzeProjectCodeCached([{ fileName: `project-${projectId}.json`, type: 'worldbook', text: worldbookText }]);
-    if (codeCheck?.gate === 'reject') {
-      return c.json(
-        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
-        422,
-      );
-    }
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
+    }
+
+    // #42: no heavy checker on this path. The receipt proves the Worker validated
+    // exactly these bytes; it carries no verdict, so a forged "passed=true" buys
+    // nothing. Approval still requires a reviewer-device result for this content.
+    const attested = await validateAttestedUpload(
+      c,
+      payload.userId,
+      'worldbook',
+      worldbookText,
+      c.req.header('x-workshop-content-attestation'),
+    );
+    if (attested.valid === false) {
+      return c.json({ error: attested.error }, 409);
     }
 
     let targetProject = project;
@@ -444,17 +483,19 @@ export class ProjectRegexUpload extends OpenAPIRoute {
 
     const regexText = new TextDecoder().decode(arrayBuffer);
     const validation = validateProjectContentText(regexText, 'regex');
-    const codeCheck = validation.valid === false
-      ? null
-      : await analyzeProjectCodeCached([{ fileName: `regex-${projectId}.json`, type: 'regex', text: regexText }]);
-    if (codeCheck?.gate === 'reject') {
-      return c.json(
-        { error: formatUploaderCodeCheckError(codeCheck), codeCheck: toUploaderCodeCheck(codeCheck) },
-        422,
-      );
-    }
     if (validation.valid === false) {
       return c.json({ error: validation.error }, 400);
+    }
+
+    const attested = await validateAttestedUpload(
+      c,
+      payload.userId,
+      'regex',
+      regexText,
+      c.req.header('x-workshop-content-attestation'),
+    );
+    if (attested.valid === false) {
+      return c.json({ error: attested.error }, 409);
     }
 
     let targetProject = project;

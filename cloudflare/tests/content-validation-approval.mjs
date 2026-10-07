@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { analyzeProjectCodeV2, CHECKER_VERSION } from '../src/utils/ejs-checker/index.mjs';
+import { applyAuditBaseline, buildAuditSnapshot, buildReviewPolicyVersion } from '../src/utils/ejs-checker/audit.mjs';
 
 const BASE_URL = 'http://127.0.0.1:8791';
 const SIGNING_VALUE = 'cw-local-api-test';
@@ -30,9 +32,10 @@ function createToken({ userId, username, isAdmin }) {
 const creatorToken = createToken({ userId: 'cw_validation_creator', username: 'Validation Creator', isAdmin: false });
 const adminToken = createToken({ userId: 'cw_validation_admin', username: 'Validation Admin', isAdmin: true });
 
-async function api(path, { method = 'GET', token, body, expected = 200, contentType = 'application/json' } = {}) {
+async function api(path, { method = 'GET', token, body, expected = 200, contentType = 'application/json', attestation } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
+  if (attestation) headers['x-workshop-content-attestation'] = attestation;
   let requestBody;
   if (body !== undefined) {
     headers['content-type'] = contentType;
@@ -61,12 +64,51 @@ async function createProject(name, tags = ['角色']) {
   });
 }
 
+/** Stands in for a device: runs the complete checker over the exact pending content. */
+async function runDeviceCheck(deviceCheck) {
+  const report = analyzeProjectCodeV2(deviceCheck.files);
+  const auditSnapshot = report.gate === 'reject' ? null : await buildAuditSnapshot(deviceCheck.files, report);
+  return {
+    success: true,
+    gate: report.gate,
+    engine: report.engine,
+    parserCompatibility: report.parserCompatibility,
+    policyVersion: auditSnapshot?.policyVersion ?? buildReviewPolicyVersion(CHECKER_VERSION),
+    checkerRevision: CHECKER_VERSION.engine + ':' + CHECKER_VERSION.policyVersion,
+    trustedAssetHosts: deviceCheck.trustedAssetHosts,
+    projectId: deviceCheck.projectId,
+    draftRevision: deviceCheck.draftRevision,
+    filesHash: auditSnapshot?.filesHash ?? '',
+    auditSnapshot,
+    report: auditSnapshot ? applyAuditBaseline(report, auditSnapshot, deviceCheck.baseline) : report,
+  };
+}
+
+/** Uploads a file the way the creator UI does: attest first, then upload. */
+async function uploadFile(projectId, path, text) {
+  const receipt = await api(`/api/projects/preflight/${path.endsWith('upload-regex') ? 'regex' : 'worldbook'}`, {
+    method: 'POST',
+    token: creatorToken,
+    body: text,
+  });
+  return api(`/api/projects/${projectId}/${path}`, {
+    method: 'POST',
+    token: creatorToken,
+    body: text,
+    attestation: receipt.attestation,
+  });
+}
+
 async function approve(projectId, expected = 200) {
   const detail = await api(`/api/admin/review/${projectId}`, { token: adminToken });
+  const reviewerResult = {
+    ...(await runDeviceCheck(detail.deviceCheck)),
+    challenge: detail.deviceCheck.challenge,
+  };
   return api(`/api/admin/review/${projectId}`, {
     method: 'POST',
     token: adminToken,
-    body: { action: 'approve', expectedRevision: detail.project.draftRevision, reviewToken: detail.reviewToken },
+    body: { action: 'approve', expectedRevision: detail.project.draftRevision, reviewerResult },
     expected,
   });
 }
@@ -156,11 +198,7 @@ try {
     expected: 400,
   });
 
-  await api(`/api/projects/${empty.projectId}/upload`, {
-    method: 'POST',
-    token: creatorToken,
-    body: worldbook,
-  });
+  await uploadFile(empty.projectId, 'upload', worldbook);
   await approve(empty.projectId);
 
   const metadataDraft = await api(`/api/projects/${empty.projectId}`, {
@@ -209,11 +247,7 @@ try {
     },
   });
   cleanupIds.add(structuredCharacter.projectId);
-  await api(`/api/projects/${structuredCharacter.projectId}/upload`, {
-    method: 'POST',
-    token: creatorToken,
-    body: worldbook,
-  });
+  await uploadFile(structuredCharacter.projectId, 'upload', worldbook);
 
   const structuredCharacterDraftDetail = await api(`/api/projects/${structuredCharacter.projectId}`, { token: creatorToken });
   assert.equal(structuredCharacterDraftDetail.project.projectType, '角色');
@@ -271,23 +305,15 @@ try {
 
   const roleRegexOnly = await createProject('Validation Regex Only');
   cleanupIds.add(roleRegexOnly.projectId);
-  await api(`/api/projects/${roleRegexOnly.projectId}/upload-regex`, {
-    method: 'POST',
-    token: creatorToken,
-    body: regex,
-  });
+  await uploadFile(roleRegexOnly.projectId, 'upload-regex', regex);
   await approve(roleRegexOnly.projectId, 409);
 
   const extensionRegexOnly = await createProject('Validation Extension Regex Only', ['扩展']);
   cleanupIds.add(extensionRegexOnly.projectId);
-  await api(`/api/projects/${extensionRegexOnly.projectId}/upload-regex`, {
-    method: 'POST',
-    token: creatorToken,
-    body: regex,
-  });
+  await uploadFile(extensionRegexOnly.projectId, 'upload-regex', regex);
   await approve(extensionRegexOnly.projectId);
 
-  const publishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  const publishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`, { token: creatorToken });
   assert.equal(publishedRegex.project.status, 'approved');
   assert.equal(publishedRegex.regexEntriesPreview.length, 1);
 
@@ -299,11 +325,7 @@ try {
   assert.ok(regexEditDraft.draftProjectId);
   cleanupIds.add(regexEditDraft.draftProjectId);
 
-  const regexEditUpload = await api(`/api/projects/${regexEditDraft.draftProjectId}/upload-regex`, {
-    method: 'POST',
-    token: creatorToken,
-    body: updatedRegex,
-  });
+  const regexEditUpload = await uploadFile(regexEditDraft.draftProjectId, 'upload-regex', updatedRegex);
   assert.equal(regexEditUpload.projectId, regexEditDraft.draftProjectId);
 
   const regexEditDraftDetail = await api(`/api/projects/${regexEditDraft.draftProjectId}`, { token: creatorToken });
@@ -316,7 +338,7 @@ try {
   await approve(regexEditDraft.draftProjectId);
   cleanupIds.delete(regexEditDraft.draftProjectId);
 
-  const republishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`);
+  const republishedRegex = await api(`/api/projects/${extensionRegexOnly.projectId}`, { token: creatorToken });
   assert.equal(republishedRegex.project.status, 'approved');
   assert.equal(republishedRegex.project.description, 'regex-only edit lifecycle test');
   assert.equal(republishedRegex.regexEntriesPreview.length, 1);
@@ -326,7 +348,7 @@ try {
 
   // Removing the last worldbook entry is an explicit tombstone. The remaining
   // valid regex keeps this extension valid, and approval must not revive the old file.
-  const mixedDraft = await api(`/api/projects/${extensionRegexOnly.projectId}/upload`, { method: 'POST', token: creatorToken, body: worldbook });
+  const mixedDraft = await uploadFile(extensionRegexOnly.projectId, 'upload', worldbook);
   cleanupIds.add(mixedDraft.projectId);
   const mixedDetail = await api(`/api/projects/${mixedDraft.projectId}`, { token: creatorToken });
   const removedEntry = await api(`/api/projects/${mixedDraft.projectId}/entries/remove`, { method: 'POST', token: creatorToken, body: { kind: 'worldbook', entryKey: mixedDetail.worldbookEntriesPreview[0].entryKey } });
@@ -339,7 +361,7 @@ try {
 
   // The inverse tombstone has no regex sources to inspect but its bytes are
   // still bound to the review and must replace the published regex file.
-  const worldbookDraft = await api(`/api/projects/${extensionRegexOnly.projectId}/upload`, { method: 'POST', token: creatorToken, body: worldbook });
+  const worldbookDraft = await uploadFile(extensionRegexOnly.projectId, 'upload', worldbook);
   cleanupIds.add(worldbookDraft.projectId);
   const inverseDetail = await api(`/api/projects/${worldbookDraft.projectId}`, { token: creatorToken });
   await api(`/api/projects/${worldbookDraft.projectId}/entries/remove`, { method: 'POST', token: creatorToken, body: { kind: 'regex', entryKey: inverseDetail.regexEntriesPreview[0].entryKey } });

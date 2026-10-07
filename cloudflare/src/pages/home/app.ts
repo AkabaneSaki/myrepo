@@ -21,6 +21,7 @@ import { homeAppActionsScript } from './app/actions';
 import { homeAppBootstrapScript } from './app/bootstrap';
 import workshopConfig from '../../../../config/workshop.json';
 import uploadChecker from '../../generated/upload-checker-revision.json';
+import reviewChecker from '../../generated/review-checker-revision.json';
 import { CHECKER_LIMITS } from '../../utils/ejs-checker/limits.mjs';
 
 const projectContentPolicyJson = JSON.stringify(PROJECT_CONTENT_POLICY);
@@ -36,6 +37,7 @@ export const homeScript = String.raw`
   const WORKSHOP_CONFIG = ${workshopConfigJson};
   const WORKSHOP_LIMITS = ${workshopLimitsJson};
   const UPLOAD_CHECKER_URL = '/assets/upload-checker.js?v=${uploadChecker.revision}';
+  const REVIEW_CHECKER_URL = '/assets/review-checker.js?v=${reviewChecker.revision}';
   const UPLOAD_CHECKER_TIMEOUT_MS = ${CHECKER_LIMITS.browserTimeoutMs};
 
   ${homeStateScript}

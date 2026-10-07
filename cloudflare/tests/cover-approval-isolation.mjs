@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { analyzeProjectCodeV2, CHECKER_VERSION } from '../src/utils/ejs-checker/index.mjs';
+import { applyAuditBaseline, buildAuditSnapshot, buildReviewPolicyVersion } from '../src/utils/ejs-checker/audit.mjs';
 
 const BASE_URL = 'http://127.0.0.1:8791';
 const SIGNING_VALUE = 'cw-local-api-test';
@@ -30,9 +32,10 @@ function createToken({ userId, username, isAdmin }) {
 const creatorToken = createToken({ userId: 'cw_cover_creator', username: 'Cover Creator', isAdmin: false });
 const adminToken = createToken({ userId: 'cw_cover_admin', username: 'Cover Admin', isAdmin: true });
 
-async function api(path, { method = 'GET', token, body, expected = 200 } = {}) {
+async function api(path, { method = 'GET', token, body, expected = 200, attestation } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
+  if (attestation) headers['x-workshop-content-attestation'] = attestation;
   let requestBody;
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
@@ -57,8 +60,43 @@ async function api(path, { method = 'GET', token, body, expected = 200 } = {}) {
   return data;
 }
 
-async function uploadCover(projectId, bytes, contentType, fileName) {
-  const form = new FormData();
+/** Stands in for a device: runs the complete checker over the exact pending content. */
+async function runDeviceCheck(deviceCheck) {
+  const report = analyzeProjectCodeV2(deviceCheck.files);
+  const auditSnapshot = report.gate === 'reject' ? null : await buildAuditSnapshot(deviceCheck.files, report);
+  return {
+    success: true,
+    gate: report.gate,
+    engine: report.engine,
+    parserCompatibility: report.parserCompatibility,
+    policyVersion: auditSnapshot?.policyVersion ?? buildReviewPolicyVersion(CHECKER_VERSION),
+    checkerRevision: CHECKER_VERSION.engine + ':' + CHECKER_VERSION.policyVersion,
+    trustedAssetHosts: deviceCheck.trustedAssetHosts,
+    projectId: deviceCheck.projectId,
+    draftRevision: deviceCheck.draftRevision,
+    filesHash: auditSnapshot?.filesHash ?? '',
+    auditSnapshot,
+    report: auditSnapshot ? applyAuditBaseline(report, auditSnapshot, deviceCheck.baseline) : report,
+  };
+}
+
+async function approveProject(projectId) {
+  const detail = await api(`/api/admin/review/${projectId}`, { token: adminToken });
+  return api(`/api/admin/review/${projectId}`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      action: 'approve',
+      expectedRevision: detail.project.draftRevision,
+      reviewerResult: {
+        ...(await runDeviceCheck(detail.deviceCheck)),
+        challenge: detail.deviceCheck.challenge,
+      },
+    },
+  });
+}
+
+async function uploadCover(projectId, bytes, contentType, fileName) {  const form = new FormData();
   form.set('cover', new Blob([bytes], { type: contentType }), fileName);
   const response = await fetch(`${BASE_URL}/api/projects/${projectId}/upload-cover`, {
     method: 'POST',
@@ -122,19 +160,20 @@ try {
   publishedId = created.projectId;
   assert.ok(publishedId);
 
-  await api(`/api/projects/${publishedId}/upload`, {
+  const worldbookReceipt = await api('/api/projects/preflight/worldbook', {
     method: 'POST',
     token: creatorToken,
     body: JSON.stringify(worldbook),
   });
+  await api(`/api/projects/${publishedId}/upload`, {
+    method: 'POST',
+    token: creatorToken,
+    body: JSON.stringify(worldbook),
+    attestation: worldbookReceipt.attestation,
+  });
   await uploadCover(publishedId, initialCover, 'image/png', 'initial.png');
 
-  const pending = await api(`/api/admin/review/${publishedId}`, { token: adminToken });
-  await api(`/api/admin/review/${publishedId}`, {
-    method: 'POST',
-    token: adminToken,
-    body: { action: 'approve', expectedRevision: pending.project.draftRevision, reviewToken: pending.reviewToken },
-  });
+  await approveProject(publishedId);
 
   assert.deepEqual(await fetchFile(`/api/files/projects/${publishedId}/cover.png`), initialCover);
 
@@ -163,12 +202,7 @@ try {
     replacementCoverJpg,
   );
 
-  const draft = await api(`/api/admin/review/${draftId}`, { token: adminToken });
-  await api(`/api/admin/review/${draftId}`, {
-    method: 'POST',
-    token: adminToken,
-    body: { action: 'approve', expectedRevision: draft.project.draftRevision, reviewToken: draft.reviewToken },
-  });
+  await approveProject(draftId);
   draftId = null;
 
   const published = await api(`/api/projects/${publishedId}`);

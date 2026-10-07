@@ -127,24 +127,57 @@ assert.ok(rules(regexEval).includes('M1'));
 assert.ok(!rules(regexEval).some(rule => /^L[1-7]$/.test(rule)));
 
 const assetsSource = fs.readFileSync(new URL('../src/endpoints/projects/assets.ts', import.meta.url), 'utf8');
-assert.match(assetsSource, /analyzeProjectCodeCached\(\[\{ fileName: `project-\$\{projectId\}\.json`/);
-assert.match(assetsSource, /analyzeProjectCodeCached\(\[\{ fileName: `regex-\$\{projectId\}\.json`/);
-assert.match(assetsSource, /toUploaderCodeCheck\(codeCheck\)/);
-assert.match(assetsSource, /422/);
-assert.match(assetsSource, /class ProjectUploadPreflight/);
-assert.match(assetsSource, /自动检查通过，可以继续/);
+const adminSource = fs.readFileSync(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');
 
-const indexSource = fs.readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+// #42: the Worker must never execute the heavy checker on the upload or review path.
+const indexTsSource = fs.readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+assert.doesNotMatch(assetsSource, /analyzeProjectCodeCached|analyzeProjectCodeV2/, 'upload and preflight must not run the heavy checker');
+assert.doesNotMatch(adminSource, /analyzeProjectCodeCached|analyzeProjectCodeV2/, 'review detail and approval must not run the heavy checker');
+assert.doesNotMatch(adminSource, /buildAuditSnapshot/, 'only the device may build an audit snapshot');
+assert.match(assetsSource, /issueCreatorAttestation/, 'preflight must stamp a content attestation');
+assert.match(assetsSource, /verifyCreatorAttestation/, 'uploads must verify the attestation');
+assert.match(assetsSource, /x-workshop-content-attestation/);
+assert.match(assetsSource, /hashContentText/);
+assert.match(assetsSource, /class ProjectUploadPreflight/);
+assert.match(assetsSource, /class ProjectUpload/);
+assert.match(assetsSource, /class ProjectRegexUpload/);
+assert.match(adminSource, /issueReviewChallenge/);
+assert.match(adminSource, /verifyReviewerResult/);
+assert.match(adminSource, /contentFilesHash/);
+assert.match(indexTsSource, /\/assets\/review-checker\.js/);
+assert.match(indexTsSource, /CODE_CHECK_SERVICE/, 'durable object routing must be retained on the live worker');
+
+const indexSource = indexTsSource;
 assert.match(indexSource, /\/api\/projects\/preflight\/:kind/);
 
 const apiSource = fs.readFileSync(new URL('../src/pages/home/api.ts', import.meta.url), 'utf8');
 assert.match(apiSource, /async function preflightProjectUpload\(file, kind\)/);
 assert.match(apiSource, /\/api\/projects\/preflight\//);
+assert.match(apiSource, /X-Workshop-Content-Attestation/);
+assert.match(apiSource, /function runAdminReviewDeviceCheck\(deviceCheck\)/);
+assert.match(apiSource, /REVIEW_CHECKER_URL/);
 
 const editorSource = fs.readFileSync(new URL('../src/pages/home/modal/project-editor.ts', import.meta.url), 'utf8');
 assert.match(editorSource, /runPreparedPreflight/);
 assert.match(editorSource, /preflightState !== "ok"/);
-assert.match(editorSource, /本地检查通过，提交时还会再次检查/);
+assert.match(editorSource, /prepared\.attestation = result\.attestation/);
+
+const adminUiSource = fs.readFileSync(new URL('../src/pages/home/modal/admin-review.ts', import.meta.url), 'utf8');
+assert.match(adminUiSource, /function renderAdminCodeCheck\(report, detail = null\)/);
+assert.match(adminUiSource, /renderAdminCodeCheck\(codeCheck, checkDetail\)/);
+assert.match(adminUiSource, /runAdminReviewDeviceCheck\(detail\.deviceCheck\)/);
+assert.match(adminUiSource, /reviewerResult: \{ \.\.\.deviceResult/);
+assert.doesNotMatch(adminUiSource, /reviewToken: detail\.reviewToken/, 'the review token was replaced by a content-bound device result');
+
+const attestationSource = fs.readFileSync(new URL('../src/utils/ejs-checker/attestation.mjs', import.meta.url), 'utf8');
+assert.doesNotMatch(attestationSource, /^import /m, 'binding helpers must import no checker engine');
+assert.doesNotMatch(attestationSource, /analyzeProjectCode|parseEjs|from 'parse5'|from 'acorn'/);
+
+const uploadWorkerSource = fs.readFileSync(new URL('../src/utils/ejs-checker/upload-worker.mjs', import.meta.url), 'utf8');
+assert.match(uploadWorkerSource, /analyzeProjectCodeV2/, 'the creator device must run the complete rule set');
+const reviewWorkerSource = fs.readFileSync(new URL('../src/utils/ejs-checker/review-worker.mjs', import.meta.url), 'utf8');
+assert.match(reviewWorkerSource, /analyzeProjectCodeV2/, 'the reviewer device must run the complete rule set');
+assert.match(reviewWorkerSource, /applyAuditBaseline/);
 
 const uploadPreviewSource = fs.readFileSync(new URL('../src/pages/home/upload-preview.ts', import.meta.url), 'utf8');
 assert.match(uploadPreviewSource, /function renderUploadPreflightStatus/);
@@ -229,21 +262,14 @@ assert.match(stylesSource, /data-admin-review-theme="light"\] \.external-links-n
 assert.match(stylesSource, /\.admin-code-source-line\.is-target/);
 assert.match(stylesSource, /data-admin-review-theme="light"\] \.admin-code-source-line\.is-target/);
 
-const adminSource = fs.readFileSync(new URL('../src/endpoints/admin.ts', import.meta.url), 'utf8');
-assert.match(adminSource, /codeCheckInputs/);
-assert.match(adminSource, /codeCheck\.gate === 'reject'/);
-assert.match(adminSource, /codeCheck,/);
-
-const adminUiSource = fs.readFileSync(new URL('../src/pages/home/modal/admin-review.ts', import.meta.url), 'utf8');
-assert.match(adminUiSource, /function renderAdminCodeCheck\(report, detail = null\)/);
-assert.match(adminUiSource, /renderAdminCodeCheck\(codeCheck, detail\)/);
-assert.match(adminUiSource, /function renderAdminAuditReadableEvidence\(detail, item\)/);
-assert.match(adminUiSource, /条目中可见 URL/);
-assert.match(adminUiSource, /data-admin-code-jump/);
-assert.match(adminUiSource, /function bindAdminCodeCheckNavigation\(overlay, detail\)/);
-assert.match(adminUiSource, /data-admin-audit-recheck/);
-assert.match(adminUiSource, /prefetchedDetail \|\| await fetchAdminReviewDetail\(project\.id\)/);
-assert.match(adminUiSource, /已按当前 Checker 规则重新检查/);
-assert.match(adminUiSource, /codeCheck\?\.gate === \"reject\" \? \"disabled\"/);
+const adminUiRenderSource = adminUiSource;
+assert.match(adminUiRenderSource, /function renderAdminCodeCheck\(report, detail = null\)/);
+assert.match(adminUiRenderSource, /function renderAdminAuditReadableEvidence\(detail, item\)/);
+assert.match(adminUiRenderSource, /条目中可见 URL/);
+assert.match(adminUiRenderSource, /data-admin-code-jump/);
+assert.match(adminUiRenderSource, /function bindAdminCodeCheckNavigation\(overlay, detail\)/);
+assert.match(adminUiRenderSource, /data-admin-audit-recheck/);
+assert.match(adminUiRenderSource, /prefetchedDetail \|\| await fetchAdminReviewDetail\(project\.id\)/);
+assert.match(adminUiRenderSource, /deviceCheckPending \? "disabled" : ""/, 'approval stays disabled until the device check finished');
 
 console.log('EJS upload gate + audit report smoke: ok');

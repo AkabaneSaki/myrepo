@@ -7,12 +7,23 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { isEmptyProjectContentText, validateProjectContentText, type ProjectEntryKind } from '../utils/project-content';
 import { attachWorldbookEjsLengthEstimates } from '../utils/project-entry-estimates';
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../utils/project-preview';
-import { analyzeProjectCodeCached } from '../utils/ejs-checker/cache.mjs';
-import { buildAuditSnapshot, applyAuditBaseline, buildReviewToken } from '../utils/ejs-checker/audit.mjs';
+import {
+  contentFilesHash,
+  issueReviewChallenge,
+  verifyReviewerResult,
+} from '../utils/ejs-checker/attestation.mjs';
+import { CHECKER_VERSION } from '../utils/ejs-checker/index.mjs';
+import { buildReviewPolicyVersion } from '../utils/ejs-checker/audit.mjs';
+import { trustedAssetHosts } from '../utils/ejs-checker/policy-config.mjs';
 import { buildProjectReviewDiff } from '../utils/project-review-diff';
 
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
+
+/** #42: the complete rule analysis runs on the reviewer device. The Worker binds the
+ * device verdict to exact content, exact draft revision and exact checker revision. */
+const DEVICE_CHECKER_REVISION = `${CHECKER_VERSION.engine}:${CHECKER_VERSION.policyVersion}`;
+
 
 function getReviewContentKey(projectId: string, kind: ProjectEntryKind): string {
   const fileName = kind === 'worldbook' ? `project-${projectId}.json` : `regex-${projectId}.json`;
@@ -54,7 +65,12 @@ async function readDirectReviewContentText(
 }
 
 
-async function validateReviewPayloads(
+/**
+ * #42: reads the exact pending content and performs cheap authoritative validation
+ * only — size/type, structure, project content policy, and the hashes that bind a
+ * device verdict to this content. No EJS / Regex rule analysis runs here.
+ */
+async function collectReviewContent(
   c: AppContext,
   project: {
     id: string;
@@ -64,7 +80,14 @@ async function validateReviewPayloads(
     tags?: string[];
     draftRevision: number;
   },
-): Promise<{ valid: true; snapshot: Record<string, unknown>; reviewToken: string; codeFiles: Array<{ type: ProjectEntryKind; text: string }> } | { valid: false; error: string }> {
+): Promise<
+  | {
+      valid: true;
+      filesHash: string;
+      codeFiles: Array<{ fileName: string; type: ProjectEntryKind; text: string }>;
+    }
+  | { valid: false; error: string }
+> {
   const presence = { worldbook: false, regex: false };
   const codeCheckInputs: Array<{ fileName: string; type: ProjectEntryKind; text: string }> = [];
 
@@ -93,15 +116,75 @@ async function validateReviewPayloads(
     return { valid: false, error: policyValidation.error };
   }
 
-  const codeCheck = await analyzeProjectCodeCached(codeCheckInputs);
-  if (codeCheck.gate === 'reject') {
-    const firstBlocker = codeCheck.findings.find(finding => finding.severity === 'high');
-    const label = firstBlocker ? `[${firstBlocker.ruleId}] ${firstBlocker.title}` : '脚本未通过自动检查';
-    return { valid: false, error: `项目仍有自动检查阻断项：${label}。请在审核详情查看后要求 Creator 修改。` };
+  return { valid: true, filesHash: await contentFilesHash(codeCheckInputs), codeFiles: codeCheckInputs };
+}
+
+/**
+ * Approval gate for #42. The Worker recomputes the content hash from the stored
+ * bytes, re-checks the draft revision, and verifies that the reviewer device
+ * produced a result for exactly this content, this revision and this checker build.
+ * A tampered, missing, stale or foreign result can never approve anything.
+ */
+async function verifyReviewerApproval(
+  c: AppContext,
+  project: { id: string; draftRevision: number },
+  deviceResult: unknown,
+): Promise<
+  | { valid: true; snapshot: Record<string, unknown>; codeFiles: Array<{ type: ProjectEntryKind; text: string }> }
+  | { valid: false; error: string }
+> {
+  const content = await collectReviewContent(c, project);
+  if (content.valid === false) {
+    return { valid: false, error: content.error };
   }
 
-  const snapshot = await buildAuditSnapshot(codeCheckInputs, codeCheck);
-  return { valid: true, snapshot, reviewToken: await buildReviewToken(snapshot, project.draftRevision), codeFiles: codeCheckInputs };
+  if (!deviceResult || typeof deviceResult !== 'object') {
+    return { valid: false, error: '还没有收到审核设备上的完整检查结果，请先在审核详情完成本机检查，再决定是否通过。' };
+  }
+  if (typeof (deviceResult as { challenge?: unknown }).challenge !== 'string') {
+    return { valid: false, error: '这份检查结果无法确认对应哪一次内容，请重新打开审核详情并再次检查。' };
+  }
+
+  const verified = await verifyReviewerResult(c.env.JWT_SECRET, deviceResult, {
+    projectId: project.id,
+    draftRevision: project.draftRevision,
+    filesHash: content.filesHash,
+    checkerRevision: DEVICE_CHECKER_REVISION,
+    // The complete binding a reviewer result must satisfy: rule set, standard,
+    // trusted asset hosts and every reviewer-visible rule category. A result
+    // produced by any other checker build cannot approve this project.
+    policyVersion: buildReviewPolicyVersion(CHECKER_VERSION),
+    engine: CHECKER_VERSION.engine,
+    parserCompatibility: CHECKER_VERSION.parserCompatibility,
+  });
+
+  if (!verified || verified.ok !== true) {
+    const reason = String(verified?.reason ?? 'unknown');
+    if (reason === 'checker-revision') {
+      return { valid: false, error: '审核设备上的检查器版本已更新，请刷新页面重新检查后再通过。' };
+    }
+    if (reason === 'content' || reason === 'result-content' || reason === 'snapshot-content') {
+      return { valid: false, error: '文件内容或检查依据已变化，请重新打开审核详情，确认后再通过。' };
+    }
+    if (reason === 'revision' || reason === 'result-revision') {
+      return { valid: false, error: '草稿在审核期间已更新，本次检查结果已过期，请刷新后重新检查。' };
+    }
+    if (reason.startsWith('challenge:')) {
+      return { valid: false, error: '这份检查结果已失效或不是本次审核签发的，请重新打开审核详情并再次检查。' };
+    }
+    console.warn('Reviewer device result rejected', { projectId: project.id, reason });
+    return { valid: false, error: '无法确认这份检查结果的完整性，请重新检查后再通过。' };
+  }
+
+  if (verified.gate === 'reject') {
+    return { valid: false, error: '项目仍有自动检查阻断项。请在审核详情查看后要求 Creator 修改。' };
+  }
+
+  return {
+    valid: true,
+    snapshot: verified.snapshot,
+    codeFiles: content.codeFiles.map(({ type, text }) => ({ type, text })),
+  };
 }
 
 /**
@@ -290,14 +373,14 @@ export class AdminReviewDetail extends OpenAPIRoute {
     const regexEntriesPreview = currentRegexText ? parseRegexEntriesPreview(currentRegexText) : [];
     const codeCheckInputs = [
       ...(currentWorldbookText
-        ? [{ fileName: `project-${project.id}.json`, type: 'worldbook', text: currentWorldbookText }]
+        ? [{ fileName: `project-${project.id}.json`, type: 'worldbook' as const, text: currentWorldbookText }]
         : []),
-      ...(currentRegexText ? [{ fileName: `regex-${project.id}.json`, type: 'regex', text: currentRegexText }] : []),
+      ...(currentRegexText ? [{ fileName: `regex-${project.id}.json`, type: 'regex' as const, text: currentRegexText }] : []),
     ];
-    const rawCodeCheck = await analyzeProjectCodeCached(codeCheckInputs);
-    const snapshot = rawCodeCheck.gate === 'reject' ? null : await buildAuditSnapshot(codeCheckInputs, rawCodeCheck);
+    // #42: no heavy checker here. The Worker hands the reviewer device the exact
+    // pending content plus a signed challenge, and verifies only what comes back.
+    const filesHash = await contentFilesHash(codeCheckInputs);
     const baseline = project[acceptedCodeCheckKey] ? JSON.parse(project[acceptedCodeCheckKey]) : null;
-    const codeCheck = snapshot ? applyAuditBaseline(rawCodeCheck, snapshot, baseline) : rawCodeCheck;
     const reviewDiff = buildProjectReviewDiff({
       previousWorldbookText,
       currentWorldbookText,
@@ -323,8 +406,24 @@ export class AdminReviewDetail extends OpenAPIRoute {
       worldbookEntriesPreview,
       regexEntriesPreview,
       reviewDiff,
-      codeCheck,
-      reviewToken: snapshot ? await buildReviewToken(snapshot, project.draftRevision) : null,
+      deviceCheck: {
+        checkerRevision: DEVICE_CHECKER_REVISION,
+        engine: CHECKER_VERSION.engine,
+        parserCompatibility: CHECKER_VERSION.parserCompatibility,
+        policyVersion: buildReviewPolicyVersion(CHECKER_VERSION),
+        trustedAssetHosts,
+        projectId: project.id,
+        draftRevision: project.draftRevision,
+        filesHash,
+        files: codeCheckInputs,
+        baseline,
+        challenge: await issueReviewChallenge(c.env.JWT_SECRET, {
+          projectId: project.id,
+          draftRevision: project.draftRevision,
+          filesHash,
+          checkerRevision: DEVICE_CHECKER_REVISION,
+        }),
+      },
     };
   }
 }
@@ -347,7 +446,31 @@ export class AdminReview extends OpenAPIRoute {
               action: z.enum(['approve', 'reject']),
               rejectReason: Str({ required: false }),
               expectedRevision: z.number().int().min(1).optional(),
-              reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+              reviewerResult: z
+                .object({
+                  challenge: z.string().min(1),
+                  projectId: Str({ required: false }),
+                  draftRevision: z.number().int().optional(),
+                  filesHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+                  checkerRevision: z.string().optional(),
+                  gate: z.enum(['accept', 'reject']),
+                  auditSnapshot: z.object({
+                    filesHash: z.string().regex(/^[a-f0-9]{64}$/),
+                    policyVersion: z.string(),
+                    engine: z.string(),
+                    parserCompatibility: z.string(),
+                    findings: z
+                      .array(
+                        z.object({
+                          key: z.string(),
+                          fingerprint: z.string(),
+                          rule: z.string(),
+                        }),
+                      )
+                      .optional(),
+                  }),
+                })
+                .optional(),
             }),
           },
         },
@@ -371,7 +494,7 @@ export class AdminReview extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { projectId } = data.params;
-    const { action, rejectReason, expectedRevision, reviewToken } = data.body;
+    const { action, rejectReason, expectedRevision, reviewerResult } = data.body;
 
     // 检查项目是否存在
     const project = await projectDb.get(c, projectId);
@@ -394,12 +517,12 @@ export class AdminReview extends OpenAPIRoute {
     let acceptedSnapshot: Record<string, unknown> | undefined;
     let reviewedCodeFiles: Array<{ type: ProjectEntryKind; text: string }> | undefined;
     if (action === 'approve') {
-      const contentValidation = await validateReviewPayloads(c, project);
+      // #42: authoritative, cheap validation of the reviewer device's verdict.
+      // The Worker never re-runs the checker; it only proves the result belongs to
+      // this exact content, this exact draft revision and this exact checker build.
+      const contentValidation = await verifyReviewerApproval(c, project, reviewerResult);
       if (contentValidation.valid === false) {
         return c.json({ error: contentValidation.error }, 409);
-      }
-      if (!reviewToken || reviewToken !== contentValidation.reviewToken) {
-        return c.json({ error: '文件内容或检查依据已变化，请重新打开审核详情，确认后再通过。' }, 409);
       }
       acceptedSnapshot = contentValidation.snapshot;
       reviewedCodeFiles = contentValidation.codeFiles;

@@ -4,9 +4,12 @@ import { DurableObject } from 'cloudflare:workers';
 import workshopConfig from '../../config/workshop.json';
 import uploadCheckerBase64 from './generated/upload-checker.txt';
 import uploadCheckerRevision from './generated/upload-checker-revision.json';
+import reviewCheckerBase64 from './generated/review-checker.txt';
+import reviewCheckerRevision from './generated/review-checker-revision.json';
 import checkerNotices from '../../util/ejs-checker-v2.NOTICES.txt';
 
 const uploadCheckerSource = new TextDecoder().decode(Uint8Array.from(atob(uploadCheckerBase64), char => char.charCodeAt(0)));
+const reviewCheckerSource = new TextDecoder().decode(Uint8Array.from(atob(reviewCheckerBase64), char => char.charCodeAt(0)));
 
 // 类型定义
 import type { Env } from './env';
@@ -195,6 +198,12 @@ app.get('/assets/upload-checker.js', c => new Response(uploadCheckerSource, {
   headers: {
     'Content-Type': 'application/javascript; charset=utf-8',
     'Cache-Control': c.req.query('v') === uploadCheckerRevision.revision ? 'public, max-age=31536000, immutable' : 'no-store',
+  },
+}));
+app.get('/assets/review-checker.js', c => new Response(reviewCheckerSource, {
+  headers: {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': c.req.query('v') === reviewCheckerRevision.revision ? 'public, max-age=31536000, immutable' : 'no-store',
   },
 }));
 app.get('/assets/upload-checker-notices.txt', () => new Response(checkerNotices, {

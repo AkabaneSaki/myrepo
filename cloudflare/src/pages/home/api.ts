@@ -844,6 +844,33 @@ async function preflightProjectUpload(file, kind) {
   });
 }
 
+/**
+ * Server-stamped receipt for exactly these bytes. The Worker recomputes the hash of
+ * the uploaded file and rejects anything that does not match, so this receipt cannot
+ * be reused for different content. It carries no checker verdict.
+ */
+async function attestProjectContent(file, kind) {
+  const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
+  const response = await fetch('/api/projects/preflight/' + normalizedKind, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
+      'Content-Type': file.type || 'application/json',
+    },
+    body: file,
+  });
+  const { rawText, data } = await parseResponseBody(response);
+  if (!response.ok) {
+    const error = new Error(resolveApiErrorMessage(response.status, rawText, data, '文件完整性检查失败'));
+    error.codeCheck = data?.codeCheck || null;
+    throw error;
+  }
+  if (!data?.success || !data.attestation) {
+    throw new Error('文件完整性检查未完成，暂时不能提交。请刷新页面后再试。');
+  }
+  return data;
+}
+
 async function preflightProjectSubmission(file, kind) {
   assertUploadSize(file);
   const normalizedKind = kind === 'regex' ? 'regex' : 'worldbook';
@@ -862,7 +889,7 @@ async function preflightProjectSubmission(file, kind) {
       error.codeCheck = data?.codeCheck || null;
       throw error;
     }
-    if (!data?.success || data.codeCheck?.gate !== 'accept') throw new Error('提交检查未完成，暂时不能提交。请联系管理员并附上页面截图。');
+    if (!data?.success || !data.attestation) throw new Error('提交检查未完成，暂时不能提交。请联系管理员并附上页面截图。');
     return data;
   } catch (error) {
     const normalized = normalizeThrownError(error, '自动检查失败');
@@ -870,8 +897,7 @@ async function preflightProjectSubmission(file, kind) {
     throw normalized;
   }
 }
-
-async function uploadProjectFile(projectId, file) {
+async function uploadProjectFile(projectId, file, attestation) {
   clearProjectListClientCache();
   assertUploadSize(file);
   try {
@@ -880,6 +906,7 @@ async function uploadProjectFile(projectId, file) {
       headers: {
         Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
         'Content-Type': file.type,
+        ...(attestation ? { 'X-Workshop-Content-Attestation': attestation } : {}),
       },
       body: file,
     });
@@ -894,7 +921,7 @@ async function uploadProjectFile(projectId, file) {
   }
 }
 
-async function uploadRegexFile(projectId, file) {
+async function uploadRegexFile(projectId, file, attestation) {
   clearProjectListClientCache();
   assertUploadSize(file);
   try {
@@ -903,6 +930,7 @@ async function uploadRegexFile(projectId, file) {
       headers: {
         Authorization: 'Bearer ' + localStorage.getItem(TOKEN_KEY),
         'Content-Type': file.type,
+        ...(attestation ? { 'X-Workshop-Content-Attestation': attestation } : {}),
       },
       body: file,
     });
@@ -1007,6 +1035,41 @@ async function fetchAdminReviewDetail(projectId) {
   return apiFetch('/api/admin/review/' + projectId, {
     method: 'GET',
     cache: 'no-store',
+  });
+}
+
+/**
+ * Runs the complete checker on the reviewer device over the exact content the server
+ * just returned, and returns a result the server can bind to that content. The
+ * server performs no rule analysis of its own; it only verifies the bindings.
+ */
+function runAdminReviewDeviceCheck(deviceCheck) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(REVIEW_CHECKER_URL);
+    const finish = (error, result) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      if (error) reject(error); else resolve(result);
+    };
+    const timeout = setTimeout(
+      () => finish(new Error('本机检查用时过长，尚未完成。请稍后重新检查，或联系管理员。')),
+      UPLOAD_CHECKER_TIMEOUT_MS,
+    );
+    worker.onmessage = event => {
+      const result = event.data;
+      if (!result?.success) {
+        finish(new Error(result?.error || '本机未能完成这条内容的检查。'));
+        return;
+      }
+      resolve(result);
+    };
+    worker.onerror = () => finish(new Error('本机未能启动内容检查。请刷新页面后重试。'));
+    worker.postMessage({
+      files: deviceCheck?.files || [],
+      baseline: deviceCheck?.baseline || null,
+      projectId: deviceCheck?.projectId,
+      draftRevision: deviceCheck?.draftRevision,
+    });
   });
 }
 

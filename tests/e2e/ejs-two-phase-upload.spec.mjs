@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 
@@ -22,18 +23,19 @@ async function harness(page) {
   await page.addScriptTag({ content: `const TOKEN_KEY=['local','content','qa'].join('-');localStorage.setItem(TOKEN_KEY,${JSON.stringify(authJwt)}); const WORKSHOP_LIMITS={projectUploadBytes:10485760,projectUploadLabel:'10MB'};const PROJECT_TAXONOMY={};const PROJECT_CONTENT_POLICY={'系统核心':{required:['worldbook']}};const UPLOAD_CHECKER_URL='/assets/upload-checker.js?v=${revision}';const UPLOAD_CHECKER_TIMEOUT_MS=30000;function escapeHtml(v){const el=document.createElement('div');el.textContent=String(v??'');return el.innerHTML;}function renderDetailSection(label,icon,entries){return '<p>'+entries.length+' 条内容</p>';}function renderDetailEntry(){}function renderRegexEntry(){}function showToast(){}function parseTagsInput(){return [];}\n` + homeApiScript + '\n' + homeUploadPreviewScript + '\n' + homeProjectEditorModalScript + `\nconst formHarness=prepareProjectForm(document.querySelector('#overlay'));document.querySelector('#submit').onclick=()=>formHarness.checkSubmission().then(()=>document.body.dataset.submission='ok',()=>document.body.dataset.submission='rejected');document.querySelector('#responsive').onclick=()=>document.querySelector('#clicks').textContent=String(Number(document.querySelector('#clicks').textContent)+1);` });
 }
 const upload = scripts => ({ name: 'scripts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scripts)) });
-test('browser checks locally; M1 fails server submission with a reason', async ({ page }, testInfo) => {
+test('the creator device runs the complete checker and a blocked file never reaches the Worker', async ({ page }, testInfo) => {
   await harness(page);
   let serverChecks = 0;
   page.on('request', request => { if (request.url().includes('/api/projects/preflight/')) serverChecks++; });
   await page.locator('#regexInput').setInputFiles(upload([{ id: 'eval', scriptName: '动态代码示例', findRegex: 'x', replaceString: '<script>eval("1")</script>' }]));
-  await expect(page.locator('#regexUploadPreview')).toContainText('本地检查通过，提交时还会再次检查');
-  expect(serverChecks).toBe(0);
-  await page.locator('#submit').click();
-  await expect(page.locator('body')).toHaveAttribute('data-submission', 'rejected');
+  await expect(page.locator('#regexUploadPreview')).toContainText('自动检查未通过');
   await expect(page.locator('#regexUploadPreview')).toContainText('eval');
   await expect(page.locator('#regexUploadPreview')).toContainText('改为明确的函数调用');
-  expect(serverChecks).toBe(1);
+  expect(serverChecks).toBe(0, 'the blocked file is never sent for server attestation');
+  // A blocked file keeps preflightState at "error", so the form itself refuses the
+  // submission and nothing is attested or uploaded.
+  assert.equal(serverChecks, 0);
+  assert.equal(await page.evaluate(() => document.body.dataset.submission), undefined);
   await page.screenshot({ path: testInfo.outputPath('two-phase-rejected.png'), fullPage: true });
 });
 test('200 scripts run in a background thread and oversized code gets an actionable local failure', async ({ page }) => {
@@ -45,6 +47,7 @@ test('200 scripts run in a background thread and oversized code gets an actionab
   await expect(page.locator('#regexUploadPreview')).toContainText('本地检查通过');
   await page.locator('#submit').click();
   await expect(page.locator('body')).toHaveAttribute('data-submission', 'ok');
+  await expect(page.locator('#regexUploadPreview')).toContainText('提交检查通过');
   await page.evaluate(() => regexInput._fileDropController.clear());
   await page.locator('#regexInput').setInputFiles(upload([{ id: 'large', scriptName: '过大脚本', findRegex: 'x', replaceString: '<script>' + '0;'.repeat(40000) + '</script>' }]));
   await expect(page.locator('#regexUploadPreview')).toContainText('处理上限');

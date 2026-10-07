@@ -14,6 +14,18 @@ function canonical(value, ast = false) {
     .map(key => [key,canonical(value[key],ast)]));
 }
 const stable = value => JSON.stringify(canonical(value));
+/** Full reviewer-facing rule identity. Shared with the server so both sides can
+ * recompute it cheaply and compare it byte for byte without executing rules. */
+export function buildReviewPolicyVersion(checkerVersion) {
+  return stable({
+    policy: CHECK_POLICY_VERSION,
+    engine: checkerVersion.engine,
+    parserCompatibility: checkerVersion.parserCompatibility,
+    standard: 'PW-CODE-CHECK-v1',
+    rules: 'EJS:L1-L7; COMMON:M1-M5,U2-U5; API:API1-API2; HINTS:AH1-AH4; EJS-PARSE,JS-PARSE,CHECKER-INTERNAL,CHECKER-LIMIT',
+    trustedAssetHosts,
+  });
+}
 async function digest(value) {
   const bytes = new TextEncoder().encode(stable(value));
   const hash = await crypto.subtle.digest('SHA-256',bytes);
@@ -100,7 +112,9 @@ function normalizedEvidence(evidence) {
 /** Only hashes and short finding summaries are persisted, never the uploaded source. */
 export async function buildAuditSnapshot(inputs, report) {
   const checkerVersion = {engine:report.engine ?? CHECKER_VERSION.engine,parserCompatibility:report.parserCompatibility ?? CHECKER_VERSION.parserCompatibility};
-  const policyVersion = stable({policy:CHECK_POLICY_VERSION,...checkerVersion,standard:report.standard,rules:report.rules,trustedAssetHosts});
+  const policyVersion = report.standard === undefined
+    ? buildReviewPolicyVersion(CHECKER_VERSION)
+    : stable({policy:CHECK_POLICY_VERSION,...checkerVersion,standard:report.standard,rules:report.rules,trustedAssetHosts});
   const filesHash = await digest(inputs.map(input => ({type:input.type === 'regex' ? 'regex' : 'worldbook',text:String(input.text ?? '')})));
   const books = inputs.map((input,index) => parseCodeCheckInput(input,index));
   const entries = books.flatMap(book => book.entries);

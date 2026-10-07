@@ -1017,13 +1017,14 @@ const taxonomyLabelUi = Function(
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: '规则' }), '扩展 · 规则');
 assert.equal(taxonomyLabelUi.getProjectTypeDisplayLabel({ projectType: '扩展', extensionType: null }), '扩展');
 
-const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', 'workshopLimitsJson', 'uploadChecker', 'CHECKER_LIMITS', `return (${appExpression});`)(
+const homeScript = Function(...fragmentNames, 'projectContentPolicyJson', 'projectTaxonomyJson', 'workshopConfigJson', 'workshopLimitsJson', 'uploadChecker', 'reviewChecker', 'CHECKER_LIMITS', `return (${appExpression});`)(
   ...Object.values(fragments),
   JSON.stringify(testProjectContentPolicy),
   JSON.stringify(testProjectTaxonomy),
   JSON.stringify(workshopConfig),
   JSON.stringify(testWorkshopLimits),
   JSON.parse(await readFile(resolve('src/generated/upload-checker-revision.json'), 'utf8')),
+  JSON.parse(await readFile(resolve('src/generated/review-checker-revision.json'), 'utf8')),
   CHECKER_LIMITS,
 );
 assert.equal(typeof homeScript, 'string');
@@ -1040,7 +1041,9 @@ assert.equal(contentPolicyUi.validateProjectContentSelection('事件', false, tr
 assert.match(contentPolicyUi.getProjectContentRequirementText('扩展'), /世界书或正则选一种就可以/);
 assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: reviewProjectData\.draftRevision/);
-assert.match(homeScript, /reviewToken: detail\.reviewToken/);
+assert.match(homeScript, /reviewerResult: \{ \.\.\.deviceResult, challenge: detail\.deviceCheck\?\.challenge/);
+assert.match(homeScript, /runAdminReviewDeviceCheck\(detail\.deviceCheck\)/);
+assert.doesNotMatch(homeScript, /reviewToken: detail\.reviewToken/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /当前编辑草稿也会一并删除/);
 assert.match(homeScript, /document\.querySelectorAll\('\.project-card, \.discover-card'\)/);
