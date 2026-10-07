@@ -2,9 +2,9 @@
 //
 // Runs the same complete rule set as the creator device over the exact pending
 // content the Worker just handed out, merges the previously accepted baseline, and
-// returns everything the server needs to bind that verdict: hashes, revisions, gate
-// and the audit snapshot. The server verifies only those bindings afterwards and
-// never re-runs this analysis.
+// returns everything the server needs to bind the trusted reviewer's submitted
+// result: hashes, revisions, gate and the audit snapshot. The server verifies only
+// those bindings afterwards and never re-runs this analysis.
 import { analyzeProjectCodeV2, CHECKER_VERSION } from './index.mjs';
 import { applyAuditBaseline, buildAuditSnapshot } from './audit.mjs';
 
