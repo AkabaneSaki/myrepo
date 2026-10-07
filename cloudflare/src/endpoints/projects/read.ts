@@ -17,7 +17,9 @@ const PRIVATE_PROJECT_REVIEW_FIELDS = [
   'publishedProjectId',
   'draftProjectId',
   'publishedVersion',
-  'status',
+  // Public endpoints only expose approved projects to unrelated viewers. Keep
+  // that approved status in the response because public cover routing still
+  // uses it to distinguish CDN/proxy delivery from authenticated draft assets.
   'reviewedAt',
   'reviewerId',
   'rejectReason',

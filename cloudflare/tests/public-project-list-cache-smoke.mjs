@@ -28,7 +28,13 @@ assert.match(
 assert.match(
   readSource,
   /PRIVATE_PROJECT_REVIEW_FIELDS[\s\S]*'draftProjectId'[\s\S]*'rejectReason'[\s\S]*'hasPendingDraft'/,
-  'public project responses must hide review-workflow state from unrelated viewers',
+  'public project responses must hide private review-workflow state from unrelated viewers',
+);
+const privateReviewFieldsBlock = readSource.match(/const PRIVATE_PROJECT_REVIEW_FIELDS = \[[\s\S]*?\] as const;/)?.[0] || '';
+assert.doesNotMatch(
+  privateReviewFieldsBlock,
+  /'status'/,
+  'public approved project status must remain available so public covers are not misclassified as authenticated assets',
 );
 assert.match(
   readSource,
