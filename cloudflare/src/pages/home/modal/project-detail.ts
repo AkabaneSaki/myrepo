@@ -306,7 +306,7 @@ export const homeProjectDetailModalScript = [
   '        if (hint) hint.textContent = `已评分 ${savedRating}★ · 可修改星级和评论`;',
   '        if (detail.project?.privateRating) { detail.project.privateRating.myRating = savedRating; detail.project.privateRating.myComment = savedComment; }',
   '        ratingSubmitButton.textContent = "更新评分";',
-  '        showToast("匿名评分已送给作者", "success");',
+  '        showToast("评分已保存到 Workshop", "success");',
   '      } catch (error) {',
   '        showToast("评分失败: " + (error?.message || String(error)), "error");',
   '      } finally {',

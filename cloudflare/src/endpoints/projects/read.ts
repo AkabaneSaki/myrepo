@@ -408,53 +408,12 @@ async function readPrivateProjectRatingState(
   }
 
   if (project.authorId === payload.userId) {
-    const summary = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS rating_count,
-              AVG(rating) AS average_rating,
-              SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS star_1,
-              SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) AS star_2,
-              SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS star_3,
-              SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS star_4,
-              SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) AS star_5,
-              SUM(CASE WHEN comment_text IS NOT NULL AND TRIM(comment_text) <> '' THEN 1 ELSE 0 END) AS comment_count
-       FROM project_ratings
-       WHERE project_id = ?`,
-    )
-      .bind(project.id)
-      .first<Record<string, number | null>>();
-    const comments = await c.env.DB.prepare(
-      `SELECT rating, comment_text
-       FROM project_ratings
-       WHERE project_id = ?
-         AND comment_text IS NOT NULL
-         AND TRIM(comment_text) <> ''
-       ORDER BY updated_at DESC
-       LIMIT 20`,
-    )
-      .bind(project.id)
-      .all<{ rating: number; comment_text: string }>();
-    const count = Number(summary?.rating_count || 0);
     return {
       myRating: null,
       myComment: '',
       canRate: false,
-      reason: '作者可以查看匿名评分统计',
-      summary: {
-        count,
-        average: count > 0 ? Math.round(Number(summary?.average_rating || 0) * 10) / 10 : null,
-        commentCount: Number(summary?.comment_count || 0),
-        comments: (comments.results || []).map(item => ({
-          rating: Number(item.rating || 0),
-          comment: String(item.comment_text || ''),
-        })),
-        distribution: {
-          1: Number(summary?.star_1 || 0),
-          2: Number(summary?.star_2 || 0),
-          3: Number(summary?.star_3 || 0),
-          4: Number(summary?.star_4 || 0),
-          5: Number(summary?.star_5 || 0),
-        },
-      },
+      reason: '评分和留言目前只保存于 Workshop，不向作者或公众显示',
+      summary: null,
     };
   }
 

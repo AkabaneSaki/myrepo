@@ -29,6 +29,7 @@ const homePageSource = await readFile(resolve('src/pages/home.ts'), 'utf8');
 const homeStylesSource = await readFile(resolve('src/pages/home/styles.ts'), 'utf8');
 const recommendationsEndpointSource = await readFile(resolve('src/endpoints/recommendations.ts'), 'utf8');
 const indexSource = await readFile(resolve('src/index.ts'), 'utf8');
+const projectReadEndpointSource = await readFile(resolve('src/endpoints/projects/read.ts'), 'utf8');
 const fragments = {
   homeStateScript: await evaluateStandalone('src/pages/home/state.ts', 'homeStateScript'),
   homeUtilsScript: await evaluateStandalone('src/pages/home/utils.ts', 'homeUtilsScript'),
@@ -471,12 +472,20 @@ assert.match(fragments.homeApiScript, /params\.set\('minLikes'/);
 assert.match(fragments.homeApiScript, /params\.set\('minDownloads'/);
 assert.match(fragments.homeApiScript, /async function setPrivateProjectRating\(projectId, rating, comment = ''\)/);
 assert.match(fragments.homeDetailModalRenderScript, /data-project-rating/);
-assert.match(fragments.homeDetailModalRenderScript, /只有作者能看到统计与匿名留言/);
+assert.match(fragments.homeDetailModalRenderScript, /记名评分喵，目前只用于 Workshop 内部收集/);
+assert.match(fragments.homeDetailModalRenderScript, /评分和留言目前只保存于 Workshop，不向作者或公众显示/);
+assert.doesNotMatch(fragments.homeDetailModalRenderScript, /匿名评分|匿名留言|只有作者能看到/);
 assert.match(fragments.homeDetailModalRenderScript, /data-private-rating-comment/);
 assert.match(fragments.homeDetailModalRenderScript, /data-private-rating-submit/);
-assert.match(fragments.homeDetailModalRenderScript, /private-rating-comments/);
+assert.doesNotMatch(fragments.homeDetailModalRenderScript, /private-rating-comments/);
 assert.match(fragments.homeModalsScript, /setPrivateProjectRating\(projectId, rating, comment\)/);
 assert.match(fragments.homeModalsScript, /selectPrivateRating\(rating\)/);
+assert.match(fragments.homeModalsScript, /评分已保存到 Workshop/);
+assert.doesNotMatch(fragments.homeModalsScript, /匿名评分已送给作者/);
+assert.match(projectReadEndpointSource, /reason: '评分和留言目前只保存于 Workshop，不向作者或公众显示'/);
+assert.doesNotMatch(projectReadEndpointSource, /作者可以查看匿名评分统计/);
+assert.doesNotMatch(projectReadEndpointSource, /SELECT COUNT\(\*\) AS rating_count/);
+assert.doesNotMatch(projectReadEndpointSource, /SELECT rating, comment_text/);
 assert.doesNotMatch(fragments.homeModalsScript, /ratingNeedsInstallRepair/);
 assert.doesNotMatch(fragments.homeModalsScript, /setProjectSubscription\(detailProject\.id, true\)/);
 assert.match(fragments.homeModalsScript, /ratingStarsWrap\?\.classList\.add\("previewing"\)/);
