@@ -406,6 +406,8 @@ export const homeAdminReviewModalScript = [
   '  applyAdminReviewTheme(loadingOverlay, getAdminReviewTheme());',
   '  try {',
   '    const detail = prefetchedDetail || await fetchAdminReviewDetail(project.id);',
+  '    const checkerLoadingText = loadingOverlay.querySelector(".detail-loading-text");',
+  '    if (checkerLoadingText) checkerLoadingText.textContent = "正在你的装置上运行完整 Checker…";',
   '    // #42: the complete checker runs here, on the reviewer device, over exactly the',
   '    // content the server just returned. The server does not re-run it afterwards.',
   '    let deviceResult = null;',
