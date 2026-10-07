@@ -32,6 +32,9 @@ function getReviewContentKey(projectId: string, kind: ProjectEntryKind): string 
   return `projects/${projectId}/${fileName}`;
 }
 
+// 审核队列单页上限：既能覆盖真实的待审核积压，也避免一次请求读穿整张表。
+const MAX_ADMIN_PENDING_PAGE_SIZE = 100;
+
 async function readReviewContent(
   c: AppContext,
   projectId: string,
@@ -204,7 +207,7 @@ export class AdminPendingList extends OpenAPIRoute {
       }),
       query: z.object({
         page: Num({ description: 'Page number', default: 0 }),
-        pageSize: Num({ description: 'Page size', default: 20 }),
+        pageSize: Num({ description: 'Page size (clamped to 1..100)', default: 20 }),
         sort: z.enum(['oldest', 'latest']).default('oldest'),
         projectType: z.enum(['事件', '系统核心', '角色', '扩展']).optional(),
       }),
@@ -226,7 +229,12 @@ export class AdminPendingList extends OpenAPIRoute {
     }
 
     const data = await this.getValidatedData<typeof this.schema>();
-    const { page, pageSize, sort, projectType } = data.query;
+    const { sort, projectType } = data.query;
+    // The queue is paginated, so the page size is a reviewer-facing choice, not a
+    // trust boundary. Clamp it: an unbounded page would let one request read the
+    // whole pending table.
+    const pageSize = Math.min(Math.max(Math.trunc(data.query.pageSize) || 0, 1), MAX_ADMIN_PENDING_PAGE_SIZE);
+    const page = Math.max(Math.trunc(data.query.page) || 0, 0);
 
     const result = await projectDb.getPendingList(c, page, pageSize, payload, { sort, projectType });
 

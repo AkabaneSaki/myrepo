@@ -40,6 +40,7 @@
     "check:cover-isolation": "node tests/cover-approval-isolation.mjs",
     "check:content-validation": "node tests/content-validation-approval.mjs",
     "check:admin-review-recovery": "node tests/admin-review-recovery-smoke.mjs",
+    "check:admin-review-pending-queue": "node tests/admin-review-pending-queue-consistency.mjs",
     "check:review-snapshot-flow": "node tests/review-snapshot-flow-smoke.mjs",
     "test:db-init-local": "wrangler d1 execute creative_workshop_local_test --local --config wrangler.local-test.jsonc --file=schema.sql",
     "test:db-snapshot-seed-local": "wrangler d1 execute creative_workshop --local --config wrangler.jsonc --persist-to .wrangler/local-production-20260906 --file=../../workshop-backups/2026-09-06/creative_workshop.sql",
@@ -74,7 +75,7 @@
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",
     "check:creative-workshop-repair-d1-guard": "node tests/creative-workshop-repair-d1-guard-smoke.mjs",
     "check:oauth-external-browser": "node tests/oauth-external-browser-smoke.mjs",
-    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery",
+    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery && npm run check:admin-review-pending-queue",
     "check:workshop-config": "node ../scripts/check-workshop-config.mjs"
   },
   "dependencies": {

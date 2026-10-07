@@ -1008,17 +1008,44 @@ async function uploadDiscoverBanner(file) {
   return data || {};
 }
 
+// 审核队列必须是「可操作的待审核」全集：只显示一页、却把 total 当成队列长度，
+// 会让管理员以为项目丢失。这里按页拉取直到覆盖 total，并对超大队列设上限。
+const ADMIN_PENDING_PAGE_SIZE = 20;
+const ADMIN_PENDING_MAX_CARDS = 200;
+
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
-  const params = new URLSearchParams({ page: '0', pageSize: '12', sort });
-  if (projectType) params.set('projectType', projectType);
   const startedAt = performance.now();
-  const result = await apiFetch('/api/admin/pending?' + params.toString());
+  const projects = [];
+  let total = 0;
+  let page = 0;
+
+  while (true) {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(ADMIN_PENDING_PAGE_SIZE), sort });
+    if (projectType) params.set('projectType', projectType);
+    const result = await apiFetch('/api/admin/pending?' + params.toString());
+    const batch = Array.isArray(result?.projects) ? result.projects : [];
+    total = Number(result?.total ?? total);
+    projects.push(...batch);
+    const seenTotal = total <= projects.length;
+    const pageExhausted = batch.length < ADMIN_PENDING_PAGE_SIZE;
+    if (seenTotal || pageExhausted || projects.length >= ADMIN_PENDING_MAX_CARDS) break;
+    page += 1;
+  }
+
   console.info('[CreativeWorkshop] admin pending loaded', {
     ms: Math.round(performance.now() - startedAt),
-    returned: Array.isArray(result?.projects) ? result.projects.length : 0,
-    total: Number(result?.total || 0),
+    returned: projects.length,
+    total,
+    pages: page + 1,
   });
-  return result;
+  return {
+    success: true,
+    projects,
+    total,
+    page: 0,
+    pageSize: ADMIN_PENDING_PAGE_SIZE,
+    hasMore: projects.length < total,
+  };
 }
 
 async function cleanupOutdatedReviewDrafts() {

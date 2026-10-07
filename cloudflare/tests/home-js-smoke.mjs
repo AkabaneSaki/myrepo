@@ -388,7 +388,9 @@ assert.match(fragments.homeModalsScript, /getMobileReaderSourceIndex/);
 assert.match(fragments.homeDetailModalRenderScript, /tag-system-artwork/);
 assert.match(fragments.homeDetailModalRenderScript, /const tagsHtml = inspectionTagsHtml \+ creatorTagsHtml/);
 assert.match(fragments.homeModalsScript, /admin-review-signal--ejs/);
-assert.match(fragments.homeApiScript, /URLSearchParams\(\{ page: '0', pageSize: '12', sort \}\)/);
+// #44: the pending queue must page through every actionable review, not stop at one page.
+assert.match(fragments.homeApiScript, /const ADMIN_PENDING_PAGE_SIZE = \d+;/);
+assert.match(fragments.homeApiScript, /while \(true\)[\s\S]{0,900}page \+= 1;/);
 assert.match(fragments.homeStateScript, /DEFAULT_SORT_MODE = 'discover'/);
 assert.match(fragments.homeStateScript, /viewMode: 'discover'/);
 assert.match(fragments.homeLayoutRenderScript, /data-workshop-view=\"discover\"/);

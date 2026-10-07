@@ -1201,11 +1201,19 @@ export const projectDb = {
       .bind(...filterValues, pageSize, offset)
       .all<Record<string, unknown>>();
 
+    const total = countResult?.total || 0;
+    const enrichedProjects = await enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser);
+
     return {
-      total: countResult?.total || 0,
+      total,
       page,
       pageSize,
-      projects: await enrichProjects(c, (results.results || []).map(parseProjectRow), currentUser),
+      // The count and the page read the exact same WHERE clause, so the remaining
+      // count is derived from those two numbers instead of a second eligibility
+      // query. The review queue uses this to say "X of N" instead of claiming N
+      // while only offering the rows of one page.
+      hasMore: offset + enrichedProjects.length < total,
+      projects: enrichedProjects,
     };
   },
 
