@@ -20,8 +20,10 @@ import { buildProjectReviewDiff } from '../utils/project-review-diff';
 import { r2Storage } from '../utils/r2';
 import { bumpProjectVersionWithLegacyFallback } from '../utils/version.js';
 
-/** #42: the complete rule analysis runs on the reviewer device. The Worker binds the
- * device verdict to exact content, exact draft revision and exact checker revision. */
+/** #42: the complete rule analysis runs on the trusted reviewer device. The Worker
+ * binds the submitted review result to exact content, exact draft revision and exact
+ * checker revision; it does not try to prove that a trusted reviewer did not alter
+ * their own verdict. */
 const DEVICE_CHECKER_REVISION = `${CHECKER_VERSION.engine}:${CHECKER_VERSION.policyVersion}`;
 
 
@@ -67,8 +69,9 @@ async function readDirectReviewContentText(
 
 /**
  * #42: reads the exact pending content and performs cheap authoritative validation
- * only — size/type, structure, project content policy, and the hashes that bind a
- * device verdict to this content. No EJS / Regex rule analysis runs here.
+ * only — size/type, structure, project content policy, and the hashes that bind the
+ * trusted reviewer's submitted result to this content. No EJS / Regex rule analysis
+ * runs here.
  */
 async function collectReviewContent(
   c: AppContext,
@@ -121,9 +124,10 @@ async function collectReviewContent(
 
 /**
  * Approval gate for #42. The Worker recomputes the content hash from the stored
- * bytes, re-checks the draft revision, and verifies that the reviewer device
- * produced a result for exactly this content, this revision and this checker build.
- * A tampered, missing, stale or foreign result can never approve anything.
+ * bytes, re-checks the draft revision, and verifies that the trusted reviewer's
+ * submitted result belongs to exactly this content, this revision and this checker
+ * build. This is content/revision binding, not remote attestation that the browser
+ * executed unmodified checker code. Missing, stale or foreign results fail closed.
  */
 async function verifyReviewerApproval(
   c: AppContext,
@@ -150,9 +154,9 @@ async function verifyReviewerApproval(
     draftRevision: project.draftRevision,
     filesHash: content.filesHash,
     checkerRevision: DEVICE_CHECKER_REVISION,
-    // The complete binding a reviewer result must satisfy: rule set, standard,
-    // trusted asset hosts and every reviewer-visible rule category. A result
-    // produced by any other checker build cannot approve this project.
+    // Compatibility binding for the trusted reviewer's result: rule set, standard,
+    // trusted asset hosts and every reviewer-visible rule category. A result tied
+    // to any other checker build cannot approve this project.
     policyVersion: buildReviewPolicyVersion(CHECKER_VERSION),
     engine: CHECKER_VERSION.engine,
     parserCompatibility: CHECKER_VERSION.parserCompatibility,
@@ -173,7 +177,7 @@ async function verifyReviewerApproval(
       return { valid: false, error: '这份检查结果已失效或不是本次审核签发的，请重新打开审核详情并再次检查。' };
     }
     console.warn('Reviewer device result rejected', { projectId: project.id, reason });
-    return { valid: false, error: '无法确认这份检查结果的完整性，请重新检查后再通过。' };
+    return { valid: false, error: '无法确认这份检查结果与当前内容的绑定，请重新检查后再通过。' };
   }
 
   if (verified.gate === 'reject') {
@@ -517,9 +521,10 @@ export class AdminReview extends OpenAPIRoute {
     let acceptedSnapshot: Record<string, unknown> | undefined;
     let reviewedCodeFiles: Array<{ type: ProjectEntryKind; text: string }> | undefined;
     if (action === 'approve') {
-      // #42: authoritative, cheap validation of the reviewer device's verdict.
-      // The Worker never re-runs the checker; it only proves the result belongs to
-      // this exact content, this exact draft revision and this exact checker build.
+      // #42: cheap authoritative validation of content/revision binding.
+      // The reviewer is the trusted approval authority. The Worker never re-runs
+      // the checker; it only verifies that the submitted result belongs to this
+      // exact content, exact draft revision and exact checker build.
       const contentValidation = await verifyReviewerApproval(c, project, reviewerResult);
       if (contentValidation.valid === false) {
         return c.json({ error: contentValidation.error }, 409);
