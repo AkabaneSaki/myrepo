@@ -13,7 +13,7 @@
 - 管理员审核、日志与内容 Diff；
 - 对 Tavern Client 提供项目与安装所需接口。
 
-仓库级 Git / staging / production 规则以根目录 `AGENTS.md` 与 `docs/GIT-WORKFLOW.md` 为准。
+根目录 `AGENTS.md` 只负责 bootstrap；仓库级 Git / staging / production 规则从 `origin/documentation:docs/AGENT-POLICY.md` 读取。
 
 ## 目录
 
@@ -164,18 +164,11 @@ task branch
 
 不要把 task branch 直接部署到正常 staging Worker，也不要把“push 到 staging branch”和“部署 staging Worker”说成同一件事。
 
-具体 SOP：
+具体 SOP 与进一步资料统一从 canonical documentation 读取：
 
 ```text
-../AGENTS.md
-../docs/GIT-WORKFLOW.md
+origin/documentation:docs/INDEX.md
+origin/documentation:docs/AGENT-POLICY.md
 ```
 
-## 进一步资料
-
-```text
-../docs/README.md
-../docs/audits/workshop-architecture.md
-../docs/plans/workshop-persistent-session.md
-../docs/plans/cover-image-delivery.md
-```
+`docs/INDEX.md` 会按任务指向当前 architecture audit、active plans、release SOP 等文档；code branch 不维护这些文档的本地副本。

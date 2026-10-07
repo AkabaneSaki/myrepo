@@ -92,8 +92,7 @@ const files = {
   types: await read('cloudflare/src/types.ts'),
   versionUtil: await read('cloudflare/src/utils/version.js'),
   agents: await read('AGENTS.md'),
-  workflow: await read('docs/GIT-WORKFLOW.md'),
-  releaseSop: await read('docs/WORKSHOP-RELEASE-SOP.md'),
+
   readme: await read('README.md'),
   configReadme: await read('config/README.md'),
 };
@@ -168,13 +167,10 @@ for (const [path, source] of forbiddenTargets) {
 
 assert.doesNotMatch(files.agents, /Current stable production line:\s*`\d+\.\d+\.\d+`/);
 assert.doesNotMatch(files.agents, /Current feature-development line:\s*`\d+\.\d+\.\d+-dev\d+`/);
-assert.doesNotMatch(files.workflow, /owner main \/ production\s*=\s*\d+\.\d+\.\d+/);
-assert.doesNotMatch(files.workflow, /origin\/staging\s*=\s*\d+\.\d+\.\d+-dev\d+/);
 
 for (const [path, source] of [
   ['AGENTS.md', files.agents],
-  ['docs/GIT-WORKFLOW.md', files.workflow],
-  ['docs/WORKSHOP-RELEASE-SOP.md', files.releaseSop],
+
   ['config/README.md', files.configReadme],
 ]) {
   for (const value of forbiddenValues) {

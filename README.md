@@ -105,13 +105,13 @@ D1 的当前新库结构以 [`cloudflare/schema.sql`](cloudflare/schema.sql) 为
 
 不要在 README 手工维护第二份“当前表清单”：项目、审核、搜索索引、计数器、随机抽取等功能会持续增加或迁移表结构，复制清单很容易过期。
 
-开发文档从 [`docs/README.md`](docs/README.md) 进入。主要长期资料：
+共享项目文档不随 code branch 复制维护。Canonical documentation 位于 `origin/documentation`：
 
-- [`docs/audits/workshop-architecture.md`](docs/audits/workshop-architecture.md)：taxonomy、内容规则与维护边界；
-- [`cloudflare/README.md`](cloudflare/README.md)：Worker 目录、验证脚本与审核流程；
-- [`docs/GIT-WORKFLOW.md`](docs/GIT-WORKFLOW.md)：Git、staging Worker 与 production 的发布 SOP。
+- [Documentation Index](https://github.com/uikawinwing/myrepo/blob/documentation/docs/INDEX.md)：按名称、用途、状态和 related issue 找需要的文档；
+- [Agent Policy](https://github.com/uikawinwing/myrepo/blob/documentation/docs/AGENT-POLICY.md)：仓库操作规则；
+- [`cloudflare/README.md`](cloudflare/README.md)：当前 Worker 代码目录与验证入口。
 
-未实现设计放在 `docs/plans/`；已经完成或被取代的阶段记录放在 `docs/archive/`，不要从 archive 推断当前运行状态。
+未实现计划、维护审计与历史记录也统一由 documentation branch 的 `docs/` 管理；不要从旧 code branch 的文档快照推断当前状态。
 
 ## 使用说明
 

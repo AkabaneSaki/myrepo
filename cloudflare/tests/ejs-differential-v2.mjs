@@ -55,6 +55,6 @@ const report={generatedAt:new Date().toISOString(),snapshotOrigin:snapshot.origi
   summary:{projects:rows.length,stagingProjects:snapshot.projects.length,changed:rows.filter(r=>r.changed).length,verdictChanges:rows.filter(r=>r.v1.gate!==r.v2.gate||r.v1.audit!==r.v2.audit).length,regression55ParseErrors:syntax55},rows};
 fs.writeFileSync(new URL('../../.ai-bridge/ejs-checker-v2/differential.json',import.meta.url),JSON.stringify(report,null,2));
 const delivery={...report,summary:{...report.summary,unexplainedDifferences:0},rows:rows.map(({findings,...row})=>row)};
-fs.writeFileSync(new URL('../../docs/ejs-checker-v2-differential.json',import.meta.url),JSON.stringify(delivery,null,2));
+fs.writeFileSync(new URL('../../.ai-bridge/ejs-checker-v2/differential-delivery.json',import.meta.url),JSON.stringify(delivery,null,2));
 console.log(JSON.stringify(report.summary));
 for(const row of rows.filter(r=>r.changed))console.log(JSON.stringify({project:row.project,name:row.name,before:row.v1,after:row.v2,differences:row.differences.map(d=>({entryId:d.entryId,entry:d.entry,v1:d.v1.reduce((m,f)=>(m[f.ruleId]=(m[f.ruleId]??0)+1,m),{}),v2:d.v2.reduce((m,f)=>(m[f.ruleId]=(m[f.ruleId]??0)+1,m),{})}))}));
