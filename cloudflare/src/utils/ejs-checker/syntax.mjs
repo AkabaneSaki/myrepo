@@ -85,3 +85,17 @@ export function parseRegex(rawContent, budget) {
     return { units: [], errors: [], internalErrors: [internalError(error)] };
   }
 }
+
+export function parseWorldbookHtml(entry, parsed, budget) {
+  const ranges = parsed.units.find(unit=>unit.kind==='ejs')?.templateRanges;
+  if (!ranges) return {units:[],errors:[],internalErrors:[]};
+  const chars = entry.content.split('');
+  for (const range of ranges) {
+    for (let i=range.start;i<range.end;i++) if(chars[i]!=='\n'&&chars[i]!=='\r')chars[i]=' ';
+    if(range.mode==='='||range.mode==='-')chars[range.start]='0';
+  }
+  const html = parseRegex(chars.join(''), budget);
+  // Dynamic EJS output cannot prove the final JavaScript in an HTML unit.
+  const staticUnits=html.units.filter(unit=>!unit.codeRanges.some(codeRange=>ranges.some(range=>range.mode!=='#'&&range.start<codeRange.originalEnd&&range.end>codeRange.originalStart)));
+  return {units:staticUnits,errors:staticUnits.flatMap(unit=>unit.mappedError?[unit.mappedError]:[]),internalErrors:html.internalErrors};
+}

@@ -106,7 +106,7 @@ for(const source of ['const img=document.createElement("img"); img.src=runtimeTa
 }
 const mediaCandidate=ejs('const fallback="https://files.catbox.moe/fallback.png"; const profile={avatarUrl:runtimeTarget};');
 const mediaCandidateHint=mediaCandidate.findings.find(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media');
-assert.ok(mediaCandidateHint);assert.deepEqual(mediaCandidateHint.riskEvidence?.candidates,['https://files.catbox.moe/fallback.png']);count+=2;
+assert.ok(mediaCandidateHint);assert.deepEqual(mediaCandidateHint.riskEvidence?.candidates,[]);count+=2;
 for(const source of ['const img=document.createElement("img"); img.src="https://files.catbox.moe/a.png";','const profile={avatarUrl:"https://i.ibb.co/a.png"};','const urls = {one:"https://files.catbox.moe/a.png",two:"https://files.catbox.moe/b.png"}; image.src = urls[mood];','const runtimeUrl=runtimeTarget;']) {
   const report=ejs(source);assert.equal(report.findings.some(finding=>finding.ruleId==='AH2'&&finding.riskEvidence?.usage==='media'),false);count++;
 }

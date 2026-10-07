@@ -11,6 +11,13 @@ const transformed = await transform(moduleSource, { loader: 'ts', format: 'esm' 
 const { homeAdminReviewModalScript } = await import('data:text/javascript;base64,' + Buffer.from(transformed.code).toString('base64'));
 const transformedStyles = await transform(readFileSync(new URL('../../cloudflare/src/pages/home/styles.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'esm' });
 const { homeStyles } = await import('data:text/javascript;base64,' + Buffer.from(transformedStyles.code).toString('base64'));
+const loadFragment = async (file, name) => {
+  const result = await transform(readFileSync(new URL('../../cloudflare/src/pages/home/' + file, import.meta.url), 'utf8'), { loader: 'ts', format: 'esm' });
+  return (await import('data:text/javascript;base64,' + Buffer.from(result.code).toString('base64')))[name];
+};
+const mediaDetailScript = await loadFragment('render/detail-modal.ts', 'homeDetailModalRenderScript');
+const mediaDeviceScript = await loadFragment('external-links.ts', 'homeExternalLinksScript');
+const mediaWorkerSource = Buffer.from(readFileSync(new URL('../../cloudflare/src/generated/upload-checker.txt', import.meta.url), 'utf8'), 'base64').toString('utf8');
 const pageErrors = new WeakMap();
 test.afterEach(async ({ page }) => expect(pageErrors.get(page) || []).toEqual([]));
 const risk = (ruleId, reviewState, entry = 'CharacterPanel', extra = {}) => ({
@@ -33,7 +40,41 @@ async function install(page) {
   await page.addStyleTag({ content: homeStyles });
   await page.addScriptTag({ content: 'function escapeHtml(value) { const chars = "&<>" + String.fromCharCode(34, 39); const entities = ["&amp;", "&lt;", "&gt;", "&quot;", "&#39;"]; return String(value ?? "").replace(/[&<>"\x27]/g, char => entities[chars.indexOf(char)]); }' });
   await page.addScriptTag({ content: homeAdminReviewModalScript });
+  await page.addScriptTag({ content: 'window.inspectProjectExternalLinksOnDevice = async () => ({ externalLinkRecords: [], externalLinksNeedingReview: [] });' });
 }
+
+test('trusted media stays out of audit warnings until reused in prose', async ({ page }, testInfo) => {
+  await page.route('http://workshop.test/hotfix43', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Workshop 链接检查</title><main id="root"></main><button id="add-prose">加入简介链接</button>' }));
+  await page.route('http://workshop.test/assets/upload-checker.js', route => route.fulfill({ contentType: 'application/javascript', body: mediaWorkerSource }));
+  await page.goto('http://workshop.test/hotfix43');
+  pageErrors.set(page, []);
+  page.on('pageerror', error => pageErrors.get(page).push(error.message));
+  const remoteMediaRequests = [];
+  page.on('request', request => { if (/files\.catbox\.moe|i\.ibb\.co/.test(request.url())) remoteMediaRequests.push(request.url()); });
+  await page.addStyleTag({ content: homeStyles });
+  await page.addScriptTag({ content: 'const UPLOAD_CHECKER_URL="/assets/upload-checker.js"; const UPLOAD_CHECKER_TIMEOUT_MS=15000; const WORKSHOP_CONFIG={}; function escapeHtml(value) {return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}' });
+  await page.addScriptTag({ content: mediaDetailScript + '\n' + mediaDeviceScript + '\n' + homeAdminReviewModalScript });
+  await page.evaluate(async () => {
+    const url = 'https://files.catbox.moe/a.png';
+    const regex = [{ replaceString: '<img src="' + url + '">' }];
+    const render = async description => {
+      const summary = await inspectProjectExternalLinksOnDevice({ description }, [], regex);
+      document.querySelector('#root').innerHTML = renderAdminInspectionSignals([], regex, summary) + renderExternalLinksPanel([], regex, { project: summary, reviewOnly: true, title: '需要确认的链接' });
+    };
+    await render('');
+    document.querySelector('#add-prose').onclick = () => render(url);
+  });
+  await expect(page).toHaveTitle('Workshop 链接检查');
+  await expect(page.locator('#root')).toContainText('正则 1');
+  await expect(page.locator('#root')).not.toContainText('需要确认的链接');
+  await expect(page.locator('#root')).not.toContainText('外链 1');
+  await page.getByRole('button', { name: '加入简介链接' }).click();
+  await expect(page.locator('#root')).toContainText('需要确认的链接');
+  await expect(page.locator('#root')).toContainText('简介');
+  await expect(page.locator('#root')).toContainText('外链 1');
+  expect(remoteMediaRequests).toEqual([]);
+  await page.screenshot({ path: path.join(tmpdir(), `poem-hotfix43-${testInfo.project.name}.png`), fullPage: false });
+});
 
 test('audit groups all findings per entry and folds confirmed and removed evidence', async ({ page }, testInfo) => {
   await install(page);
