@@ -1016,6 +1016,7 @@ const ADMIN_PENDING_MAX_CARDS = 200;
 async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) {
   const startedAt = performance.now();
   const projects = [];
+  const seenIds = new Set();
   let total = 0;
   let page = 0;
 
@@ -1025,7 +1026,14 @@ async function fetchPendingProjects({ sort = 'oldest', projectType = '' } = {}) 
     const result = await apiFetch('/api/admin/pending?' + params.toString());
     const batch = Array.isArray(result?.projects) ? result.projects : [];
     total = Number(result?.total ?? total);
-    projects.push(...batch);
+    // 审核期间队列可能变动：approve/reject 会让行移出排序窗口，翻页按 OFFSET
+    // 读取可能重复。同一项目只保留一次，卡片和数字才不会互相打架。
+    for (const project of batch) {
+      const key = String(project?.id ?? '');
+      if (!key || seenIds.has(key)) continue;
+      seenIds.add(key);
+      projects.push(project);
+    }
     const seenTotal = total <= projects.length;
     const pageExhausted = batch.length < ADMIN_PENDING_PAGE_SIZE;
     if (seenTotal || pageExhausted || projects.length >= ADMIN_PENDING_MAX_CARDS) break;

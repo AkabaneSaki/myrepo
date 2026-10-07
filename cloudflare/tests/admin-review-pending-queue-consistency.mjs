@@ -227,8 +227,18 @@ assert.match(
 );
 assert.match(
   adminReviewSource,
-  /updateAdminReviewQueueSummary\(queueOverlay, adminReviewQueueKnownTotal\)/,
+  /updateAdminReviewQueueSummary\(queueOverlay, Number\(refreshedQueue\.total/,
   'approve / reject must refresh the summary from the remaining cards',
+);
+assert.match(
+  adminReviewSource,
+  /overlay\.dataset\.reviewKnownTotal = String\(/,
+  'the known total must live on the queue overlay, not in a cross-modal global',
+);
+assert.doesNotMatch(
+  adminReviewSource,
+  /let adminReviewQueueKnownTotal/,
+  'a global known-total must not leak between successive Audit Center modals',
 );
 
 // ---------- 前端行为：把真正的分页加载与摘要渲染跑起来 ----------
@@ -354,6 +364,48 @@ const capped = await (async () => {
 assert.equal(capped.projects.length, 200, 'the queue must stop at the safety cap');
 assert.equal(capped.total, 260);
 assert.equal(capped.hasMore, true, 'a capped queue must report that projects are still unloaded');
+
+// 审核期间队列会变动：翻页按 OFFSET 读取，窗口右移会让同一项目被读两次。
+// 新提交排在最旧优先的队首，正好把窗口右移一格。
+const baseRows = Array.from({ length: 7 }, (_, index) => ({ id: `s${index}` }));
+const inserted = { id: 's-new' };
+let shiftCalls = 0;
+const shifting = await (async () => {
+  const fetcher = evaluateWith(
+    extractFunction(homeApiScript, 'async function fetchPendingProjects'),
+    {
+      ADMIN_PENDING_PAGE_SIZE: 3,
+      ADMIN_PENDING_MAX_CARDS: 200,
+      console: { info() {} },
+      performance: { now: () => 0 },
+      // 第 0 页之后有一个新提交进入队首：page=1 的 OFFSET=3 会再次读到 s3。
+      apiFetch: endpoint => {
+        shiftCalls += 1;
+        const params = new URL(`https://workshop.test${endpoint}`).searchParams;
+        const page = Number(params.get('page') || 0);
+        const pageSize = Number(params.get('pageSize') || 0);
+        const live = shiftCalls > 1 ? [inserted, ...baseRows] : baseRows;
+        return Promise.resolve({
+          total: live.length,
+          projects: live.slice(page * pageSize, (page + 1) * pageSize),
+        });
+      },
+    },
+  );
+  return fetcher({ sort: 'oldest', projectType: '' });
+})();
+const shiftingIds = shifting.projects.map(project => project.id);
+assert.ok(shiftCalls > 1, 'the shifting fixture must actually require more than one page');
+assert.equal(
+  new Set(shiftingIds).size,
+  shiftingIds.length,
+  'a queue that shifts between pages must not render the same review card twice',
+);
+assert.deepEqual(
+  shiftingIds,
+  ['s0', 's1', 's2', 's3', 's4', 's5', 's6'],
+  'every pending project must appear exactly once, in queue order',
+);
 
 // 摘要渲染：数字 = 真实卡片数；未加载时必须说明数量。
 const renderQueueSummary = evaluateWith(
