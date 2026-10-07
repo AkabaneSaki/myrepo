@@ -38,6 +38,7 @@ const fragments = {
   homeDailyRandomDrawScript: await evaluateStandalone('src/pages/home/daily-random.ts', 'homeDailyRandomDrawScript'),
   homeCardsRenderScript: await evaluateStandalone('src/pages/home/render/cards.ts', 'homeCardsRenderScript'),
   homeDetailModalRenderScript: await evaluateStandalone('src/pages/home/render/detail-modal.ts', 'homeDetailModalRenderScript'),
+  homeExternalLinksScript: await evaluateStandalone('src/pages/home/external-links.ts', 'homeExternalLinksScript'),
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
@@ -369,7 +370,7 @@ assert.match(fragments.homeUploadPreviewScript, /data-regex-upload-remove/);
 assert.match(fragments.homeUploadPreviewScript, /data-upload-preview-clear/);
 assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('世界书条目'/);
 assert.match(fragments.homeUploadPreviewScript, /renderDetailSection\('正则列表'/);
-assert.match(fragments.homeModalsScript, /审核外链/);
+assert.match(fragments.homeModalsScript, /需要确认的链接/);
 assert.match(fragments.homeDetailModalRenderScript, /collectProjectExternalLinks/);
 assert.match(fragments.homeDetailModalRenderScript, /未访问、未验证远端内容/);
 assert.match(fragments.homeDetailModalRenderScript, /角色定义前/);

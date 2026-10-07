@@ -1,4 +1,4 @@
-import { parseEjs, parseRegex } from './syntax.mjs';
+import { parseEjs, parseRegex, parseWorldbookHtml } from './syntax.mjs';
 import { inspectAstPolicy, inspectSymbolCollisions } from './policy.mjs';
 import { inspectCapabilities } from './capabilities.mjs';
 import { inspectApiUsage } from './api-catalogue.mjs';
@@ -12,22 +12,6 @@ export const CHECKER_VERSION = Object.freeze({
   policyVersion:CHECK_POLICY_VERSION,
   parserCompatibility:'EJS 3.1.9 / ST nested tags; Acorn 8.18.0; HTML parse5 8.0.1',
 });
-
-function worldbookHtml(entry, parsed, budget) {
-  const ranges = parsed.units.find(unit=>unit.kind==='ejs')?.templateRanges;
-  if (!ranges) return {units:[],errors:[],internalErrors:[]};
-  const chars = entry.content.split('');
-  for (const range of ranges) {
-    for (let i=range.start;i<range.end;i++) if(chars[i]!=='\n'&&chars[i]!=='\r')chars[i]=' ';
-    if(range.mode==='='||range.mode==='-')chars[range.start]='0';
-  }
-  const html = parseRegex(chars.join(''), budget);
-  // EJS output inside a script/attribute can generate arbitrary JavaScript.
-  // Its final syntax is unknowable without running the template. Check the
-  // actual EJS AST and fully static HTML units; never invent an author error.
-  const staticUnits=html.units.filter(unit=>!unit.codeRanges.some(codeRange=>ranges.some(range=>range.mode!=='#'&&range.start<codeRange.originalEnd&&range.end>codeRange.originalStart)));
-  return {units:staticUnits,errors:staticUnits.flatMap(unit=>unit.mappedError?[unit.mappedError]:[]),internalErrors:html.internalErrors};
-}
 
 function analyze(inputs, server) {
   const books=[],findings=[];
@@ -49,7 +33,7 @@ function analyze(inputs, server) {
   for(const entry of admitted ? entries : []) {
     inspectDecorators(entry,findings);
     const ejs=entry.sourceType==='worldbook'&&entry.hasEjs?parseEjs(entry.content,{privateScope:entry.isPrivate,budget}):{units:[],errors:[],internalErrors:[]};
-    const html=ejs.internalErrors.length ? {units:[],errors:[],internalErrors:[]} : entry.sourceType==='regex'||!entry.hasEjs?parseRegex(entry.content,budget):worldbookHtml(entry,ejs,budget);
+    const html=ejs.internalErrors.length ? {units:[],errors:[],internalErrors:[]} : entry.sourceType==='regex'||!entry.hasEjs?parseRegex(entry.content,budget):parseWorldbookHtml(entry,ejs,budget);
     for(const record of syntaxFindings(entry,ejs))add(entry,record);
     for(const record of syntaxFindings({...entry,sourceType:'regex'},html))add(entry,record);
     if ([...ejs.internalErrors,...html.internalErrors].some(error => error.kind === 'limit')) break;

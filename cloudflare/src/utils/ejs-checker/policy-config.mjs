@@ -1,17 +1,11 @@
 export const CHECK_POLICY_VERSION = 'PW-CODE-POLICY-2026-10-05.3';
-export const trustedAssetHosts = Object.freeze(['files.catbox.moe', 'i.ibb.co']);
+import { isTrustedStaticMediaUrl } from '../external-links/policy.mjs';
+export { TRUSTED_MEDIA_HOSTS as trustedAssetHosts } from '../external-links/policy.mjs';
 export const CHARINFO_MANAGED_BLOCK_START = '<%# char-info-ejs-builder:start:v2 %>';
 export const CHARINFO_MANAGED_BLOCK_END = '<%# char-info-ejs-builder:end:v2 %>';
 
-const MEDIA_EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|apng|bmp|ico|mp4|webm|mov|m4v|ogv)$/i;
-
 export function trustedStaticMediaUrl(value, usage) {
-  if (usage !== 'media' || typeof value !== 'string' || /\$\d+|\$<[^>]+>|\$\{/.test(value)) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password
-      && trustedAssetHosts.includes(url.hostname.toLowerCase()) && MEDIA_EXTENSIONS.test(url.pathname);
-  } catch { return false; }
+  return usage === 'media' && isTrustedStaticMediaUrl(value);
 }
 
 function countOccurrences(content, target) {

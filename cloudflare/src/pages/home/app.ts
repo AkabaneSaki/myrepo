@@ -5,6 +5,7 @@ import { homePresentationScript } from './presentation';
 import { homePublishCheckScript } from './publish-check';
 import { homeCardsRenderScript } from './render/cards';
 import { homeDetailModalRenderScript } from './render/detail-modal';
+import { homeExternalLinksScript } from './external-links';
 import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
 import { homeRepairScript } from './repair-ui';
@@ -47,6 +48,7 @@ export const homeScript = String.raw`
   ${homeDailyRandomDrawScript}
   ${homeCardsRenderScript}
   ${homeDetailModalRenderScript}
+  ${homeExternalLinksScript}
   ${homeUploadPreviewScript}
   ${homeReviewDiffRenderScript}
   ${homeLayoutRenderScript}

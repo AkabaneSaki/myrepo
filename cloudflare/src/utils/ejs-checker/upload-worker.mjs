@@ -1,14 +1,29 @@
 // Creator-device checker (#42).
 //
-// The Worker must not run the heavy rule analysis on the upload path, so this
-// bundle now runs the *complete* rule set (L1-L7 / M / U / AH / API) in the
-// creator's browser instead of the local-only subset. A passing verdict here is
-// the first of the two complete checks; the reviewer device runs the second.
+// The Worker runs the complete rule set (L1-L7 / M / U / AH / API) in the
+// creator's browser. #43 also reuses this browser Worker for lightweight
+// project external-link presentation analysis; neither operation runs the
+// heavy checker on Cloudflare.
 import { analyzeProjectCodeV2 } from './index.mjs';
 import { formatUploaderCodeCheckError, toUploaderCodeCheck } from './report.mjs';
+import { collectProjectExternalLinks, externalLinksNeedingReview, groupExternalLinksByHostname } from '../external-links/collect.mjs';
 
-self.onmessage = async ({ data: { file, kind } }) => {
+self.onmessage = async ({ data }) => {
   try {
+    if (data?.operation === 'external-links') {
+      const records = collectProjectExternalLinks(data.project);
+      self.postMessage({
+        success: true,
+        summary: {
+          externalLinkRecords: records,
+          externalLinksNeedingReview: externalLinksNeedingReview(records),
+          externalLinkGroups: groupExternalLinksByHostname(records),
+        },
+      });
+      return;
+    }
+
+    const { file, kind } = data || {};
     const text = await file.text();
     const report = analyzeProjectCodeV2([{ fileName: file.name, type: kind, text }]);
     self.postMessage({
