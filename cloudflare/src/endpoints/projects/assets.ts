@@ -30,9 +30,10 @@ const ATTESTATION_ERROR = '这份文件的本地检查结果已经失效，请�
 const DEVICE_CHECKER_REVISION = `${CHECKER_VERSION.engine}:${CHECKER_VERSION.policyVersion}`;
 
 /**
- * #42: the Worker performs only cheap authoritative validation here. The complete
- * rule analysis lives on the creator device, and its verdict never reaches this
- * function — only a server-stamped receipt over the exact uploaded bytes.
+ * #42: the Worker performs only cheap authoritative validation here. In the normal
+ * Workshop flow the complete rule analysis runs on the creator device first. This
+ * function does not certify that browser verdict; it only validates a server-stamped
+ * receipt bound to the exact uploaded bytes.
  */
 async function validateAttestedUpload(
   c: AppContext,
@@ -131,9 +132,9 @@ export class ProjectUploadPreflight extends OpenAPIRoute {
       return c.json({ error: validation.error }, 400);
     }
 
-    // Cheap authoritative validation only: the complete rule analysis already ran on
-    // the creator device. The receipt is stamped from these exact bytes, so a later
-    // upload of different content cannot reuse it.
+    // Cheap authoritative validation only. The normal Workshop UI has already run
+    // the complete creator-device checker before calling this endpoint. The receipt
+    // is stamped from these exact bytes, so different content cannot reuse it.
     const contentHash = await hashContentText(text);
     return {
       success: true,
@@ -265,9 +266,10 @@ export class ProjectUpload extends OpenAPIRoute {
       return c.json({ error: validation.error }, 400);
     }
 
-    // #42: no heavy checker on this path. The receipt proves the Worker validated
-    // exactly these bytes; it carries no verdict, so a forged "passed=true" buys
-    // nothing. Approval still requires a reviewer-device result for this content.
+    // #42: no heavy checker on this path. The receipt binds this upload to exactly
+    // these bytes and carries no checker verdict. A creator can bypass the normal UI
+    // only to submit pending content; publication still requires trusted human review
+    // against the exact stored content.
     const attested = await validateAttestedUpload(
       c,
       payload.userId,
