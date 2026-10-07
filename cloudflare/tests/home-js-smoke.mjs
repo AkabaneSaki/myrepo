@@ -69,6 +69,16 @@ assert.match(homePageSource, /theme-color\" content=\"#0f1012/);
 assert.match(homePageSource, /rel=\"icon\" href=\"data:,/);
 assert.match(homePageSource, /html,body\{margin:0;min-height:100%;background:#0f1012/);
 assert.match(homeStylesSource, /body \{[^}]*background:#0f1012/);
+assert.match(
+  fragments.homeCardsRenderScript,
+  /const reviewBadge = showAdminActions \? getProjectReviewBadge\(project\) : "";/,
+  'ordinary viewers must not render creator/admin review badges on public cards',
+);
+assert.match(
+  fragments.homeCardsRenderScript,
+  /const rejectReason = showAdminActions \? getProjectRejectReason\(project\) : "";/,
+  'ordinary viewers must not render creator/admin rejection state on public cards',
+);
 assert.match(homeAppSource, /mobileToolSheet\.inert = true/);
 assert.match(homeAppSource, /mobileToolSheet\.inert = false/);
 assert.match(homeAppSource, /mobileToolSheet\.contains\(activeElement\).*activeElement\.blur/);
