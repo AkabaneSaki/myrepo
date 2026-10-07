@@ -30,4 +30,4 @@ Server-only domain configuration already has its own single source:
 
 Implementation constants such as polling intervals, DOM storage keys, protocol namespaces, cache TTLs, and UI timing values stay near the code unless they are duplicated or become operator-tuned settings.
 
-See `docs/CONFIG-HARDCODE-AUDIT.md` for the latest duplication audit and the rule for deciding whether a literal belongs in configuration.
+See canonical documentation `origin/documentation:docs/audits/config-hardcode.md` for the duplication audit and the rule for deciding whether a literal belongs in configuration.
