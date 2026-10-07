@@ -19,11 +19,11 @@ These rules apply to all agents and automated sessions working in this repositor
 - Creative Workshop has one user-facing version line: the **SillyTavern client import tag**. Workers have only two runtime environments: **staging** and **production**; do not assign Worker SemVer.
 - `client.stable` = latest released production client tag and current support baseline.
 - `client.staging` = active staging client line for the next planned feature release.
-- A planned staging feature line chooses its release boundary in advance. Example: production `2.2.0` + staging `2.3.0-devN` means the accepted staging line will release/tag `2.3.0`.
+- A planned staging feature line chooses its release boundary in advance. The accepted staging line releases the base SemVer of `client.staging` (the same version without its `-devN` suffix).
 - When staging is promoted to production, **always release the planned client tag** even if many changes in that staging cycle were Worker/web-only. Do not re-decide the tag by inspecting whether the final diff happened to touch enough client code.
 - Production hotfixes are the exception:
   - Worker/web-only production hotfix → fix/deploy production, create no client tag, record the bug/fix, then forward-port the logical fix into `origin/staging`.
-  - SillyTavern-client production hotfix → release the next patch tag on the current production line (for example `2.2.0 → 2.2.1`), then forward-port the same logical fix into staging.
+  - SillyTavern-client production hotfix → release the next patch tag on the current production line, then forward-port the same logical fix into staging.
 - Before investigating a bug reported from an old client tag, update/reproduce against the current `client.stable`. If the bug is already fixed there, treat it as an outdated-client report rather than a new production bug.
 - Current client release values are read only from `config/workshop.json`. Never duplicate live version numbers in this file, UI code, tests, or deployment scripts.
 - Do not add a general-purpose minimum-supported-version concept. A historical migration may have its own `beforeVersion` cutoff, but that is not the production support baseline.

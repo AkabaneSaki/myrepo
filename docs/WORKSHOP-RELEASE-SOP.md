@@ -2,7 +2,7 @@
 
 Creative Workshop uses one user-facing version line and two Worker environments.
 
-- **SillyTavern client tag** is the version users import, for example `@2.2.0`, `@2.2.1`, or `@2.3.0`.
+- **SillyTavern client tag** is the version users import. The current value is always read from `config/workshop.json`.
 - **Worker** has only two runtime environments: **staging** and **production**.
 - Do not invent or maintain a Worker SemVer. A Worker deployment is simply the current state of that environment.
 - Exact Git SHA or Cloudflare deployment identity may still be used internally for deployment verification and rollback, but it is not a product version and does not drive client tagging.
@@ -13,14 +13,14 @@ The production client tag is the current support baseline.
 
 The staging client line is the next planned feature release.
 
-Example:
+Model:
 
 ```text
-production client = 2.2.0
-staging client    = 2.3.0-devN
+production client = client.stable
+staging client    = client.staging
 ```
 
-The staging line is therefore the future `2.3.0` release. When the accepted staging feature line is promoted to production, release and tag `2.3.0`.
+The staging line therefore releases the base SemVer of `client.staging`. When the accepted staging feature line is promoted to production, release and tag that planned base version.
 
 Do **not** re-audit the entire staging release at the end and ask whether enough SillyTavern-side code changed to "deserve" the tag. The release boundary was already chosen when the staging feature line was opened. The tag moves with the planned production release so users, support, and the deployed feature set share one clear baseline.
 
@@ -47,23 +47,23 @@ production bug
 → staging continues toward its planned next release
 ```
 
-A Worker-only production hotfix does not consume `2.2.1`, `2.2.2`, or any other client version.
+A Worker-only production hotfix does not consume any client patch version.
 
 ### SillyTavern client hotfix
 
 If the production fix changes the SillyTavern client and users need a new imported client to receive the fix, release a patch on the current production line.
 
-Example:
+Model:
 
 ```text
-production client = 2.2.0
+production client = client.stable
 ST-side production bug
 → fix production client
-→ release/tag 2.2.1
-→ latest supported production client becomes 2.2.1
+→ release/tag next patch of client.stable
+→ latest supported production client becomes that patch
 → deploy production Worker too if the fix requires Worker changes
 → forward-port the logical fix into origin/staging
-→ future 2.3.0 must contain the same fix
+→ planned next release must contain the same fix
 ```
 
 Production hotfix tags are immutable. Do not overwrite an existing release tag.
@@ -72,11 +72,11 @@ Production hotfix tags are immutable. Do not overwrite an existing release tag.
 
 Feature work accumulates on the staging line and is validated against the staging Worker.
 
-Example:
+Model:
 
 ```text
-production client = 2.2.0
-staging client    = 2.3.0-devN
+production client = client.stable
+staging client    = client.staging
 
 feature/fix work
 → origin/staging
@@ -85,31 +85,31 @@ feature/fix work
 → repeat until accepted
 → owner production integration
 → production Worker
-→ build/release client 2.3.0
-→ create immutable tag 2.3.0
-→ production support baseline becomes 2.3.0
+→ build/release base SemVer of client.staging
+→ create immutable tag for that release
+→ production support baseline moves to that tag
 ```
 
-The final `2.3.0` tag is required for the planned release even if some or most changes in that staging cycle happened to be Worker/web-only.
+The final planned tag is required for the release even if some or most changes in that staging cycle happened to be Worker/web-only.
 
 That rule is deliberate: the tag is not merely a diff counter for the client bundle. It is also the supported client baseline for that production release. This prevents users from staying on much older imports and reporting bugs that have already been fixed in newer releases.
 
-After `2.3.0` is released, the next staging feature line may advance to the next planned release, for example `2.4.0-dev1`.
+After the planned release is shipped, `client.staging` may advance to the next planned feature line.
 
 ## Hotfix while a newer feature line is in staging
 
 Keep production and staging source lines separate.
 
-Example:
+Model:
 
 ```text
-production = 2.2.0
-staging    = future 2.3.0
+production = client.stable
+staging    = future release represented by client.staging
 ```
 
-If production gets a Worker-only hotfix, production receives the Worker fix and staging receives the forward-port. The client tags stay `2.2.0` and `2.3.0-devN`.
+If production gets a Worker-only hotfix, production receives the Worker fix and staging receives the forward-port. `client.stable` and `client.staging` do not change.
 
-If production gets an ST client hotfix, production may move to `2.2.1`. Staging remains the future `2.3.0`, but the same logical fix must be included there before release.
+If production gets an ST client hotfix, `client.stable` moves to the next patch. Staging remains the planned future release, but the same logical fix must be included there before release.
 
 Never merge the old production hotfix branch wholesale into staging just to synchronize it. Forward-port or recreate the required fix against current staging when necessary.
 
@@ -152,7 +152,7 @@ production Worker
 
 That is all the version model needs.
 
-Do not label Workers as `2.2.0`, `2.3.0`, or similar. Those numbers belong to the client import/release line.
+Do not label Workers with client SemVer values. Those numbers belong to the client import/release line.
 
 For operational safety, deployment tooling may record the exact source Git SHA or Cloudflare deployment identity. This is verification metadata only; Master does not need a separate Worker version number for release management.
 
@@ -205,8 +205,8 @@ Do not report a separate Worker SemVer.
 Use a compact release status such as:
 
 ```text
-Production client: 2.2.1
-Staging target: 2.3.0
+Production client: <client.stable>
+Staging target: <base SemVer of client.staging>
 Staging Worker: deployed / not deployed
 Production Worker: deployed / unchanged
 Git source: <sha when relevant>
