@@ -60,7 +60,7 @@
     "check:project-discord-update-center": "node tests/project-discord-update-center-smoke.mjs",
     "check:discord-gated-download": "node tests/discord-gated-download-smoke.mjs",
     "check:daily-random-draw": "node tests/daily-random-draw-smoke.mjs",
-    "check:d1-interaction-guards": "node tests/d1-interaction-guards-smoke.mjs",
+    "check:d1-interaction-guards": "node tests/d1-interaction-guards-smoke.mjs && node tests/project-daily-interactions.mjs",
     "check:staging-sync": "python -m unittest scripts/test_sync_staging_from_backup.py -v",
     "check:public-counts": "node tests/public-project-counts.mjs",
     "check:public-list-cache": "node tests/public-project-list-cache-smoke.mjs",
