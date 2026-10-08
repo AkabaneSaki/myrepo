@@ -28,6 +28,23 @@ const MAX_DAILY_COUNTED_DOWNLOADS = 15_000;
 // responses. Review evidence must not leak through the public Project shape.
 export const acceptedCodeCheckKey = Symbol('acceptedCodeCheck');
 
+// Old submitted snapshots must not reappear after a newer one is rejected.
+// 'drafting' is deliberately excluded: editing is not yet a submission.
+// Share this predicate between queue count/list and the atomic review UPDATE.
+function latestSubmittedReviewCondition(alias: 'p' | 'projects'): string {
+  return `(${alias}.review_target <> 'draft'
+    OR ${alias}.published_project_id IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM projects newer
+      WHERE newer.published_project_id = ${alias}.published_project_id
+        AND newer.author_id = ${alias}.author_id
+        AND newer.review_target = 'draft'
+        AND newer.status IN ('pending', 'rejected', 'approved')
+        AND (COALESCE(newer.created_at, '') > COALESCE(${alias}.created_at, '')
+          OR (COALESCE(newer.created_at, '') = COALESCE(${alias}.created_at, '') AND newer.id > ${alias}.id))
+    ))`;
+}
+
 /**
  * 生成 UUID
  */
@@ -1069,13 +1086,14 @@ export const projectDb = {
       ? JSON.stringify({ ...acceptedSnapshot, reviewerId, reviewedAt, revision: expectedRevision })
       : null;
 
+    const reviewEligibility = latestSubmittedReviewCondition('projects');
     const result = action === 'approve'
       ? await db
           .prepare(
             `UPDATE projects
              SET status = 'approved', reviewed_at = ?, reviewer_id = ?, reject_reason = NULL,
                  latest_approved_at = ?, updated_at = ?, accepted_code_check = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL AND ${reviewEligibility} RETURNING id`,
           )
           .bind(reviewedAt, reviewerId, reviewedAt, reviewedAt, acceptance, projectId, expectedRevision)
           .first<{ id: string }>()
@@ -1083,7 +1101,7 @@ export const projectDb = {
           .prepare(
             `UPDATE projects
              SET status = 'rejected', reviewed_at = ?, reviewer_id = ?, reject_reason = ?, updated_at = ?
-             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL RETURNING id`,
+             WHERE id = ? AND status = 'pending' AND draft_revision = ? AND content_mutation_token IS NULL AND ${reviewEligibility} RETURNING id`,
           )
           .bind(reviewedAt, reviewerId, rejectReason || null, reviewedAt, projectId, expectedRevision)
           .first<{ id: string }>();
@@ -1172,7 +1190,7 @@ export const projectDb = {
   ) => {
     const db = c.env.DB;
     const offset = page * pageSize;
-    const conditions = ["p.status = 'pending'"];
+    const conditions = ["p.status = 'pending'", latestSubmittedReviewCondition('p')];
     const filterValues: unknown[] = [];
     if (options.projectType) {
       conditions.push('p.project_type = ?');
