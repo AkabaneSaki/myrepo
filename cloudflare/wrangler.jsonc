@@ -4,6 +4,17 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-03-12",
   "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  },
   "durable_objects": {
     "bindings": [{ "name": "CODE_CHECK_SERVICE", "class_name": "CodeCheckService" }]
   },
