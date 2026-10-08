@@ -1,0 +1,22 @@
+{
+  "source": {
+    "cleanliness": "all",
+    "default": {
+      "remote": "origin",
+      "type": "branch",
+      "name": "staging"
+    },
+    "allowed": [
+      {
+        "remote": "origin",
+        "type": "branch",
+        "pattern": "^staging$"
+      },
+      {
+        "remote": "origin",
+        "type": "branch",
+        "pattern": "^(fix|feature|hotfix|refactor|release)/[A-Za-z0-9][A-Za-z0-9._/-]*$"
+      }
+    ]
+  }
+}
