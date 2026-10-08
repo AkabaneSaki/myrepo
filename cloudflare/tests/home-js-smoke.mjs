@@ -67,6 +67,35 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+const worldbookList = { innerHTML: '', querySelectorAll: () => [] };
+const additionalTab = {
+  dataset: { installTarget: 'additional' },
+  classList: { toggle: () => {} },
+  addEventListener(_event, handler) { this.click = handler; },
+};
+const installModal = Function(
+  'state', 'openModal', 'escapeHtml',
+  `${await evaluateStandalone('src/pages/home/modal/project-install.ts', 'homeProjectInstallModalScript')}\nreturn openInstallWorldbookModal;`,
+)(
+  { tavern: { worldbooks: {
+    primary: '主世界书',
+    additional: ['已绑定B', '已绑定A', '已绑定B'],
+    available: ['B10', 'B2', 'A', '主世界书', '已绑定A', 'B2'],
+  } } },
+  () => ({
+    querySelector: selector => selector === '[data-additional-worldbook-list]' ? worldbookList : null,
+    querySelectorAll: selector => selector === '[data-install-target]' ? [additionalTab] : [],
+  }),
+  value => value,
+);
+installModal('project-for-sorting-test', null);
+additionalTab.click();
+assert.deepEqual(
+  [...worldbookList.innerHTML.matchAll(/data-worldbook-name="([^"]+)"/g)].map(match => match[1]),
+  ['已绑定B', '已绑定A', 'A', 'B2', 'B10'],
+  'bound worldbooks must stay first in binding order; other worldbooks must sort by name without duplicates or primary',
+);
+
 assert.match(homePageSource, /theme-color\" content=\"#0f1012/);
 assert.match(homePageSource, /rel=\"icon\" href=\"data:,/);
 assert.match(homePageSource, /html,body\{margin:0;min-height:100%;background:#0f1012/);
