@@ -26,7 +26,12 @@ export const homeProjectInstallModalScript = [
   '  const primary = worldbooks.primary || null;',
   '  const additional = Array.isArray(worldbooks.additional) ? worldbooks.additional.filter(Boolean) : [];',
   '  const available = Array.isArray(worldbooks.available) ? worldbooks.available.filter(Boolean) : [];',
-  '  const additionalCandidates = Array.from(new Set([...additional, ...available])).filter(name => name !== primary);',
+  '  const boundNames = new Set(additional);',
+  '  const additionalCandidates = [',
+  '    ...Array.from(boundNames).filter(name => name !== primary),',
+  '    ...Array.from(new Set(available)).filter(name => name !== primary && !boundNames.has(name))',
+  '      .sort((a, b) => String(a).localeCompare(String(b), "zh-CN", { numeric: true, sensitivity: "base" })),',
+  '  ];',
 
   '  const initialMode = primary ? "primary" : "additional";',
   '  const bodyHtml = `<form id="installWorldbookForm" class="install-worldbook-form"><div class="form-group"><label>安装位置</label><div class="install-target-switch"><button type="button" class="btn install-target-option${initialMode === "primary" ? " active" : ""}" data-install-target="primary"${primary ? "" : " disabled"}><i class="fas fa-book"></i><span>角色主世界书</span></button><button type="button" class="btn install-target-option${initialMode === "additional" ? " active" : ""}" data-install-target="additional"><i class="fas fa-layer-group"></i><span>附加世界书</span></button></div></div><div class="form-group install-additional-panel" data-additional-worldbook${initialMode === "additional" ? "" : " hidden"}><label for="additionalWorldbookSearch">选择附加世界书</label><div class="install-worldbook-search-wrap"><i class="fas fa-search"></i><input type="search" id="additionalWorldbookSearch" placeholder="搜索附加世界书" autocomplete="off"></div><div class="install-worldbook-list" data-additional-worldbook-list></div><div class="install-worldbook-create"><button type="button" class="btn btn-outline install-worldbook-create-trigger" data-new-additional-worldbook><i class="fas fa-plus"></i> 新建附加世界书</button><div class="install-worldbook-create-panel" data-new-additional-worldbook-panel hidden><label for="newAdditionalWorldbookName">世界书名称</label><input type="text" id="newAdditionalWorldbookName" data-new-additional-worldbook-name placeholder="例如：梅林 DLC" maxlength="120" autocomplete="off"><div class="install-worldbook-create-actions"><button type="button" class="btn btn-outline" data-new-additional-worldbook-cancel>取消</button><button type="button" class="btn btn-primary" data-new-additional-worldbook-confirm>建立并安装</button></div></div></div></div><button type="submit" class="btn install-submit-btn"><i class="fas fa-download"></i> 安装</button></form>`;',
