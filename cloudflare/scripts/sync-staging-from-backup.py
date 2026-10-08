@@ -27,6 +27,8 @@ TABLE_POLICY = {
     "project_rank_snapshots": "derived",
     "project_ranking_days": "derived",
     "project_daily_rankings": "derived",
+    "project_period_rank_snapshots": "derived",
+    "project_daily_interactions": "staging-local",
     "project_ranking_builds": "derived",
     "discovery_feature_history": "derived",
     "daily_random_draw_state": "staging-local",
