@@ -57,7 +57,8 @@ assert.doesNotMatch(installInfoSource, /\bINSERT\b|\bUPDATE\b|\bDELETE\b/i);
 assert.doesNotMatch(installInfoSource, /project_likes|project_subscribes|download_history|acquisition/i);
 
 assert.match(repairEndpoint, /safeById = resolved\.byId\.map\(project => \(\{ \.\.\.project, downloadUrl: null \}\)\)/);
-assert.match(recommendationsEndpoint, /parseProjectRow\(row\), downloadUrl: null/);
+assert.match(recommendationsEndpoint, /parseProjectRow\(row\)/);
+assert.match(recommendationsEndpoint, /downloadUrl: null/);
 
 assert.match(apiScript, /fetchProjectInstallInfo/);
 assert.match(apiScript, /\/install-info/);

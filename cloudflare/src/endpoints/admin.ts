@@ -936,10 +936,22 @@ export class AdminActionLogList extends OpenAPIRoute {
     }
 
     const logs = await projectDb.getAdminLogs(c, 200);
+    // Existing curator rows preserve attribution for picks made before audit logging.
+    const picks = await c.env.DB.prepare(`
+      SELECT r.project_id AS projectId, p.name AS projectName,
+             r.curator_id AS actorId,
+             COALESCE(u.global_name, u.username, r.curator_id) AS actorName,
+             r.updated_at AS updatedAt
+      FROM devteam_recommendations r
+      JOIN projects p ON p.id = r.project_id
+      LEFT JOIN users u ON u.id = r.curator_id
+      ORDER BY r.updated_at DESC LIMIT 200
+    `).all();
 
     return {
       success: true,
       logs,
+      currentEditorPicks: picks.results || [],
     };
   }
 }

@@ -62,7 +62,7 @@ async function apiFetch(endpoint, options = {}) {
   } catch (error) {
     throw normalizeThrownError(error, '请求失败');
   }
-  if (response.status === 401) {
+  if (response.status === 401 && localStorage.getItem(TOKEN_KEY) === token) {
     clearAuthenticatedCoverObjectUrls();
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -190,46 +190,15 @@ async function fetchDiscoverShelves(forceRefresh = false) {
 }
 
 async function fetchDevTeamRecommendations(forceRefresh = false) {
+  const requestToken = ++state.editorRecommendationsRequestToken;
+  const sessionToken = localStorage.getItem(TOKEN_KEY);
   const suffix = forceRefresh ? ('?_=' + Date.now()) : '';
   const data = await apiFetch('/api/devteam-recommendations' + suffix);
-  const curators = Array.isArray(data.curators) ? data.curators : [];
-  setDevTeamCurators(curators);
-  const projects = curators.flatMap(curator => (curator.recommendations || []).map(item => item.project)).filter(Boolean);
+  if (requestToken !== state.editorRecommendationsRequestToken || sessionToken !== localStorage.getItem(TOKEN_KEY)) return;
+  const projects = Array.isArray(data.recommendations) ? data.recommendations : [];
+  setEditorRecommendations(projects, data.myRecommendedProjectIds);
   syncProjectStats(projects, { replace: false });
-  return curators;
-}
-
-async function fetchDlcKitchenProfile(forceRefresh = false) {
-  if (!state.currentUser?.isAdmin) return null;
-  if (!forceRefresh && state.dlcKitchenProfile) return state.dlcKitchenProfile;
-  const suffix = forceRefresh ? ('?_=' + Date.now()) : '';
-  const data = await apiFetch('/api/admin/devteam-curator-profile' + suffix);
-  const profile = data?.profile || {};
-  state.dlcKitchenProfile = {
-    title: String(profile.title || ''),
-    bio: String(profile.bio || ''),
-    reactionPresets: Array.isArray(profile.reactionPresets)
-      ? profile.reactionPresets.map(item => String(item || '').trim()).filter(Boolean).slice(0, 12)
-      : [],
-  };
-  return state.dlcKitchenProfile;
-}
-
-async function saveDlcKitchenProfile(profile) {
-  const data = await apiFetch('/api/admin/devteam-curator-profile', {
-    method: 'PUT',
-    body: JSON.stringify(profile || {}),
-  });
-  const saved = data?.profile || {};
-  state.dlcKitchenProfile = {
-    title: String(saved.title || ''),
-    bio: String(saved.bio || ''),
-    reactionPresets: Array.isArray(saved.reactionPresets)
-      ? saved.reactionPresets.map(item => String(item || '').trim()).filter(Boolean).slice(0, 12)
-      : [],
-  };
-  await fetchDevTeamRecommendations(true);
-  return state.dlcKitchenProfile;
+  return projects;
 }
 
 async function saveDevTeamRecommendation(projectId, fields) {

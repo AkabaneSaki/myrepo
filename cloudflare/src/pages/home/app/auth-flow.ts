@@ -198,6 +198,8 @@ export const homeAppAuthFlowScript = String.raw`
     invalidateAllProjectDetailCaches();
     setCurrentUser(payload.user);
     renderApp();
+    void fetchDevTeamRecommendations(true).then(() => renderApp())
+      .catch(error => console.warn('[CreativeWorkshop] 编辑精选刷新失败', error));
     apiFetch('/api/auth/me', { method: 'GET' })
       .then(data => {
         if (!showRejectedProjectReminder(data.rejectedProjects)) showToast('登录成功');

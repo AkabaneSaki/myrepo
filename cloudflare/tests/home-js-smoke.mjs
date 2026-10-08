@@ -67,6 +67,41 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+// A browse shelf refresh must not zero out editor picks absent from that shelf.
+const statsSyncSource = fragments.homeStateScript.match(/function syncProjectStats\(projects, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(statsSyncSource, 'syncProjectStats must remain testable');
+const updateLikeSource = fragments.homeStateScript.match(/function updateLikeState\(projectId, payload\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(updateLikeSource, 'like responses must update the shared stats state');
+const statsState = {
+  editorRecommendations: [
+    { id: 'editor-only', likesCount: 10, userLiked: true },
+    { id: 'also-on-shelf', likesCount: 4 },
+  ],
+  likesMap: new Map(),
+  subsMap: new Map(),
+};
+const syncStats = new Function('state', statsSyncSource + '\nreturn syncProjectStats;')(statsState);
+const updateStatsLike = new Function('state', updateLikeSource + '\nreturn updateLikeState;')(statsState);
+syncStats(statsState.editorRecommendations, { replace: false });
+syncStats([{ id: 'shelf-only', likesCount: 2 }, { id: 'also-on-shelf', likesCount: 7 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 10, liked: true });
+assert.deepEqual(statsState.likesMap.get('also-on-shelf'), { count: 7, liked: false });
+assert.deepEqual(statsState.likesMap.get('shelf-only'), { count: 2, liked: false });
+syncStats([{ id: 'another-shelf', likesCount: 3 }], { replace: false });
+assert.equal(statsState.likesMap.get('editor-only').count, 10);
+updateStatsLike('editor-only', { count: 9, liked: false });
+syncStats([{ id: 'next-shelf', likesCount: 1 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 9, liked: false }, 'an unlike must survive an unrelated shelf refresh');
+updateStatsLike('editor-only', { count: 10, liked: true });
+syncStats([{ id: 'next-shelf', likesCount: 1 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 10, liked: true }, 'a like must survive an unrelated shelf refresh');
+assert.equal(statsState.likesMap.has('shelf-only'), false, 'old shelf entries must not accumulate');
+syncStats([{ id: 'editor-only', likesCount: 12, userLiked: true }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 12, liked: true }, 'fresh project data must update the retained stats');
+statsState.editorRecommendations = [];
+syncStats([]);
+assert.equal(statsState.likesMap.size, 0, 'removed editor picks must not remain in the stats map');
+
 const worldbookList = { innerHTML: '', querySelectorAll: () => [] };
 const additionalTab = {
   dataset: { installTarget: 'additional' },
@@ -429,46 +464,39 @@ assert.match(fragments.homeStateScript, /viewMode: 'discover'/);
 assert.match(fragments.homeLayoutRenderScript, /data-workshop-view=\"discover\"/);
 assert.match(fragments.homeLayoutRenderScript, /renderDiscoverHome/);
 assert.match(fragments.homeLayoutRenderScript, /renderDevTeamRecommendations\(\)/);
-assert.match(fragments.homeCardsRenderScript, /DLC KITCHEN/);
+assert.match(fragments.homeCardsRenderScript, /EDITOR PICKS/);
+assert.match(fragments.homeCardsRenderScript, /renderDiscoverShelf\("编辑精选"/);
 assert.match(fragments.homeCardsRenderScript, /devteam-recommend-btn/);
 assert.match(fragments.homeApiScript, /\/api\/devteam-recommendations/);
 assert.match(recommendationsEndpointSource, /SUPER_ADMIN_USER_ID/);
 assert.match(recommendationsEndpointSource, /FROM super_admins super_admin/);
-assert.match(recommendationsEndpointSource, /curator\.title AS curator_title/);
-assert.match(recommendationsEndpointSource, /r\.reaction_label/);
 assert.match(recommendationsEndpointSource, /devteam_recommendations r INDEXED BY idx_devteam_recommendations_updated/);
+assert.match(recommendationsEndpointSource, /GROUP BY r\.project_id[\s\S]*?ORDER BY MAX\(r\.updated_at\)[\s\S]*?LIMIT 100/);
+assert.match(recommendationsEndpointSource, /myRecommendedProjectIds/);
+assert.doesNotMatch(recommendationsEndpointSource, /curator\.title AS curator_title/);
+assert.doesNotMatch(recommendationsEndpointSource, /curator_global_name/);
+assert.doesNotMatch(recommendationsEndpointSource, /curator_avatar/);
+assert.match(recommendationsEndpointSource, /editor_pick_saved/);
+assert.match(recommendationsEndpointSource, /editor_pick_removed/);
 const startupInitialRenderIndex = fragments.homeAppBootstrapScript.indexOf('renderApp();');
 const startupAuthTaskIndex = fragments.homeAppBootstrapScript.indexOf("const authTask = timedTask('auth'");
-const startupRecommendationsTaskIndex = fragments.homeAppBootstrapScript.indexOf("const recommendationsTask = timedTask('dlc-kitchen'");
+const startupRecommendationsTaskIndex = fragments.homeAppBootstrapScript.indexOf("const recommendationsTask = timedTask('editor-picks'");
 const startupShelvesTaskIndex = fragments.homeAppBootstrapScript.indexOf("const shelvesTask = timedTask('discover-shelves'");
 const startupAwaitIndex = fragments.homeAppBootstrapScript.indexOf('await Promise.allSettled');
 assert.ok(startupInitialRenderIndex >= 0 && startupInitialRenderIndex < startupAuthTaskIndex, 'Workshop shell must render before startup API tasks');
 assert.ok(startupAuthTaskIndex >= 0 && startupRecommendationsTaskIndex > startupAuthTaskIndex && startupShelvesTaskIndex > startupRecommendationsTaskIndex, 'startup tasks must be scheduled before the settle barrier');
-assert.ok(startupAwaitIndex > startupShelvesTaskIndex, 'DLC kitchen must not block Discover shelves startup');
-assert.match(recommendationsEndpointSource, /reaction_presets/);
-assert.match(recommendationsEndpointSource, /reactionLabel: z\.string\(\)\.trim\(\)\.max\(32\)/);
-assert.match(recommendationsEndpointSource, /reactionPresets: z\.array/);
-assert.match(indexSource, /\/api\/admin\/devteam-curator-profile/);
-assert.match(fragments.homeApiScript, /fetchDlcKitchenProfile/);
-assert.match(fragments.homeApiScript, /saveDlcKitchenProfile/);
-assert.match(fragments.homeCardsRenderScript, /data-devteam-curator-shift/);
-assert.match(fragments.homeCardsRenderScript, /查看全部 \$\{recommendations\.length\} 道/);
-assert.match(fragments.homeAppActionsScript, /touchstart/);
-assert.match(fragments.homeAppActionsScript, /openDlcKitchenCuratorModal/);
-assert.match(fragments.homeAppActionsScript, /openDlcKitchenSettingsModal/);
-assert.match(fragments.homeLayoutRenderScript, /dlcKitchenSettingsBtn/);
-assert.match(fragments.homeLayoutRenderScript, /mobileDlcKitchenSettingsBtn/);
-assert.match(fragments.homeModalsScript, /dlcKitchenCuratorTitle/);
-assert.match(fragments.homeModalsScript, /dlcKitchenCuratorBio/);
-assert.match(fragments.homeModalsScript, /dlcKitchenPresetAdd/);
-assert.match(fragments.homeModalsScript, /data-reaction-preset-index/);
-assert.doesNotMatch(fragments.homeModalsScript, /devTeamCuratorTitle/);
-assert.match(fragments.homeModalsScript, /devTeamReactionLabel/);
-assert.match(fragments.homeModalsScript, /DLC私房菜/);
-assert.match(fragments.homeDetailModalRenderScript, /DLC私房菜/);
+assert.ok(startupAwaitIndex > startupShelvesTaskIndex, 'Editor picks must not block Discover shelves startup');
+assert.doesNotMatch(indexSource, /\/api\/admin\/devteam-curator-profile/);
+assert.doesNotMatch(fragments.homeApiScript, /fetchDlcKitchenProfile|saveDlcKitchenProfile/);
+assert.doesNotMatch(fragments.homeCardsRenderScript, /DLC KITCHEN|data-devteam-curator-shift/);
+assert.doesNotMatch(fragments.homeAppActionsScript, /openDlcKitchenCuratorModal|openDlcKitchenSettingsModal/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /dlcKitchenSettingsBtn|mobileDlcKitchenSettingsBtn/);
+assert.doesNotMatch(fragments.homeModalsScript, /dlcKitchenCuratorTitle|dlcKitchenCuratorBio|dlcKitchenPresetAdd|devTeamReactionLabel/);
+assert.match(fragments.homeModalsScript, /toggleEditorPick/);
+assert.doesNotMatch(fragments.homeDetailModalRenderScript, /DLC私房菜|devteam-detail-recommendation/);
 assert.match(fragments.homeDetailModalRenderScript, /detail-devteam-recommend-btn/);
 assert.match(fragments.homeModalsScript, /detail-devteam-recommend-btn/);
-assert.match(fragments.homeCardsRenderScript, /还没有私房菜/);
+assert.doesNotMatch(fragments.homeCardsRenderScript, /还没有私房菜/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /shelves\.downloads/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /shelves\.likes/);
 assert.doesNotMatch(fragments.homeApiScript, /key: 'downloads', sort: 'downloads'/);

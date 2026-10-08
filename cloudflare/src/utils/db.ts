@@ -24,6 +24,14 @@ import { r2Storage } from './r2';
 import { bumpProjectVersionWithLegacyFallback, normalizeProjectVersionBase, parseProjectVersion } from './version.js';
 
 const MAX_DAILY_COUNTED_DOWNLOADS = 15_000;
+type AdminActionLogInput = {
+  action: string;
+  targetType: string;
+  targetId?: string;
+  actorId: string;
+  actorName: string;
+  detail?: Record<string, unknown> | null;
+};
 // Symbol properties survive internal object spreads but never appear in JSON
 // responses. Review evidence must not leak through the public Project shape.
 export const acceptedCodeCheckKey = Symbol('acceptedCodeCheck');
@@ -1582,19 +1590,14 @@ export const projectDb = {
       .run();
   },
 
-  logAdminAction: async (
+  prepareAdminAction: (
     c: AppContext,
-    payload: {
-      action: string;
-      targetType: string;
-      targetId?: string;
-      actorId: string;
-      actorName: string;
-      detail?: Record<string, unknown> | null;
-    },
+    payload: AdminActionLogInput,
+    requirePreviousChange = false,
   ) => {
-    await c.env.DB.prepare(
-      `INSERT INTO admin_action_logs (id, action, target_type, target_id, actor_id, actor_name, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    return c.env.DB.prepare(
+      `INSERT INTO admin_action_logs (id, action, target_type, target_id, actor_id, actor_name, detail, created_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ? = 0 OR changes() > 0`,
     )
       .bind(
         generateId(),
@@ -1605,8 +1608,12 @@ export const projectDb = {
         payload.actorName,
         payload.detail ? JSON.stringify(payload.detail) : null,
         now(),
-      )
-      .run();
+        requirePreviousChange ? 1 : 0,
+      );
+  },
+
+  logAdminAction: async (c: AppContext, payload: AdminActionLogInput) => {
+    await projectDb.prepareAdminAction(c, payload).run();
   },
 
   getAdminLogs: async (c: AppContext, limit: number = 100) => {

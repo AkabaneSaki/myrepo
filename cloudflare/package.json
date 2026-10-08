@@ -68,6 +68,7 @@
     "check:home-asset-cache": "node tests/home-asset-cache-smoke.mjs",
     "check:project-detail-r2-parallel": "node tests/project-detail-r2-parallel-smoke.mjs",
     "check:dlc-kitchen-cache": "node tests/dlc-kitchen-cache-smoke.mjs",
+    "check:editor-picks": "node tests/editor-picks-smoke.mjs",
     "check:discover-banner-cache": "node tests/discover-banner-cache-smoke.mjs",
     "check:cache-regression": "npm run check:public-list-cache && npm run check:project-list-client-cache && npm run check:home-asset-cache && npm run check:project-detail-r2-parallel && npm run check:dlc-kitchen-cache && npm run check:discover-banner-cache && npm run check:types && npm run check:home-js-smoke && npm run check:production",
     "check:creative-workshop-conflict-consent": "node tests/creative-workshop-conflict-consent-smoke.mjs",
@@ -75,7 +76,7 @@
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",
     "check:creative-workshop-repair-d1-guard": "node tests/creative-workshop-repair-d1-guard-smoke.mjs",
     "check:oauth-external-browser": "node tests/oauth-external-browser-smoke.mjs",
-    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery && npm run check:admin-review-pending-queue",
+    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:editor-picks && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery && npm run check:admin-review-pending-queue",
     "check:workshop-config": "node ../scripts/check-workshop-config.mjs"
   },
   "dependencies": {
