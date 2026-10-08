@@ -658,7 +658,8 @@ function renderProjectPagination() {
     || getActivePublicTags().length);
   const type = state.activeBaseTag;
   const scopedTotal = counts ? (type === 'all' ? counts.total : Number(counts.byType?.[type] || 0)) : 0;
-  const pageCount = !filtered && counts ? Math.ceil(scopedTotal / pagination.pageSize) : null;
+  const pageCount = !filtered && counts && !/^(downloads|likes)(7|30)$/.test(state.sortMode)
+    ? Math.ceil(scopedTotal / pagination.pageSize) : null;
   const lastVisiblePage = pageCount === null
     ? pagination.page + (pagination.hasMore ? 1 : 0)
     : Math.max(0, Math.min(19, pageCount - 1));
