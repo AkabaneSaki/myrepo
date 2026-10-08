@@ -1278,7 +1278,7 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 .devteam-curator-view-all i { margin-left:4px; font-size:.55rem; }
 .devteam-curator-track { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:12px; }
 .devteam-recommend-item { min-width:0; }
-.devteam-recommend-item .discover-card-cover-shell { aspect-ratio:16/9; border-radius:5px; }
+.devteam-recommend-item .discover-card-cover-shell { border-radius:5px; }
 .devteam-recommend-item .discover-card-copy { padding-top:7px; }
 .devteam-recommend-comment { margin-top:7px; }
 .dlc-kitchen-reaction { display:inline-flex; align-items:center; width:max-content; max-width:100%; padding:2px 7px; border:1px solid rgba(100,167,213,.22); border-radius:999px; background:rgba(100,167,213,.08); color:#69aedd; font-size:.64rem; line-height:1.45; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
