@@ -144,9 +144,9 @@ export function collectProjectExternalLinks({
   const addEntry = (item, sourceType) => {
     const content = String(sourceType === 'regex' ? item?.replaceString ?? item?.replace_string ?? '' : item?.content ?? item?.text ?? '');
     const source = sourceType === 'regex' ? LINK_SOURCE.REGEX : LINK_SOURCE.WORLDBOOK;
-    // Presentation analysis runs in the browser Worker, with the checker limits.
-    // If parsing cannot complete, no media proof is granted.
-    if (content.length > CHECKER_LIMITS.entryCharacters || budget.nodes >= CHECKER_LIMITS.astNodes || budget.units >= CHECKER_LIMITS.codeUnits) {
+    // Browser-only analysis: large HTML/CSS should get normal media evidence.
+    // Exhausting an executable parse budget still grants no media proof.
+    if (budget.nodes >= CHECKER_LIMITS.astNodes || budget.units >= CHECKER_LIMITS.codeUnits) {
       addTextLinks(content, source, LINK_USAGE.UNKNOWN);
       return;
     }

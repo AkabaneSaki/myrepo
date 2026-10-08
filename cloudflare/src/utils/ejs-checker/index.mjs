@@ -26,9 +26,6 @@ function analyze(inputs, server) {
   const budget = createParseBudget();
   const limitFinding = (entry, detail) => findings.push(finding('CHECKER-LIMIT','high','内容超过本次检查的处理上限',entry,0,detail,'请减少本次提交的内容，或拆分过大的条目；重复提交相同内容仍无法通过。'));
   if (entries.length > CHECKER_LIMITS.entries) limitFinding(entries[0], '一次检查最多处理 2000 条内容。请减少本次提交的条目。');
-  if (entries.reduce((sum, entry) => sum + entry.content.length, 0) > CHECKER_LIMITS.totalCharacters) limitFinding(entries[0], '一次检查的正文总计最多 200 万个字符。请减少本次提交的内容。');
-  const oversized = entries.find(entry => entry.content.length > CHECKER_LIMITS.entryCharacters);
-  if (oversized) limitFinding(oversized, '单条内容最多 30 万个字符。请拆分这个过大的条目。');
   const admitted = !findings.some(item => item.ruleId === 'CHECKER-LIMIT');
   for(const entry of admitted ? entries : []) {
     inspectDecorators(entry,findings);
