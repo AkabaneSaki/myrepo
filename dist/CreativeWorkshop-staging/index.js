@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./util/iframe_srcdoc.html
-const iframe_srcdoc_namespaceObject = "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n</head>\n<body></body>\n</html>\n";
+const iframe_srcdoc_namespaceObject = "<!doctype html>\r\n<html>\r\n<head>\r\n  <meta charset=\"utf-8\">\r\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n</head>\r\n<body></body>\r\n</html>\r\n";
 ;// ./util/script.ts
 
 function teleportStyle(appendTo = 'head') {
@@ -3550,22 +3550,71 @@ function openCreativeWorkshop() {
     });
     const $frameShell = host$('<div>').css({
         position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
         width: '100%',
         height: '100%',
         flex: '0 0 auto',
+        overflow: 'hidden',
+        background: '#0f1012',
+        borderRadius: '20px',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
     });
+    // Host-owned WebView chrome: stays clickable even when the child iframe
+    // is blank, offline, or stuck before/after bridge initialization.
+    const $topBar = host$('<div role="toolbar" aria-label="创意工坊窗口控制栏">').css({
+        position: 'relative',
+        zIndex: 3,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flex: '0 0 48px',
+        minHeight: '48px',
+        padding: '0 4px 0 16px',
+        boxSizing: 'border-box',
+        background: '#1b1d22',
+        borderBottom: '1px solid rgba(255,255,255,0.09)',
+    });
+    const $topBarTitle = host$('<span>').text('命定创意工坊').css({
+        minWidth: '0',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: '#e5e7eb',
+        fontSize: '13px',
+        fontWeight: '600',
+        letterSpacing: '0.02em',
+    });
+    const $closeButton = host$('<button type="button" aria-label="关闭创意工坊" title="关闭创意工坊">×</button>').css({
+        flex: '0 0 44px',
+        width: '44px',
+        height: '44px',
+        marginLeft: '8px',
+        border: '0',
+        borderRadius: '9px',
+        background: 'transparent',
+        color: '#d1d5db',
+        fontSize: '28px',
+        fontWeight: '300',
+        lineHeight: '1',
+        cursor: 'pointer',
+        touchAction: 'manipulation',
+    });
+    $topBar.append($topBarTitle, $closeButton);
     const $frame = createScriptIdIframe()
         .removeAttr('srcdoc')
         .css({
+        display: 'block',
         width: '100%',
-        height: '100%',
-        borderRadius: '20px',
+        height: 'auto',
+        flex: '1 1 0',
+        minHeight: '0',
+        border: '0',
         background: '#0f1012',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
     });
     const $loading = host$('<div role="status" aria-live="polite">正在打开创意工坊…</div>').css({
         position: 'absolute',
-        inset: '0',
+        inset: '48px 0 0',
         zIndex: 2,
         display: 'grid',
         placeItems: 'center',
@@ -3576,24 +3625,6 @@ function openCreativeWorkshop() {
         letterSpacing: '0.02em',
         pointerEvents: 'none',
     });
-    let workshopReady = false;
-    const $closeButton = host$('<button type="button">退出</button>').css({
-        position: 'absolute',
-        top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-        right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
-        zIndex: 3,
-        minHeight: '44px',
-        padding: '0 14px',
-        border: '1px solid rgba(248,113,113,0.45)',
-        borderRadius: '999px',
-        background: 'rgba(185,28,28,0.92)',
-        color: '#FEF2F2',
-        fontSize: '14px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        boxShadow: '0 8px 24px rgba(127,29,29,0.35)',
-        backdropFilter: 'blur(8px)',
-    });
     const updateOverlayLayout = () => {
         const useFullscreenLayout = hostWindow.innerWidth < 1000;
         const viewportHeight = hostWindow.visualViewport?.height ?? hostWindow.innerHeight;
@@ -3602,39 +3633,32 @@ function openCreativeWorkshop() {
             top: `${viewportTop}px`,
             height: `${viewportHeight}px`,
             alignItems: useFullscreenLayout ? 'stretch' : 'center',
-            paddingTop: useFullscreenLayout ? 'calc(env(safe-area-inset-top, 0px) + 10px)' : '24px',
-            paddingRight: useFullscreenLayout ? 'env(safe-area-inset-right, 0px)' : '24px',
-            paddingBottom: useFullscreenLayout ? 'calc(env(safe-area-inset-bottom, 0px) + 10px)' : '24px',
-            paddingLeft: useFullscreenLayout ? 'env(safe-area-inset-left, 0px)' : '24px',
+            // Chrome's visual viewport excludes browser chrome. Extra insets also
+            // protect against cutouts and gesture areas in standalone/fullscreen hosts.
+            paddingTop: useFullscreenLayout ? 'calc(env(safe-area-inset-top, 0px) + 14px)' : '24px',
+            paddingRight: useFullscreenLayout ? 'calc(env(safe-area-inset-right, 0px) + 12px)' : '24px',
+            paddingBottom: useFullscreenLayout ? 'calc(env(safe-area-inset-bottom, 0px) + 14px)' : '24px',
+            paddingLeft: useFullscreenLayout ? 'calc(env(safe-area-inset-left, 0px) + 12px)' : '24px',
         });
         $frameShell.css({
             width: useFullscreenLayout ? '100%' : '90vw',
-            height: useFullscreenLayout ? '100%' : '90vh',
-        });
-        const frameRadius = useFullscreenLayout ? '12px' : '20px';
-        $frame.css({
-            // Mobile keeps a small visual safe zone; desktop keeps simple 90% sizing.
-            width: useFullscreenLayout ? '100%' : '90vw',
-            height: useFullscreenLayout ? '100%' : '90vh',
-            borderRadius: frameRadius,
+            // Mobile fills only the padded, safe visual viewport, not the physical
+            // display. Flex shrinking prevents the bottom edge from being clipped.
+            height: useFullscreenLayout ? 'auto' : '90vh',
+            flex: useFullscreenLayout ? '1 1 0' : '0 0 auto',
+            minHeight: '0',
+            borderRadius: useFullscreenLayout ? '12px' : '20px',
             boxShadow: useFullscreenLayout ? '0 8px 30px rgba(0,0,0,0.28)' : '0 24px 80px rgba(0,0,0,0.45)',
         });
-        $loading.css({ borderRadius: frameRadius });
-        $closeButton.css({
-            display: useFullscreenLayout && workshopReady ? 'none' : 'block',
-            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
-            left: 'auto',
-            transform: 'none',
-            padding: '0 14px',
-        });
+        // The iframe flexes below the permanent ST-owned top bar. No overlay
+        // controls ever need a message from the cross-origin Workshop page.
     };
     updateOverlayLayout();
     host$(hostWindow).on('resize.creative-workshop-overlay', updateOverlayLayout);
     host$(hostWindow).on('scroll.creative-workshop-overlay', updateOverlayLayout);
     hostWindow.visualViewport?.addEventListener('resize', updateOverlayLayout);
     hostWindow.visualViewport?.addEventListener('scroll', updateOverlayLayout);
-    $frameShell.append($frame, $loading, $closeButton);
+    $frameShell.append($topBar, $frame, $loading);
     $overlay.append($frameShell).appendTo(hostDocument.body);
     const slowOpenTimer = hostWindow.setTimeout(() => {
         $loading.text('打开时间较长，可以退出后重试');
@@ -3677,7 +3701,6 @@ function openCreativeWorkshop() {
         targetOrigin: getCreativeWorkshopOrigin(),
         onClose: close,
         onReady: () => {
-            workshopReady = true;
             hostWindow.clearTimeout(slowOpenTimer);
             $loading.remove();
             updateOverlayLayout();
