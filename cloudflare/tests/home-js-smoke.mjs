@@ -71,6 +71,9 @@ assert.match(homePageSource, /theme-color\" content=\"#0f1012/);
 assert.match(homePageSource, /rel=\"icon\" href=\"data:,/);
 assert.match(homePageSource, /html,body\{margin:0;min-height:100%;background:#0f1012/);
 assert.match(homeStylesSource, /body \{[^}]*background:#0f1012/);
+// #16: DLC Kitchen recommendation covers inherit the shared square Discover cover ratio.
+assert.match(homeStylesSource, /\.discover-card-cover-shell\s*\{[^}]*aspect-ratio:1\/1/);
+assert.doesNotMatch(homeStylesSource, /\.devteam-recommend-item \.discover-card-cover-shell\s*\{[^}]*aspect-ratio:/);
 assert.match(
   fragments.homeCardsRenderScript,
   /const reviewBadge = showAdminActions \? getProjectReviewBadge\(project\) : "";/,
