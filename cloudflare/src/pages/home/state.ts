@@ -131,9 +131,8 @@ const state = {
     mobilePositionY: 50,
     mobileZoom: 1,
   },
-  devTeamCurators: [],
-  dlcKitchenProfile: null,
-  activeDevTeamCuratorIndex: 0,
+  editorRecommendations: [],
+  myRecommendedProjectIds: [],
   viewMode: 'discover',
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
@@ -180,7 +179,7 @@ function setCurrentUser(user) {
   const nextUserId = nextUser?.id || null;
   state.currentUser = nextUser;
   if (previousUserId !== nextUserId) {
-    state.dlcKitchenProfile = null;
+    state.myRecommendedProjectIds = [];
     state.subsMap = new Map();
     state.subscriptionsLoaded = false;
     state.dailyRandomDraw = createDefaultDailyRandomDrawState();
@@ -194,30 +193,13 @@ function setDiscoverBanner(banner) {
   };
 }
 
-function setDevTeamCurators(curators) {
-  state.devTeamCurators = Array.isArray(curators) ? curators : [];
-  if (!state.devTeamCurators.length) {
-    state.activeDevTeamCuratorIndex = 0;
-    return;
-  }
-  const currentIndex = Number(state.activeDevTeamCuratorIndex || 0);
-  state.activeDevTeamCuratorIndex = Math.min(state.devTeamCurators.length - 1, Math.max(0, currentIndex));
+function setEditorRecommendations(projects, mine) {
+  state.editorRecommendations = Array.isArray(projects) ? projects : [];
+  state.myRecommendedProjectIds = Array.isArray(mine) ? mine : [];
 }
 
 function getMyDevTeamRecommendation(projectId) {
-  const userId = state.currentUser?.id;
-  if (!userId) return null;
-  const curator = (state.devTeamCurators || []).find(item => item?.id === userId);
-  if (!curator) return null;
-  const recommendation = (curator.recommendations || []).find(item => item?.project?.id === projectId);
-  return recommendation ? { curator, recommendation } : null;
-}
-
-function getDevTeamRecommendationsForProject(projectId) {
-  return (state.devTeamCurators || []).flatMap(curator => {
-    const recommendation = (curator?.recommendations || []).find(item => item?.project?.id === projectId);
-    return recommendation ? [{ curator, recommendation }] : [];
-  });
+  return state.currentUser?.isAdmin && state.myRecommendedProjectIds.includes(projectId);
 }
 
 function setProjects(projects) {

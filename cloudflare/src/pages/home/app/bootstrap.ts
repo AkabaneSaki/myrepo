@@ -39,6 +39,9 @@ export const homeAppBootstrapScript = String.raw`
 
     const authTask = timedTask('auth', async () => {
       const authState = await fetchCurrentUser();
+      if (authState?.user?.isAdmin) {
+        await fetchDevTeamRecommendations(true).catch(error => console.warn('[CreativeWorkshop] 管理员精选状态加载失败', error));
+      }
       if (authState?.user) {
         clearPendingOAuth();
       } else {
@@ -54,7 +57,7 @@ export const homeAppBootstrapScript = String.raw`
       renderApp();
     }).catch(error => console.warn('[CreativeWorkshop] Banner 配置加载失败', error));
 
-    const recommendationsTask = timedTask('dlc-kitchen', async () => {
+    const recommendationsTask = timedTask('editor-picks', async () => {
       await fetchDevTeamRecommendations();
       renderApp();
     }).catch(error => console.warn('[CreativeWorkshop] DevTeam 推荐加载失败', error));

@@ -6,48 +6,8 @@ import { getCurrentUserFromRequest } from '../utils/jwt';
 import { r2Storage } from '../utils/r2';
 
 type RecommendationRow = Record<string, unknown> & {
-  curator_id: string;
   project_id: string;
-  comment_text: string;
-  reaction_label: string | null;
-  recommendation_updated_at: string;
-  curator_title: string | null;
-  curator_bio: string | null;
-  curator_username: string;
-  curator_global_name: string | null;
-  curator_avatar: string | null;
 };
-
-function getCuratorAvatarUrl(row: RecommendationRow): string {
-  if (!row.curator_avatar) return 'https://cdn.discordapp.com/embed/avatars/0.png';
-  if (/^https?:\/\//i.test(row.curator_avatar)) return row.curator_avatar;
-  return `https://cdn.discordapp.com/avatars/${row.curator_id}/${row.curator_avatar}.webp?size=100`;
-}
-
-type CuratorProfileRow = {
-  title: string | null;
-  bio: string | null;
-  reaction_presets: string | null;
-};
-
-function parseReactionPresets(value: unknown): string[] {
-  if (typeof value !== 'string' || !value.trim()) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is string => typeof item === 'string')
-      .map(item => item.trim())
-      .filter(Boolean)
-      .slice(0, 12);
-  } catch {
-    return [];
-  }
-}
-
-function normalizeReactionPresets(items: string[]): string[] {
-  return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, 12);
-}
 
 function normalizeDlcKitchenCoverImage(c: AppContext, coverImage: string | null): string | null {
   if (!coverImage) return null;
@@ -79,14 +39,8 @@ async function bumpDlcKitchenRevision(c: AppContext, actorId: string): Promise<v
 }
 
 async function applyDlcKitchenViewerLikes(c: AppContext, response: any, userId?: string) {
-  if (!userId || !Array.isArray(response?.curators)) return response;
-  const projectIds: string[] = Array.from(new Set<string>(
-    response.curators.flatMap((curator: any) =>
-      (Array.isArray(curator?.recommendations) ? curator.recommendations : [])
-        .map((item: any) => String(item?.project?.id || '').trim())
-        .filter(Boolean),
-    ),
-  ));
+  if (!userId || !Array.isArray(response?.recommendations)) return response;
+  const projectIds: string[] = response.recommendations.map((project: any) => String(project?.id || '').trim()).filter(Boolean);
   const likedProjectIds = new Set<string>();
   for (let offset = 0; offset < projectIds.length; offset += 50) {
     const batch = await projectDb.getLikedProjectIds(c, projectIds.slice(offset, offset + 50), userId);
@@ -94,13 +48,7 @@ async function applyDlcKitchenViewerLikes(c: AppContext, response: any, userId?:
   }
   return {
     ...response,
-    curators: response.curators.map((curator: any) => ({
-      ...curator,
-      recommendations: (Array.isArray(curator?.recommendations) ? curator.recommendations : []).map((item: any) => ({
-        ...item,
-        project: item?.project ? { ...item.project, userLiked: likedProjectIds.has(item.project.id) } : item?.project,
-      })),
-    })),
+    recommendations: response.recommendations.map((project: any) => ({ ...project, userLiked: likedProjectIds.has(project.id) })),
   };
 }
 
@@ -108,14 +56,14 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
   schema = {
     tags: ['Recommendations'],
     summary: 'Get DevTeam Recommendations',
-    responses: { '200': { description: 'Returns active DevTeam curators and recommendations' } },
+    responses: { '200': { description: 'Returns unified editor picks' } },
   };
 
   async handle(c: AppContext) {
     const currentUser = await getCurrentUserFromRequest(c);
     const cacheRevision = await getDlcKitchenCacheRevision(c);
     const cacheUrl = new URL(c.req.url);
-    cacheUrl.pathname = '/__cache/dlc-kitchen';
+    cacheUrl.pathname = '/__cache/editor-picks';
     cacheUrl.search = new URLSearchParams({ revision: cacheRevision }).toString();
     const cacheRequest = new Request(cacheUrl.toString());
     const cached = await caches.default.match(cacheRequest);
@@ -127,16 +75,7 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
          p.*,
          author_user.global_name AS global_name,
          0 AS user_liked,
-         r.curator_id,
-         r.project_id,
-         r.comment_text,
-         r.reaction_label,
-         r.updated_at AS recommendation_updated_at,
-         curator.title AS curator_title,
-         curator.bio AS curator_bio,
-         curator_user.username AS curator_username,
-         curator_user.global_name AS curator_global_name,
-         curator_user.avatar AS curator_avatar
+         r.project_id
        FROM devteam_recommendations r INDEXED BY idx_devteam_recommendations_updated
        JOIN devteam_curators curator ON curator.user_id = r.curator_id
        JOIN users curator_user ON curator_user.id = r.curator_id
@@ -161,34 +100,17 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
     ).bind(c.env.SUPER_ADMIN_USER_ID?.trim() || '').all<RecommendationRow>();
 
     const rows = result.results || [];
-    const curators = new Map<string, any>();
-
+    const uniqueProjects = new Map<string, any>();
     for (const row of rows) {
+      if (uniqueProjects.has(row.project_id)) continue;
       const parsedProject = parseProjectRow(row);
-      const project = {
+      uniqueProjects.set(row.project_id, {
         ...parsedProject,
         downloadUrl: null,
         coverImage: normalizeDlcKitchenCoverImage(c, parsedProject.coverImage),
-      };
-      if (!curators.has(row.curator_id)) {
-        curators.set(row.curator_id, {
-          id: row.curator_id,
-          name: row.curator_global_name || row.curator_username,
-          avatarUrl: getCuratorAvatarUrl(row),
-          title: row.curator_title || '',
-          bio: row.curator_bio || '',
-          recommendations: [],
-        });
-      }
-      curators.get(row.curator_id).recommendations.push({
-        project,
-        comment: row.comment_text,
-        reactionLabel: row.reaction_label || '',
-        updatedAt: row.recommendation_updated_at,
       });
     }
-
-      publicResponse = { success: true, curators: Array.from(curators.values()) };
+    publicResponse = { success: true, recommendations: Array.from(uniqueProjects.values()) };
       await caches.default.put(cacheRequest, new Response(JSON.stringify(publicResponse), {
         headers: {
           'Content-Type': 'application/json',
@@ -197,97 +119,12 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
       }));
     }
 
-    return applyDlcKitchenViewerLikes(c, publicResponse, currentUser?.userId);
-  }
-}
-
-export class AdminDevTeamCuratorProfileGet extends OpenAPIRoute {
-  schema = {
-    tags: ['Admin'],
-    summary: 'Get own DLC kitchen curator profile',
-    request: {
-      headers: z.object({ authorization: z.string().describe('Session ID') }),
-    },
-    responses: {
-      '200': { description: 'Curator profile returned' },
-      '403': { description: 'Admin only' },
-    },
-  };
-
-  async handle(c: AppContext) {
-    const payload = await getCurrentUserFromRequest(c);
-    if (!payload?.isAdmin) return c.json({ error: 'Admin only' }, 403);
-
-    const row = await c.env.DB.prepare(
-      'SELECT title, bio, reaction_presets FROM devteam_curators WHERE user_id = ?',
-    ).bind(payload.userId).first<CuratorProfileRow>();
-
-    return {
-      success: true,
-      profile: {
-        title: row?.title || '',
-        bio: row?.bio || '',
-        reactionPresets: parseReactionPresets(row?.reaction_presets),
-      },
-    };
-  }
-}
-
-export class AdminDevTeamCuratorProfileSet extends OpenAPIRoute {
-  schema = {
-    tags: ['Admin'],
-    summary: 'Update own DLC kitchen curator profile',
-    request: {
-      headers: z.object({ authorization: z.string().describe('Session ID') }),
-      body: {
-        content: {
-          'application/json': {
-            schema: z.object({
-              title: z.string().trim().max(48),
-              bio: z.string().trim().max(160),
-              reactionPresets: z.array(z.string().trim().min(1).max(32)).max(12),
-            }),
-          },
-        },
-      },
-    },
-    responses: {
-      '200': { description: 'Curator profile saved' },
-      '403': { description: 'Admin only' },
-    },
-  };
-
-  async handle(c: AppContext) {
-    const payload = await getCurrentUserFromRequest(c);
-    if (!payload?.isAdmin) return c.json({ error: 'Admin only' }, 403);
-    const data = await this.getValidatedData<typeof this.schema>();
-    const reactionPresets = normalizeReactionPresets(data.body.reactionPresets);
-
-    await c.env.DB.prepare(
-      `INSERT INTO devteam_curators (user_id, title, bio, reaction_presets, enabled, updated_at)
-       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id) DO UPDATE SET
-         title = excluded.title,
-         bio = excluded.bio,
-         reaction_presets = excluded.reaction_presets,
-         enabled = 1,
-         updated_at = CURRENT_TIMESTAMP`,
-    ).bind(
-      payload.userId,
-      data.body.title,
-      data.body.bio,
-      JSON.stringify(reactionPresets),
-    ).run();
-    await bumpDlcKitchenRevision(c, payload.userId);
-
-    return {
-      success: true,
-      profile: {
-        title: data.body.title,
-        bio: data.body.bio,
-        reactionPresets,
-      },
-    };
+    const response = await applyDlcKitchenViewerLikes(c, publicResponse, currentUser?.userId);
+    if (!currentUser?.isAdmin) return response;
+    const mine = await c.env.DB.prepare(
+      'SELECT project_id FROM devteam_recommendations WHERE curator_id = ?',
+    ).bind(currentUser.userId).all<{ project_id: string }>();
+    return { ...response, myRecommendedProjectIds: (mine.results || []).map(row => row.project_id) };
   }
 }
 
@@ -302,7 +139,7 @@ export class AdminDevTeamRecommendationSet extends OpenAPIRoute {
         content: {
           'application/json': {
             schema: z.object({
-              comment: z.string().trim().min(1).max(500),
+              comment: z.string().trim().max(500).optional(),
               reactionLabel: z.string().trim().max(32).optional(),
             }),
           },
@@ -321,9 +158,9 @@ export class AdminDevTeamRecommendationSet extends OpenAPIRoute {
     if (!payload?.isAdmin) return c.json({ error: 'Admin only' }, 403);
     const data = await this.getValidatedData<typeof this.schema>();
     const project = await c.env.DB.prepare(
-      `SELECT id FROM projects
+      `SELECT id, name FROM projects
        WHERE id = ? AND status = 'approved' AND is_published = 1 AND visibility = 1`,
-    ).bind(data.params.projectId).first<{ id: string }>();
+    ).bind(data.params.projectId).first<{ id: string; name: string }>();
     if (!project) return c.json({ error: '只能推荐已经公开发布的项目' }, 404);
 
     await c.env.DB.batch([
@@ -344,11 +181,16 @@ export class AdminDevTeamRecommendationSet extends OpenAPIRoute {
       ).bind(
         payload.userId,
         data.params.projectId,
-        data.body.comment,
+        data.body.comment ?? '',
         data.body.reactionLabel ?? null,
         data.body.reactionLabel ?? null,
       ),
     ]);
+    await projectDb.logAdminAction(c, {
+      action: 'editor_pick_saved', targetType: 'project', targetId: data.params.projectId,
+      actorId: payload.userId, actorName: payload.globalName || payload.username,
+      detail: { projectName: project.name },
+    });
     await bumpDlcKitchenRevision(c, payload.userId);
 
     return { success: true };
@@ -373,9 +215,15 @@ export class AdminDevTeamRecommendationDelete extends OpenAPIRoute {
     const payload = await getCurrentUserFromRequest(c);
     if (!payload?.isAdmin) return c.json({ error: 'Admin only' }, 403);
     const data = await this.getValidatedData<typeof this.schema>();
-    await c.env.DB.prepare(
+    const deleted = await c.env.DB.prepare(
       'DELETE FROM devteam_recommendations WHERE curator_id = ? AND project_id = ?',
     ).bind(payload.userId, data.params.projectId).run();
+    if (deleted.meta.changes > 0) {
+      await projectDb.logAdminAction(c, {
+        action: 'editor_pick_removed', targetType: 'project', targetId: data.params.projectId,
+        actorId: payload.userId, actorName: payload.globalName || payload.username,
+      });
+    }
     await bumpDlcKitchenRevision(c, payload.userId);
     return { success: true };
   }
