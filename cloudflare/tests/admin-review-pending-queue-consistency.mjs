@@ -75,7 +75,19 @@ function insertPending(id, projectType = '角色', overrides = {}) {
 
 function pendingPage({ page = 0, pageSize = 5, projectType = null } = {}) {
   // 与 projectDb.getPendingList 使用完全相同的条件构造与查询形状。
-  const conditions = ["p.status = 'pending'"];
+  // Mirror the production predicate for SQLite behavior checks.
+  const latestSubmittedCondition = `(p.review_target <> 'draft'
+    OR p.published_project_id IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM projects newer
+      WHERE newer.published_project_id = p.published_project_id
+        AND newer.author_id = p.author_id
+        AND newer.review_target = 'draft'
+        AND newer.status IN ('pending', 'rejected', 'approved')
+        AND (COALESCE(newer.created_at, '') > COALESCE(p.created_at, '')
+          OR (COALESCE(newer.created_at, '') = COALESCE(p.created_at, '') AND newer.id > p.id))
+    ))`;
+  const conditions = ["p.status = 'pending'", latestSubmittedCondition];
   const filterValues = [];
   if (projectType) {
     conditions.push('p.project_type = ?');
@@ -176,6 +188,53 @@ assert.equal(pendingPage({ projectType: '角色' }).rows.length, 3, 'the filtere
 insertPending('ty', '系统核心');
 assert.equal(pendingPage({ projectType: '系统核心' }).total, 1, 'type filtering must count exactly the filtered rows');
 assert.equal(pendingPage({ projectType: '系统核心' }).rows.length, 1);
+
+// 9. Same published project: keep only the newest submitted draft, never dedupe by name.
+insertPending('dup-old', '扩展', {
+  name: '领地扩展', review_target: 'draft', published_project_id: 'pub',
+  created_at: '2026-02-01T00:00:00.000Z',
+});
+insertPending('dup-new', '扩展', {
+  name: '领地扩展', review_target: 'draft', published_project_id: 'pub',
+  created_at: '2026-02-02T00:00:00.000Z',
+});
+let currentRows = pendingPage({ pageSize: 50 }).rows;
+assert.ok(currentRows.includes('dup-new'), 'new submission must be visible');
+assert.ok(!currentRows.includes('dup-old'), 'older pending snapshot must be hidden');
+insertPending('dup-other', '扩展', {
+  name: '领地扩展', review_target: 'draft', published_project_id: 'pub2',
+  created_at: '2026-02-03T00:00:00.000Z',
+});
+assert.ok(pendingPage({ pageSize: 50 }).rows.includes('dup-other'), 'same title in another project must stay visible');
+
+// 10. A work-in-progress is not submitted and must not hide the pending snapshot.
+insertPending('dup-editing', '扩展', {
+  review_target: 'draft', published_project_id: 'pub', status: 'drafting',
+  created_at: '2026-02-04T00:00:00.000Z',
+});
+assert.ok(pendingPage({ pageSize: 50 }).rows.includes('dup-new'), 'drafting must not displace pending');
+
+// 11. Rejecting a newer snapshot must not resurrect the older pending snapshot.
+db.exec("UPDATE projects SET status = 'rejected' WHERE id = 'dup-new'");
+currentRows = pendingPage({ pageSize: 50 }).rows;
+assert.ok(!currentRows.includes('dup-old'), 'older snapshot must stay hidden after newer rejection');
+assert.ok(!currentRows.includes('dup-new'), 'rejected request must leave pending');
+insertPending('dup-newer', '扩展', {
+  name: '领地扩展', review_target: 'draft', published_project_id: 'pub',
+  created_at: '2026-02-05T00:00:00.000Z',
+});
+assert.ok(pendingPage({ pageSize: 50 }).rows.includes('dup-newer'), 'later resubmission must appear');
+
+// 12. Created-at tie is resolved by stable ID; latest approval/rejection uses
+// the exact same eligibility check atomically, not only in the UI.
+insertPending('tie-a', '角色', { review_target: 'draft', published_project_id: 'tie', created_at: '2026-02-06T00:00:00.000Z' });
+insertPending('tie-b', '角色', { review_target: 'draft', published_project_id: 'tie', created_at: '2026-02-06T00:00:00.000Z' });
+currentRows = pendingPage({ pageSize: 50 }).rows;
+assert.ok(!currentRows.includes('tie-a'));
+assert.ok(currentRows.includes('tie-b'));
+assert.match(dbSource, /latestSubmittedReviewCondition\('p'\)/, 'queue uses the submitted-draft predicate');
+assert.match(dbSource, /const reviewEligibility = latestSubmittedReviewCondition\('projects'\)/, 'review API uses same predicate');
+assert.equal((dbSource.match(/AND \$\{reviewEligibility\} RETURNING id/g) || []).length, 2, 'approve AND reject must be protected by the atomic SQL condition');
 
 // ---------- 前端：队列数字与卡片同源，且分页必须被取完 ----------
 
