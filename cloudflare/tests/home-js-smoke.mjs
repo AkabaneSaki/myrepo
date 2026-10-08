@@ -67,6 +67,25 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+// A browse shelf refresh must not zero out editor picks absent from that shelf.
+const statsSyncSource = fragments.homeStateScript.match(/function syncProjectStats\(projects, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(statsSyncSource, 'syncProjectStats must remain testable');
+const statsState = {
+  editorRecommendations: [
+    { id: 'editor-only', likesCount: 10, userLiked: true },
+    { id: 'also-on-shelf', likesCount: 4 },
+  ],
+  likesMap: new Map(),
+  subsMap: new Map(),
+};
+const syncStats = new Function('state', statsSyncSource + '\nreturn syncProjectStats;')(statsState);
+syncStats([{ id: 'shelf-only', likesCount: 2 }, { id: 'also-on-shelf', likesCount: 7 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 10, liked: true });
+assert.deepEqual(statsState.likesMap.get('also-on-shelf'), { count: 7, liked: false });
+assert.deepEqual(statsState.likesMap.get('shelf-only'), { count: 2, liked: false });
+syncStats([{ id: 'another-shelf', likesCount: 3 }], { replace: false });
+assert.equal(statsState.likesMap.get('editor-only').count, 10);
+
 const worldbookList = { innerHTML: '', querySelectorAll: () => [] };
 const additionalTab = {
   dataset: { installTarget: 'additional' },

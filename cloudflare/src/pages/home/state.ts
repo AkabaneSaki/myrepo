@@ -301,9 +301,11 @@ function getProjectPendingAction(projectId) {
 }
 
 function syncProjectStats(projects, options = {}) {
-  if (options.replace !== false) state.likesMap = new Map();
+  const replace = options.replace !== false;
+  if (replace) state.likesMap = new Map();
   
-  (projects || []).forEach(project => {
+  const statsProjects = replace ? [...state.editorRecommendations, ...(projects || [])] : (projects || []);
+  statsProjects.forEach(project => {
     state.likesMap.set(project.id, {
       count: project.likesCount || 0,
       liked: Boolean(project.userLiked),
