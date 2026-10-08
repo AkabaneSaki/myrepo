@@ -91,6 +91,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .sort-menu-trigger:hover { background:rgba(255,255,255,.045); }
 .sort-menu .user-menu-dropdown { min-width:240px; }
 .sort-menu-item.is-disabled,.mobile-sort-option.is-disabled { opacity:.46; cursor:not-allowed; }
+.card-period-score { color:var(--cw-text-secondary); font-size:.72rem; white-space:nowrap; }
+.sort-period-note { margin:4px 6px 0; padding:8px; color:var(--cw-text-secondary); font-size:.72rem; line-height:1.5; border-top:1px solid rgba(255,255,255,.08); }
 .projects-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:24px; margin-top:24px; }
 .project-pagination { margin:28px 0 12px; display:flex; flex-direction:column; align-items:center; gap:14px; }
 .project-pagination-summary { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 10px; color:var(--cw-text-secondary); font-size:.82rem; text-align:center; }

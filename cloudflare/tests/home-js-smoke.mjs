@@ -450,6 +450,11 @@ assert.match(fragments.homeLayoutRenderScript, /value: \"rating\", label: \"玩�
 assert.match(fragments.homeLayoutRenderScript, /value: \"downloads\", label: \"下载最多\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"updated\", label: \"最近更新\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"likes\", label: \"点赞最多\"/);
+for (const periodSort of ['downloads7', 'downloads30', 'likes7', 'likes30']) {
+  assert.match(fragments.homeLayoutRenderScript, new RegExp('value: "' + periodSort + '"'));
+}
+assert.match(fragments.homeLayoutRenderScript, /时间榜按完整 UTC 日期统计/);
+assert.match(fragments.homeCardsRenderScript, /card-period-score/);
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);

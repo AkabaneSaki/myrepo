@@ -25,6 +25,13 @@ const scenarios = [
   { name: '首页 · 最近更新', params: { page: 0, pageSize: 20, sort: 'updated' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 下载最多', params: { page: 0, pageSize: 20, sort: 'downloads' }, budget: { maxRowsRead: 80 } },
   { name: '首页 · 点赞最多', params: { page: 0, pageSize: 20, sort: 'likes' }, budget: { maxRowsRead: 80 } },
+  { name: '近7天 · 下载最多', params: { page: 3, pageSize: 20, sort: 'downloads7' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requirePeriodBoard: true },
+  { name: '近30天 · 下载最多', params: { page: 3, pageSize: 20, sort: 'downloads30' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requirePeriodBoard: true },
+  { name: '近7天 · 净增点赞最多', params: { page: 3, pageSize: 20, sort: 'likes7' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requirePeriodBoard: true },
+  { name: '近30天 · 净增点赞最多', params: { page: 3, pageSize: 20, sort: 'likes30' }, budget: { maxQueries: 3, maxRowsRead: 120 }, requirePeriodBoard: true },
+  { name: '近30天 · 分类条件', params: { page: 0, pageSize: 20, sort: 'downloads30', tag: '角色' }, budget: { maxQueries: 3, maxRowsRead: 250 }, requirePeriodBoard: true, allowEmpty: true },
+  { name: '近30天 · 关键词搜索', params: { page: 0, pageSize: 20, sort: 'downloads30', search: '世界书' }, budget: { maxQueries: 4, maxRowsRead: 600 }, requirePeriodBoard: true, allowEmpty: true },
+  { name: '近30天 · 短词搜索', params: { page: 0, pageSize: 20, sort: 'downloads30', search: '系统' }, budget: { maxQueries: 4, maxRowsRead: 600 }, requirePeriodBoard: true, allowEmpty: true },
   { name: '兼容 · 旧客户端玩家好评', params: { page: 0, pageSize: 12, sort: 'rating' }, budget: { maxRowsRead: 80 }, forbidDiscoveryBoard: true },
   { name: '筛选 · 角色', params: { page: 0, pageSize: 20, sort: 'published', projectType: '角色' }, budget: { maxRowsRead: 80 } },
   { name: '筛选 · 最低点赞', params: { page: 0, pageSize: 20, sort: 'published', minLikes: 5 }, budget: { maxRowsRead: 600 } },
@@ -143,6 +150,76 @@ async function readEligibleProjectCount() {
   return count;
 }
 
+async function seedPeriodCostFixture() {
+  // Only the private local snapshot is changed. Production D1 is never contacted.
+  const rows = [];
+  for (let offset = 0; offset < 1_000; offset += 90) {
+    // Wrangler buffers a bounded amount of CLI output; keep individual pages small.
+    const output = await runWrangler([
+      'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+      '--persist-to', persistDir,
+      '--command', "SELECT id, project_type, downloads_count, likes_count FROM projects WHERE status = 'approved' AND is_published = 1 AND visibility = 1 LIMIT 90 OFFSET " + offset,
+      '--json',
+    ], 'D1 period fixture read');
+    const batch = JSON.parse(output)?.[0]?.results || [];
+    rows.push(...batch);
+    if (batch.length < 90) break;
+  }
+  const board = {};
+  for (const kind of ['downloads7', 'downloads30', 'likes7', 'likes30']) {
+    const field = kind.startsWith('downloads') ? 'downloads_count' : 'likes_count';
+    board[kind] = rows.map(row => ({
+      id: String(row.id), type: String(row.project_type),
+      score: Math.max(1, Number(row[field] || 0)),
+    })).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  }
+  const payload = JSON.stringify(board);
+  const fixturePath = path.join(persistDir, '.period-cost-fixture.sql');
+  const statements = [
+    "INSERT OR REPLACE INTO project_period_rank_snapshots (period_end_day,board_json,built_at) VALUES (date('now','-1 day'),'',datetime('now'))",
+  ];
+  // Bound Worker parameters can hold the complete payload. The Wrangler CLI
+  // fixture uses SQL literals, so keep each individual SQL statement short.
+  for (let offset = 0; offset < payload.length; offset += 8_000) {
+    const chunk = payload.slice(offset, offset + 8_000).replaceAll("'", "''");
+    statements.push(`UPDATE project_period_rank_snapshots SET board_json = board_json || '${chunk}' WHERE period_end_day = date('now','-1 day')`);
+  }
+  writeFileSync(fixturePath, statements.join(';\n') + ';\n');
+  await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir, '--file', fixturePath,
+  ], 'D1 period fixture seed');
+}
+async function seedPeriodCronFixture() {
+  const fixtureSql = [
+    "DELETE FROM project_period_rank_snapshots WHERE period_end_day = date('now','-1 day')",
+    "INSERT INTO project_daily_interactions(day_key, project_id, downloads_count, likes_added, likes_removed) " +
+    "SELECT date('now','-1 day'), id, 1, 1, 0 FROM projects " +
+    "WHERE status = 'approved' AND is_published = 1 AND visibility = 1 " +
+    "ON CONFLICT(day_key, project_id) DO UPDATE SET downloads_count = 1, likes_added = 1, likes_removed = 0",
+  ].join('; ');
+  await runWrangler([
+    'd1', 'execute', DATABASE, '--local', '--config', 'wrangler.jsonc',
+    '--persist-to', persistDir, '--command', fixtureSql,
+  ], 'D1 period cron fixture reset');
+}
+
+async function triggerPeriodCronScenario(budget) {
+  await clearObservability();
+  const cronQuery = new URLSearchParams({ cron: '5 0 * * *' });
+  const response = await fetch(`${ORIGIN}/cdn-cgi/local/scheduled?${cronQuery}`);
+  if (!response.ok) throw new Error(`Period cron HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+  await sleep(75);
+  const cost = await readD1Cost();
+  const sqls = cost.details.map(query => String(query.sql || ''));
+  const reasons = [];
+  if (!sqls.some(sql => sql.includes('FROM project_daily_interactions'))) reasons.push('period cron did not aggregate daily activities');
+  if (!sqls.some(sql => sql.includes('INSERT OR IGNORE INTO project_period_rank_snapshots'))) reasons.push('period cron did not publish a snapshot');
+  if (cost.queries > budget.maxQueries) reasons.push(`queries ${cost.queries} > ${budget.maxQueries}`);
+  if (cost.rowsRead > budget.maxRowsRead) reasons.push(`rows_read ${cost.rowsRead} > ${budget.maxRowsRead}`);
+  if (cost.rowsWritten > budget.maxRowsWritten) reasons.push(`rows_written ${cost.rowsWritten} > ${budget.maxRowsWritten}`);
+  return { cost, reasons };
+}
 function startServer() {
   const args = [
     'dev', '--local', '--config', 'wrangler.jsonc',
@@ -437,6 +514,7 @@ async function runScenario(scenario) {
   const projectIds = Array.isArray(responseJson.projects)
     ? responseJson.projects.map(project => String(project?.id || '')).filter(Boolean)
     : [];
+  const periodScoreValid = Array.isArray(responseJson.projects) && responseJson.projects.every(project => Number(project?.periodScore) > 0);
   await sleep(50);
 
   const cost = await readD1Cost();
@@ -454,6 +532,12 @@ async function runScenario(scenario) {
     reasons.push(`public_project_counts lookups ${publicCountQueries.length} != 1`);
   } else if (Number(publicCountQueries[0].rows_read || 0) > PUBLIC_COUNT_LOOKUP_MAX_ROWS) {
     reasons.push(`public_project_counts rows_read ${publicCountQueries[0].rows_read} > ${PUBLIC_COUNT_LOOKUP_MAX_ROWS}`);
+  }
+  if (scenario.requirePeriodBoard) {
+    if (!sqlTexts.some(sql => sql.includes('project_period_rank_snapshots'))) reasons.push('period browse did not read the precomputed board');
+    if (sqlTexts.some(sql => sql.includes('project_daily_interactions'))) reasons.push('period browse scanned raw daily interactions');
+    if (!scenario.allowEmpty && projectIds.length === 0) reasons.push('period fixture unexpectedly returned no projects');
+    if (projectIds.length > 0 && !periodScoreValid) reasons.push('period projects missing the window score');
   }
   if (scenario.expectCacheHit) {
     const nonCountQueries = cost.details.filter(query => !/\bFROM\s+public_project_counts\b/i.test(String(query.sql || '')));
@@ -479,6 +563,7 @@ let failed = false;
 try {
   await ensureSnapshotState();
   const eligibleProjectCount = await readEligibleProjectCount();
+  await seedPeriodCostFixture();
   const discoveryRotationBudget = {
     ...DISCOVERY_ROTATION_BUDGET,
     maxRowsRead: eligibleProjectCount + 150,
@@ -519,6 +604,12 @@ try {
     console.log('[FAIL] 首页 · 随机发现: random picks collapsed to 最新发布');
   }
 
+  await stopServerTree();
+  await seedPeriodCronFixture();
+  await assertPortAvailable();
+  startServer();
+  await waitForServer();
+  printCostResult('趋势榜 · 每日 Cron 构建', await triggerPeriodCronScenario({ maxQueries: 6, maxRowsRead: eligibleProjectCount * 2 + 150, maxRowsWritten: 10 }));
   await stopServerTree();
   await resetDiscoveryFixtureState();
   await assertPortAvailable();

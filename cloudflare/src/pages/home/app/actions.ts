@@ -419,6 +419,10 @@ export const homeAppActionsScript = String.raw`
             updated: '最近更新',
             downloads: '下载最多',
             likes: '点赞最多',
+            downloads7: '近7天下载最多',
+            downloads30: '近30天下载最多',
+            likes7: '近7天净增点赞最多',
+            likes30: '近30天净增点赞最多',
           };
           showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
           if (state.viewMode === 'discover') {
@@ -481,7 +485,7 @@ export const homeAppActionsScript = String.raw`
           return;
         }
         state.sortRequestPending = true;
-        const sortLabelMap = { discover: '发现', published: '最新发布', updated: '最近更新', downloads: '下载最多', likes: '点赞最多' };
+        const sortLabelMap = { discover: '发现', published: '最新发布', updated: '最近更新', downloads: '下载最多', likes: '点赞最多', downloads7: '近7天下载最多', downloads30: '近30天下载最多', likes7: '近7天净增点赞最多', likes30: '近30天净增点赞最多' };
         showToast('正在按' + (sortLabelMap[nextSortMode] || '当前方式') + '排序...', 'info');
         if (state.viewMode === 'discover') {
           state.viewMode = 'catalog';

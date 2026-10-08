@@ -11,7 +11,7 @@ import { readProjectContentForEdit } from './content';
 import { r2Storage } from '../../utils/r2';
 import { normalizeProjectVersionBase } from '../../utils/version.js';
 
-const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
+const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads', 'downloads7', 'downloads30', 'likes7', 'likes30']);
 
 const PRIVATE_PROJECT_REVIEW_FIELDS = [
   'publishedProjectId',
@@ -110,6 +110,7 @@ export class ProjectList extends OpenAPIRoute {
                   downloadUrl: z.string().nullable(),
                   fileSize: z.number().nullable(),
                   downloadsCount: z.number(),
+                  periodScore: z.number().optional(),
                   hasEjs: z.boolean(),
                   hasCharacterArtwork: z.boolean(),
                   projectType: z.enum(PROJECT_TYPES),
@@ -141,7 +142,7 @@ export class ProjectList extends OpenAPIRoute {
     const payload = await getCurrentUserFromRequest(c);
     const publicCounts = await projectDb.getPublicCounts(c);
     const cacheable = page < 3 && [5, 10, 20, 48, 49, 50].includes(pageSize)
-      && ['discover', 'published', 'updated', 'downloads', 'likes'].includes(sort)
+      && ['discover', 'published', 'updated', 'downloads', 'likes', 'downloads7', 'downloads30', 'likes7', 'likes30'].includes(sort)
       && !tag && !tags && !search?.trim() && !minLikes && !minDownloads;
     const cacheUrl = new URL(c.req.url);
     cacheUrl.pathname = '/__cache/public-project-list';
@@ -149,6 +150,7 @@ export class ProjectList extends OpenAPIRoute {
       page: String(page), pageSize: String(pageSize), sort,
       projectType: projectType || '', revision: String(publicCounts.revision),
       rotation: sort === 'discover' ? getDiscoveryRotationKey() : '',
+      periodDay: /^(downloads|likes)(7|30)$/.test(sort) ? new Date().toISOString().slice(0, 10) : '',
     }).toString();
     const cacheRequest = new Request(cacheUrl.toString());
     if (cacheable) {

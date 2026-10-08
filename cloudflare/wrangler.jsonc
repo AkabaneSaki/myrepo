@@ -20,7 +20,7 @@
   },
   "migrations": [{ "tag": "code-check-service-v1", "new_sqlite_classes": ["CodeCheckService"] }],
   "triggers": {
-    "crons": ["0 2,8,14,20 * * *"]
+    "crons": ["0 2,8,14,20 * * *", "5 0 * * *"]
   },
   "d1_databases": [
     {

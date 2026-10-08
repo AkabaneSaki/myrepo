@@ -15,6 +15,7 @@ import {
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
 import { generateProjectRankingDay, getReadyProjectRankingBoard } from './project-daily-rankings';
+import { isPeriodSortMode, readPeriodBoard, type PeriodSortMode } from './project-period-rankings';
 import {
   normalizeWorldbookEjsLengthEstimates,
   parseWorldbookEjsLengthEstimates,
@@ -833,7 +834,7 @@ export const projectDb = {
       search?: string;
       minLikes?: number;
       minDownloads?: number;
-      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads';
+      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads' | PeriodSortMode;
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
     },
@@ -984,6 +985,64 @@ export const projectDb = {
       : '';
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
+
+    if (isPeriodSortMode(sortMode)) {
+      // Read a precomputed leaderboard; no 30-day aggregation on browse requests.
+      const board = await readPeriodBoard(c, sortMode);
+      const ranked = board.filter(entry =>
+        (!options.projectType || entry.type === options.projectType) &&
+        tagFilters.every(tag => !legacyTagTypes.has(tag) || legacyTagTypes.get(tag) === entry.type));
+      if (!ranked.length) {
+        return { hasMore: false, page: options.page, pageSize: options.pageSize, projects: [] };
+      }
+
+      const needsSearch = Boolean(options.authorId || searchTerm ||
+        tagFilters.some(tag => !legacyTagTypes.has(tag)) || minLikes > 0 || minDownloads > 0);
+      let matchedRanking = ranked;
+      if (needsSearch) {
+        // Use the existing FTS/tag indexes to find matching IDs once, then
+        // intersect in memory with the already-sorted bounded period board.
+        // Do not repeat a full-text predicate for every ranked project.
+        const matchResult = await db.prepare(
+          `SELECT DISTINCT p.id
+           FROM ${listSource}
+           LEFT JOIN users u ON p.author_id = u.id
+           ${listWhereClause}
+           LIMIT 5001`,
+        ).bind(...values).all<{ id: string }>();
+        const candidateIds = matchResult.results || [];
+        if (candidateIds.length > 5000) {
+          throw new Error('Period ranking filter is too broad; refine the search');
+        }
+        const matchedIds = new Set(candidateIds.map(candidate => candidate.id));
+        matchedRanking = ranked.filter(entry => matchedIds.has(entry.id));
+      }
+
+      const selected = matchedRanking.slice(offset, offset + fetchLimit);
+      const ids = selected.map(entry => entry.id);
+      if (!ids.length) {
+        return { hasMore: false, page: options.page, pageSize: options.pageSize, projects: [] };
+      }
+      // CROSS JOIN keeps the JSON page IDs as the outer loop, with a single
+      // primary-key lookup per project; ordinary JOIN causes N x N row reads.
+      const result = await db.prepare(
+        `SELECT p.*, u.global_name
+         FROM json_each(?) ranked
+         CROSS JOIN projects p ON p.id = ranked.value
+         LEFT JOIN users u ON p.author_id = u.id
+         WHERE p.status = 'approved' AND p.is_published = 1 AND p.visibility = 1
+         ORDER BY CAST(ranked.key AS INTEGER)`,
+      ).bind(JSON.stringify(ids)).all<Record<string, unknown>>();
+      const scores = new Map(selected.map(entry => [entry.id, entry.score]));
+      const pageRows = (result.results || []).slice(0, options.pageSize);
+      const enriched = await enrichProjects(c, pageRows.map(parseProjectRow), options.currentUser);
+      return {
+        hasMore: matchedRanking.length > offset + options.pageSize,
+        page: options.page,
+        pageSize: options.pageSize,
+        projects: enriched.map(project => ({ ...project, periodScore: scores.get(project.id) || 0 })),
+      };
+    }
 
     if (rankingKind) {
       let board = await getReadyProjectRankingBoard(c);

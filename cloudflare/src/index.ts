@@ -17,6 +17,7 @@ import type { Env } from './env';
 // 工具函数
 import { projectDb } from './utils/db';
 import { generateProjectRankingDay } from './utils/project-daily-rankings';
+import { generatePeriodBoards } from './utils/project-period-rankings';
 import { jwt } from './utils/jwt';
 
 // 页面
@@ -387,7 +388,12 @@ const worker: ExportedHandler<Env> = {
     if (key) return env.CODE_CHECK_SERVICE.getByName(key).fetch(request);
     return app.fetch(request, env, ctx);
   },
-  async scheduled(_controller, env) {
+  async scheduled(controller, env) {
+    if (controller.cron === '5 0 * * *') {
+      const endDay = await generatePeriodBoards({ env });
+      console.log(`Project period ranking ready: ${endDay || 'skipped'}`);
+      return;
+    }
     const rankingDay = await generateProjectRankingDay({ env });
     console.log(`Project daily ranking ready: ${rankingDay}`);
   },
