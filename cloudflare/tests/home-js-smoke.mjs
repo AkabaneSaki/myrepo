@@ -70,6 +70,8 @@ for (const [name, script] of Object.entries(fragments)) {
 // A browse shelf refresh must not zero out editor picks absent from that shelf.
 const statsSyncSource = fragments.homeStateScript.match(/function syncProjectStats\(projects, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(statsSyncSource, 'syncProjectStats must remain testable');
+const updateLikeSource = fragments.homeStateScript.match(/function updateLikeState\(projectId, payload\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(updateLikeSource, 'like responses must update the shared stats state');
 const statsState = {
   editorRecommendations: [
     { id: 'editor-only', likesCount: 10, userLiked: true },
@@ -79,12 +81,26 @@ const statsState = {
   subsMap: new Map(),
 };
 const syncStats = new Function('state', statsSyncSource + '\nreturn syncProjectStats;')(statsState);
+const updateStatsLike = new Function('state', updateLikeSource + '\nreturn updateLikeState;')(statsState);
+syncStats(statsState.editorRecommendations, { replace: false });
 syncStats([{ id: 'shelf-only', likesCount: 2 }, { id: 'also-on-shelf', likesCount: 7 }]);
 assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 10, liked: true });
 assert.deepEqual(statsState.likesMap.get('also-on-shelf'), { count: 7, liked: false });
 assert.deepEqual(statsState.likesMap.get('shelf-only'), { count: 2, liked: false });
 syncStats([{ id: 'another-shelf', likesCount: 3 }], { replace: false });
 assert.equal(statsState.likesMap.get('editor-only').count, 10);
+updateStatsLike('editor-only', { count: 9, liked: false });
+syncStats([{ id: 'next-shelf', likesCount: 1 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 9, liked: false }, 'an unlike must survive an unrelated shelf refresh');
+updateStatsLike('editor-only', { count: 10, liked: true });
+syncStats([{ id: 'next-shelf', likesCount: 1 }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 10, liked: true }, 'a like must survive an unrelated shelf refresh');
+assert.equal(statsState.likesMap.has('shelf-only'), false, 'old shelf entries must not accumulate');
+syncStats([{ id: 'editor-only', likesCount: 12, userLiked: true }]);
+assert.deepEqual(statsState.likesMap.get('editor-only'), { count: 12, liked: true }, 'fresh project data must update the retained stats');
+statsState.editorRecommendations = [];
+syncStats([]);
+assert.equal(statsState.likesMap.size, 0, 'removed editor picks must not remain in the stats map');
 
 const worldbookList = { innerHTML: '', querySelectorAll: () => [] };
 const additionalTab = {
@@ -455,7 +471,7 @@ assert.match(fragments.homeApiScript, /\/api\/devteam-recommendations/);
 assert.match(recommendationsEndpointSource, /SUPER_ADMIN_USER_ID/);
 assert.match(recommendationsEndpointSource, /FROM super_admins super_admin/);
 assert.match(recommendationsEndpointSource, /devteam_recommendations r INDEXED BY idx_devteam_recommendations_updated/);
-assert.match(recommendationsEndpointSource, /uniqueProjects\.has\(row\.project_id\)/);
+assert.match(recommendationsEndpointSource, /GROUP BY r\.project_id[\s\S]*?ORDER BY MAX\(r\.updated_at\)[\s\S]*?LIMIT 100/);
 assert.match(recommendationsEndpointSource, /myRecommendedProjectIds/);
 assert.doesNotMatch(recommendationsEndpointSource, /curator\.title AS curator_title/);
 assert.doesNotMatch(recommendationsEndpointSource, /curator_global_name/);

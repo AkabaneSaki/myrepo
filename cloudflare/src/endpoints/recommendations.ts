@@ -27,15 +27,15 @@ async function getDlcKitchenCacheRevision(c: AppContext): Promise<string> {
   return `${Number(row?.public_revision || 0)}:${Number(row?.kitchen_revision || 0)}`;
 }
 
-async function bumpDlcKitchenRevision(c: AppContext, actorId: string): Promise<void> {
-  await c.env.DB.prepare(`
+function prepareDlcKitchenRevision(c: AppContext, actorId: string) {
+  return c.env.DB.prepare(`
     INSERT INTO site_settings (key, value, updated_at, updated_by)
     VALUES ('dlc_kitchen_revision', '1', CURRENT_TIMESTAMP, ?)
     ON CONFLICT(key) DO UPDATE SET
       value = CAST(COALESCE(site_settings.value, '0') AS INTEGER) + 1,
       updated_at = CURRENT_TIMESTAMP,
       updated_by = excluded.updated_by
-  `).bind(actorId).run();
+  `).bind(actorId);
 }
 
 async function applyDlcKitchenViewerLikes(c: AppContext, response: any, userId?: string) {
@@ -95,22 +95,21 @@ export class DevTeamRecommendationList extends OpenAPIRoute {
          AND p.status = 'approved'
          AND p.is_published = 1
          AND p.visibility = 1
-       ORDER BY r.updated_at DESC
+       GROUP BY r.project_id
+       ORDER BY MAX(r.updated_at) DESC, r.project_id
        LIMIT 100`,
     ).bind(c.env.SUPER_ADMIN_USER_ID?.trim() || '').all<RecommendationRow>();
 
     const rows = result.results || [];
-    const uniqueProjects = new Map<string, any>();
-    for (const row of rows) {
-      if (uniqueProjects.has(row.project_id)) continue;
+    const projects = rows.map(row => {
       const parsedProject = parseProjectRow(row);
-      uniqueProjects.set(row.project_id, {
+      return {
         ...parsedProject,
         downloadUrl: null,
         coverImage: normalizeDlcKitchenCoverImage(c, parsedProject.coverImage),
-      });
-    }
-    publicResponse = { success: true, recommendations: Array.from(uniqueProjects.values()) };
+      };
+    });
+    publicResponse = { success: true, recommendations: projects };
       await caches.default.put(cacheRequest, new Response(JSON.stringify(publicResponse), {
         headers: {
           'Content-Type': 'application/json',
@@ -185,13 +184,13 @@ export class AdminDevTeamRecommendationSet extends OpenAPIRoute {
         data.body.reactionLabel ?? null,
         data.body.reactionLabel ?? null,
       ),
+      projectDb.prepareAdminAction(c, {
+        action: 'editor_pick_saved', targetType: 'project', targetId: data.params.projectId,
+        actorId: payload.userId, actorName: payload.globalName || payload.username,
+        detail: { projectName: project.name },
+      }),
+      prepareDlcKitchenRevision(c, payload.userId),
     ]);
-    await projectDb.logAdminAction(c, {
-      action: 'editor_pick_saved', targetType: 'project', targetId: data.params.projectId,
-      actorId: payload.userId, actorName: payload.globalName || payload.username,
-      detail: { projectName: project.name },
-    });
-    await bumpDlcKitchenRevision(c, payload.userId);
 
     return { success: true };
   }
@@ -215,16 +214,16 @@ export class AdminDevTeamRecommendationDelete extends OpenAPIRoute {
     const payload = await getCurrentUserFromRequest(c);
     if (!payload?.isAdmin) return c.json({ error: 'Admin only' }, 403);
     const data = await this.getValidatedData<typeof this.schema>();
-    const deleted = await c.env.DB.prepare(
-      'DELETE FROM devteam_recommendations WHERE curator_id = ? AND project_id = ?',
-    ).bind(payload.userId, data.params.projectId).run();
-    if (deleted.meta.changes > 0) {
-      await projectDb.logAdminAction(c, {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        'DELETE FROM devteam_recommendations WHERE curator_id = ? AND project_id = ?',
+      ).bind(payload.userId, data.params.projectId),
+      projectDb.prepareAdminAction(c, {
         action: 'editor_pick_removed', targetType: 'project', targetId: data.params.projectId,
         actorId: payload.userId, actorName: payload.globalName || payload.username,
-      });
-    }
-    await bumpDlcKitchenRevision(c, payload.userId);
+      }, true),
+      prepareDlcKitchenRevision(c, payload.userId),
+    ]);
     return { success: true };
   }
 }

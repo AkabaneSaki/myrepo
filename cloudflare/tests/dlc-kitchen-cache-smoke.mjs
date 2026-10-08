@@ -18,7 +18,7 @@ assert.match(recommendations, /normalizeDlcKitchenCoverImage\(c, parsedProject\.
 assert.match(recommendations, /coverImage\.includes\('\/api\/files\/'\)/);
 assert.match(recommendations, /r2Storage\.getProxyUrl\(c, key\)/);
 
-const revisionBumps = recommendations.match(/await bumpDlcKitchenRevision\(c, payload\.userId\)/g) || [];
+const revisionBumps = recommendations.match(/prepareDlcKitchenRevision\(c, payload\.userId\)/g) || [];
 assert.equal(revisionBumps.length, 2, 'recommendation save and delete must bump the cache revision');
 
 assert.match(

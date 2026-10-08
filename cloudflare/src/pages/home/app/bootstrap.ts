@@ -39,8 +39,8 @@ export const homeAppBootstrapScript = String.raw`
 
     const authTask = timedTask('auth', async () => {
       const authState = await fetchCurrentUser();
-      if (authState?.user?.isAdmin) {
-        await fetchDevTeamRecommendations(true).catch(error => console.warn('[CreativeWorkshop] 管理员精选状态加载失败', error));
+      if (authState?.user) {
+        await fetchDevTeamRecommendations(true).catch(error => console.warn('[CreativeWorkshop] 精选状态加载失败', error));
       }
       if (authState?.user) {
         clearPendingOAuth();

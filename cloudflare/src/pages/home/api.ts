@@ -62,7 +62,7 @@ async function apiFetch(endpoint, options = {}) {
   } catch (error) {
     throw normalizeThrownError(error, '请求失败');
   }
-  if (response.status === 401) {
+  if (response.status === 401 && localStorage.getItem(TOKEN_KEY) === token) {
     clearAuthenticatedCoverObjectUrls();
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -190,8 +190,11 @@ async function fetchDiscoverShelves(forceRefresh = false) {
 }
 
 async function fetchDevTeamRecommendations(forceRefresh = false) {
+  const requestToken = ++state.editorRecommendationsRequestToken;
+  const sessionToken = localStorage.getItem(TOKEN_KEY);
   const suffix = forceRefresh ? ('?_=' + Date.now()) : '';
   const data = await apiFetch('/api/devteam-recommendations' + suffix);
+  if (requestToken !== state.editorRecommendationsRequestToken || sessionToken !== localStorage.getItem(TOKEN_KEY)) return;
   const projects = Array.isArray(data.recommendations) ? data.recommendations : [];
   setEditorRecommendations(projects, data.myRecommendedProjectIds);
   syncProjectStats(projects, { replace: false });

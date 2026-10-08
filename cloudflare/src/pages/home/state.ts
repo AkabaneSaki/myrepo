@@ -132,6 +132,7 @@ const state = {
     mobileZoom: 1,
   },
   editorRecommendations: [],
+  editorRecommendationsRequestToken: 0,
   myRecommendedProjectIds: [],
   viewMode: 'discover',
   showOnlyMyProjects: false,
@@ -179,7 +180,12 @@ function setCurrentUser(user) {
   const nextUserId = nextUser?.id || null;
   state.currentUser = nextUser;
   if (previousUserId !== nextUserId) {
+    state.editorRecommendationsRequestToken += 1;
     state.myRecommendedProjectIds = [];
+    state.editorRecommendations.forEach(project => {
+      const stats = state.likesMap.get(project.id);
+      if (stats) stats.liked = false;
+    });
     state.subsMap = new Map();
     state.subscriptionsLoaded = false;
     state.dailyRandomDraw = createDefaultDailyRandomDrawState();
@@ -301,11 +307,12 @@ function getProjectPendingAction(projectId) {
 }
 
 function syncProjectStats(projects, options = {}) {
-  const replace = options.replace !== false;
-  if (replace) state.likesMap = new Map();
+  if (options.replace !== false) {
+    const editorProjectIds = new Set(state.editorRecommendations.map(project => project.id));
+    state.likesMap = new Map([...state.likesMap].filter(([projectId]) => editorProjectIds.has(projectId)));
+  }
   
-  const statsProjects = replace ? [...state.editorRecommendations, ...(projects || [])] : (projects || []);
-  statsProjects.forEach(project => {
+  (projects || []).forEach(project => {
     state.likesMap.set(project.id, {
       count: project.likesCount || 0,
       liked: Boolean(project.userLiked),
