@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
 const migration = await readFile(new URL('../migrations/0035_project_daily_interactions.sql', import.meta.url), 'utf8');
+const cascadeMigration = await readFile(new URL('../migrations/0037_project_daily_like_delete_cascade.sql', import.meta.url), 'utf8');
 const schema = await readFile(new URL('../schema.sql', import.meta.url), 'utf8');
 const db = new DatabaseSync(':memory:');
 db.exec('PRAGMA foreign_keys = ON;');
@@ -16,6 +17,8 @@ assert.ok(originalTriggers, 'existing likes counter triggers must be present');
 db.exec(originalTriggers[0]);
 db.exec(migration);
 db.exec(migration); // safe migration replay
+db.exec(cascadeMigration);
+db.exec(cascadeMigration);
 
 db.prepare('INSERT INTO projects (id) VALUES (?)').run('project-a');
 db.prepare('INSERT INTO projects (id) VALUES (?)').run('project-b');
@@ -58,6 +61,10 @@ assert.equal(stats()[0].downloads_count, 2, 'unrelated project updates must not 
 
 db.exec("DELETE FROM projects WHERE id='project-a'");
 assert.deepEqual(stats(), [], 'deleting a project must cascade its aggregated activity');
+db.exec("INSERT INTO project_likes (project_id, user_id) VALUES ('project-b', 'user-1')");
+db.exec("DELETE FROM projects WHERE id='project-b'");
+assert.deepEqual(stats(), [], 'deleting a project with likes must not recreate orphan activity');
+assert.equal(db.prepare('SELECT COUNT(*) AS n FROM project_likes').get().n, 0);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS project_daily_interactions/);
 assert.match(schema, /CREATE TRIGGER IF NOT EXISTS trg_project_daily_download_increment/);
 assert.match(schema, /CREATE TRIGGER IF NOT EXISTS trg_project_daily_like_added/);

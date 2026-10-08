@@ -454,6 +454,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_daily_like_removed
 AFTER DELETE ON project_likes
+WHEN EXISTS (SELECT 1 FROM projects WHERE id = OLD.project_id)
 BEGIN
   INSERT INTO project_daily_interactions (day_key, project_id, likes_removed)
   VALUES (date('now'), OLD.project_id, 1)

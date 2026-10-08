@@ -453,7 +453,14 @@ assert.match(fragments.homeLayoutRenderScript, /value: \"likes\", label: \"点�
 for (const periodSort of ['downloads7', 'downloads30', 'likes7', 'likes30']) {
   assert.match(fragments.homeLayoutRenderScript, new RegExp('value: "' + periodSort + '"'));
 }
-assert.match(fragments.homeLayoutRenderScript, /时间榜按完整 UTC 日期统计/);
+const periodSortUi = Function('window', 'state', 'escapeHtml', 'getContentFontOption', 'CONTENT_FONT_OPTIONS',
+  fragments.homeLayoutRenderScript + '; return { renderSortControl, renderFontControl, renderMobileSortOptions };')(
+  { matchMedia: () => ({ matches: true }), addEventListener() {} },
+  { sortMode: 'downloads7' }, String, () => ({ value: 'default', label: '默认' }), [],
+);
+assert.match(periodSortUi.renderSortControl(), /自统计启用以来/);
+assert.match(periodSortUi.renderMobileSortOptions(), /自统计启用以来/);
+assert.doesNotMatch(periodSortUi.renderFontControl(), /sort-period-note/);
 assert.match(fragments.homeCardsRenderScript, /card-period-score/);
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);

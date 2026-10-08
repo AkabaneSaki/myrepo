@@ -59,17 +59,15 @@ export async function readPeriodBoard(c: RankingContext, kind: PeriodSortMode): 
   const snapshot = await c.env.DB.prepare(
     'SELECT board_json FROM project_period_rank_snapshots ORDER BY period_end_day DESC LIMIT 1',
   ).first<{ board_json: string }>();
-  if (!snapshot?.board_json) return [];
-  try {
-    const payload = JSON.parse(snapshot.board_json) as Partial<PeriodBoards>;
-    const board = payload[kind];
-    if (!Array.isArray(board)) return [];
-    return board.filter(entry => entry && typeof entry.id === 'string' &&
-      typeof entry.type === 'string' && Number.isFinite(entry.score) && entry.score > 0)
-      .slice(0, MAX_RANKED_PROJECTS);
-  } catch {
-    return [];
+  if (!snapshot) return [];
+  const payload = JSON.parse(snapshot.board_json) as Partial<PeriodBoards> | null;
+  const board = payload?.[kind];
+  if (!Array.isArray(board) || board.length > MAX_RANKED_PROJECTS ||
+    !board.every(entry => entry && typeof entry.id === 'string' &&
+      typeof entry.type === 'string' && Number.isFinite(entry.score) && entry.score > 0)) {
+    throw new Error('Invalid period ranking snapshot');
   }
+  return board;
 }
 
 /** Called only by the separate once-daily cron. Never on a browse request. */

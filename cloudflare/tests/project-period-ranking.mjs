@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { buildPeriodBoards, isPeriodSortMode } from '../src/utils/project-period-rankings.ts';
+import { buildPeriodBoards, isPeriodSortMode, readPeriodBoard } from '../src/utils/project-period-rankings.ts';
 
 const now = Date.parse('2026-10-08T00:05:00.000Z');
 const items = [
@@ -28,6 +28,13 @@ assert.deepEqual(projectScores('likes30'), [['a', 6], ['b', 5]]);
 assert.equal(board.downloads30.find(x => x.id === 'a')?.type, '角色');
 assert.equal(isPeriodSortMode('likes30'), true);
 assert.equal(isPeriodSortMode('downloads'), false);
+const snapshotContext = snapshot => ({ env: { DB: { prepare: () => ({ first: async () => snapshot }) } } });
+assert.deepEqual(await readPeriodBoard(snapshotContext(null), 'downloads7'), [], 'first build may not exist yet');
+assert.deepEqual(await readPeriodBoard(snapshotContext({ board_json: JSON.stringify(board) }), 'downloads7'), board.downloads7);
+await assert.rejects(readPeriodBoard(snapshotContext({ board_json: '{' }), 'downloads7'), SyntaxError);
+for (const invalid of [null, {}, { downloads7: [{ id: 'a', type: '角色', score: -1 }] }]) {
+  await assert.rejects(readPeriodBoard(snapshotContext({ board_json: JSON.stringify(invalid) }), 'downloads7'), /Invalid period ranking snapshot/);
+}
 
 const migration = await readFile(new URL('../migrations/0036_project_period_rank_snapshots.sql', import.meta.url), 'utf8');
 const schema = await readFile(new URL('../schema.sql', import.meta.url), 'utf8');
