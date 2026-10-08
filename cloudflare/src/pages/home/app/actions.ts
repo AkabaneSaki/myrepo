@@ -507,49 +507,6 @@ export const homeAppActionsScript = String.raw`
       });
     });
 
-    const applyMetricFilter = (kind, rawValue) => {
-      if (state.filterRequestPending) return;
-      const value = Math.max(0, Math.floor(Number(rawValue || 0)));
-      if (kind === 'likes') state.minLikes = value;
-      else if (kind === 'downloads') state.minDownloads = value;
-      else return;
-
-      if (state.viewMode === 'discover') {
-        state.viewMode = 'catalog';
-        state.sortMode = 'published';
-        state.activeBaseTag = 'all';
-        state.activeTags = [];
-        state.searchKeyword = '';
-        state.searchDraft = '';
-        lastCommittedSearchKeyword = '';
-      }
-      state.mobileToolMode = '';
-      scrollWorkshopToTop();
-      resetProjectPagination();
-      state.filterRequestPending = true;
-      renderApp();
-      fetchProjects(true, { page: 0, pageSize: state.projectPagination.pageSize }).finally(() => {
-        state.filterRequestPending = false;
-        renderApp();
-      });
-    };
-
-    document.querySelectorAll('[data-metric-filter]').forEach(select => {
-      select.addEventListener('change', event => {
-        event.stopPropagation();
-        applyMetricFilter(select.dataset.metricFilter, select.value);
-      });
-      select.addEventListener('click', event => event.stopPropagation());
-    });
-
-    document.querySelectorAll('[data-clear-metric-filter]').forEach(button => {
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        applyMetricFilter(button.dataset.clearMetricFilter, 0);
-      });
-    });
-
     const filterLocalSearchTagSuggestions = (input, value) => {
       const root = input?.closest('[data-unified-search]');
       if (!root) return;

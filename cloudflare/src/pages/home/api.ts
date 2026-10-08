@@ -303,10 +303,6 @@ async function fetchProjects(forceRefresh = false, options = {}) {
   if (searchKeyword) {
     params.set('search', searchKeyword);
   }
-  const minLikes = Math.max(0, Math.floor(Number(state.minLikes || 0)));
-  if (minLikes > 0) params.set('minLikes', String(minLikes));
-  const minDownloads = Math.max(0, Math.floor(Number(state.minDownloads || 0)));
-  if (minDownloads > 0) params.set('minDownloads', String(minDownloads));
 
   const canUseProjectListClientCache = !state.showOnlyMyProjects && !state.showSubscribedAndInstalledProjects;
   forceRefresh = Boolean(forceRefresh && options.bypassClientCache);

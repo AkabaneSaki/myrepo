@@ -143,8 +143,6 @@ const state = {
   searchDraft: '',
   mobileToolMode: '',
   searchKeyword: '',
-  minLikes: 0,
-  minDownloads: 0,
   userMenuOpen: false,
   sortMenuOpen: false,
   fontMenuOpen: false,
@@ -657,7 +655,7 @@ function renderProjectPagination() {
   const pagination = state.projectPagination;
   const counts = pagination.publicCounts;
   const filtered = Boolean(String(state.searchKeyword || '').trim()
-    || getActivePublicTags().length || state.minLikes || state.minDownloads);
+    || getActivePublicTags().length);
   const type = state.activeBaseTag;
   const scopedTotal = counts ? (type === 'all' ? counts.total : Number(counts.byType?.[type] || 0)) : 0;
   const pageCount = !filtered && counts ? Math.ceil(scopedTotal / pagination.pageSize) : null;

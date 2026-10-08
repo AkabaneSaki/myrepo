@@ -160,8 +160,6 @@ function returnFromDailyRandomDrawToHome(overlay) {
   state.activeTags = [];
   state.searchDraft = '';
   state.searchKeyword = '';
-  state.minLikes = 0;
-  state.minDownloads = 0;
   state.mobileToolMode = '';
   resetProjectPagination();
   renderApp();

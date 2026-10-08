@@ -91,11 +91,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .sort-menu-trigger:hover { background:rgba(255,255,255,.045); }
 .sort-menu .user-menu-dropdown { min-width:240px; }
 .sort-menu-item.is-disabled,.mobile-sort-option.is-disabled { opacity:.46; cursor:not-allowed; }
-.metric-filter-panel { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; padding:10px; border-top:1px solid rgba(255,255,255,.065); }
-.metric-filter-panel > span { grid-column:1/-1; color:#77756f; font-size:.66rem; font-weight:700; letter-spacing:.04em; }
-.metric-filter-panel label { min-width:0; display:flex; align-items:center; gap:6px; color:#9a9892; font-size:.7rem; }
-.metric-filter-panel select { width:100%; min-width:0; height:34px; border:1px solid rgba(255,255,255,.08); border-radius:8px; background:#17181b; color:#d8d6d1; padding:0 7px; }
-.metric-filter-panel--mobile { margin-top:10px; padding:12px 0 0; }
 .projects-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:24px; margin-top:24px; }
 .project-pagination { margin:28px 0 12px; display:flex; flex-direction:column; align-items:center; gap:14px; }
 .project-pagination-summary { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 10px; color:var(--cw-text-secondary); font-size:.82rem; text-align:center; }
