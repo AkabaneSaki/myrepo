@@ -3635,10 +3635,10 @@ function openCreativeWorkshop() {
             alignItems: useFullscreenLayout ? 'stretch' : 'center',
             // Chrome's visual viewport excludes browser chrome. Extra insets also
             // protect against cutouts and gesture areas in standalone/fullscreen hosts.
-            paddingTop: useFullscreenLayout ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '24px',
-            paddingRight: useFullscreenLayout ? 'calc(env(safe-area-inset-right, 0px) + 8px)' : '24px',
-            paddingBottom: useFullscreenLayout ? 'calc(env(safe-area-inset-bottom, 0px) + 12px)' : '24px',
-            paddingLeft: useFullscreenLayout ? 'calc(env(safe-area-inset-left, 0px) + 8px)' : '24px',
+            paddingTop: useFullscreenLayout ? 'calc(env(safe-area-inset-top, 0px) + 14px)' : '24px',
+            paddingRight: useFullscreenLayout ? 'calc(env(safe-area-inset-right, 0px) + 12px)' : '24px',
+            paddingBottom: useFullscreenLayout ? 'calc(env(safe-area-inset-bottom, 0px) + 14px)' : '24px',
+            paddingLeft: useFullscreenLayout ? 'calc(env(safe-area-inset-left, 0px) + 12px)' : '24px',
         });
         $frameShell.css({
             width: useFullscreenLayout ? '100%' : '90vw',
