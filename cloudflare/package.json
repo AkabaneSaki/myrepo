@@ -28,6 +28,7 @@
     "check:review-diff": "node tests/project-review-diff.mjs",
     "check:project-ranking": "node tests/project-ranking.mjs",
     "check:project-daily-ranking": "node tests/project-daily-ranking-smoke.mjs",
+    "check:period-popularity": "node tests/project-period-popularity-smoke.mjs",
     "check:project-ranking-snapshot": "node tests/project-ranking-snapshot-smoke.mjs",
     "check:character-reference": "node tests/character-reference-fingerprint.mjs",
     "check:character-reference-registry": "node tests/character-reference-registry-smoke.mjs",

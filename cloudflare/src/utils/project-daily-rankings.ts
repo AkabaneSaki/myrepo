@@ -329,11 +329,12 @@ async function buildDiscoveryRotation(
   ]);
 }
 
-export async function generateProjectRankingDay(c: RankingContext, nowMs = Date.now()): Promise<string> {
+export async function generateProjectRankingDay(c: RankingContext, nowMs = Date.now(), onGenerated?: () => Promise<void>): Promise<string> {
   const rotationKey = getDiscoveryRotationKey(nowMs);
   const claim = await claimRankingBuild(c, rotationKey, nowMs);
   if (claim.alreadyComplete) return rotationKey;
   if (!claim.buildToken) return (await getReadyProjectRankingDay(c, nowMs)) || rotationKey;
   await buildDiscoveryRotation(c, rotationKey, claim.buildToken, nowMs);
+  if (onGenerated) await onGenerated();
   return rotationKey;
 }

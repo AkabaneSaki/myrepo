@@ -89,7 +89,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .user-menu-item.active { border-color:rgba(190,164,125,.18); background:rgba(190,164,125,.09); color:#d5c2a5; }
 .sort-menu-trigger { padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.04); }
 .sort-menu-trigger:hover { background:rgba(255,255,255,.045); }
-.sort-menu .user-menu-dropdown { min-width:240px; }
+.sort-menu .user-menu-dropdown { min-width:240px; max-height:min(70vh,520px); overflow-y:auto; }
 .sort-menu-item.is-disabled,.mobile-sort-option.is-disabled { opacity:.46; cursor:not-allowed; }
 .metric-filter-panel { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; padding:10px; border-top:1px solid rgba(255,255,255,.065); }
 .metric-filter-panel > span { grid-column:1/-1; color:#77756f; font-size:.66rem; font-weight:700; letter-spacing:.04em; }

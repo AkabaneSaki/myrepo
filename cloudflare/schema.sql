@@ -360,6 +360,21 @@ CREATE TABLE IF NOT EXISTS download_daily_usage (
     counted_downloads INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS project_metric_daily (
+    day_key TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    downloads INTEGER NOT NULL DEFAULT 0,
+    likes_delta INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day_key, project_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_period_popularity (
+    sort_mode TEXT PRIMARY KEY,
+    project_ids TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS project_ratings (
     project_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
@@ -415,6 +430,23 @@ BEGIN
     UPDATE projects
     SET likes_count = MAX(COALESCE(likes_count, 0) - 1, 0)
     WHERE id = OLD.project_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_metric_daily_like_insert
+AFTER INSERT ON project_likes
+BEGIN
+  INSERT INTO project_metric_daily (day_key, project_id, likes_delta)
+  VALUES (date('now'), NEW.project_id, 1)
+  ON CONFLICT(day_key, project_id) DO UPDATE SET likes_delta = likes_delta + 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_metric_daily_like_delete
+AFTER DELETE ON project_likes
+BEGIN
+  INSERT INTO project_metric_daily (day_key, project_id, likes_delta)
+  SELECT date('now'), OLD.project_id, -1
+  WHERE EXISTS (SELECT 1 FROM projects WHERE id = OLD.project_id)
+  ON CONFLICT(day_key, project_id) DO UPDATE SET likes_delta = likes_delta - 1;
 END;
 
 CREATE TABLE IF NOT EXISTS site_settings (

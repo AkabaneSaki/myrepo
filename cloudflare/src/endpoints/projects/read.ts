@@ -11,7 +11,7 @@ import { readProjectContentForEdit } from './content';
 import { r2Storage } from '../../utils/r2';
 import { normalizeProjectVersionBase } from '../../utils/version.js';
 
-const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads']);
+const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']);
 
 const PRIVATE_PROJECT_REVIEW_FIELDS = [
   'publishedProjectId',
@@ -141,7 +141,7 @@ export class ProjectList extends OpenAPIRoute {
     const payload = await getCurrentUserFromRequest(c);
     const publicCounts = await projectDb.getPublicCounts(c);
     const cacheable = page < 3 && [5, 10, 20, 48, 49, 50].includes(pageSize)
-      && ['discover', 'published', 'updated', 'downloads', 'likes'].includes(sort)
+      && ['discover', 'published', 'updated', 'downloads', 'likes', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d'].includes(sort)
       && !tag && !tags && !search?.trim() && !minLikes && !minDownloads;
     const cacheUrl = new URL(c.req.url);
     cacheUrl.pathname = '/__cache/public-project-list';
