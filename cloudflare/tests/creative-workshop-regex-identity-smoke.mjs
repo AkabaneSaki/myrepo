@@ -175,8 +175,8 @@ scriptVariables = {
 resolver = installRegistryApi.createCreativeWorkshopRegexIdentityResolver([recoveredRegex]);
 assert.deepEqual(
   JSON.parse(JSON.stringify(resolver(recoveredRegex))),
-  { schemaVersion: 2, projectId, entryKey: 'id:abc', installedVersion: '1.2.3' },
-  'the install registry must resolve normal UUID regex ids without encoding business metadata into regex.id',
+  { schemaVersion: 2, projectId, entryKey: 'id:abc', installedVersion: null },
+  'registry history may recover ownership but cannot claim the current version',
 );
 
 const detailV1 = {
@@ -194,6 +194,16 @@ let localRegexes = [{
   replace_string: 'old',
 }];
 scriptVariables = {};
+let regexFailure = null;
+let regexWrites = 0;
+const stageApi = loadCommonJs(await compile('src/CreativeWorkshop/services/worldbook-stage.ts'), {
+  require(specifier) {
+    if (specifier === './install-registry') return installRegistryApi;
+    if (specifier === './install-identity') return identityApi;
+    throw new Error(specifier);
+  },
+  getWorldbookNames: () => [], getWorldbook: async () => [],
+}, 'worldbook-stage.ts');
 
 const regexApi = loadCommonJs(
   await compile('src/CreativeWorkshop/services/regex.ts'),
@@ -205,12 +215,19 @@ const regexApi = loadCommonJs(
         return { fetchCreativeWorkshopProjectDetail: async () => currentDetail };
       }
       if (specifier === './regex-name') return regexNameApi;
+      if (specifier === './worldbook-stage') return stageApi;
       throw new Error(`Unexpected require: ${specifier}`);
     },
     console, Promise, Map, Set, Date, JSON,
     _: lodash,
+    getTavernRegexes: () => structuredClone(localRegexes),
     updateTavernRegexesWith: async updater => {
-      localRegexes = updater(localRegexes);
+      const next = updater(structuredClone(localRegexes));
+      regexWrites++;
+      if (regexFailure === 'before-save') throw new Error('regex save failed');
+      localRegexes = structuredClone(next);
+      if (regexFailure === 'corrupt-config') localRegexes[0].destination.display = !localRegexes[0].destination.display;
+      if (regexFailure === 'after-save') throw new Error('regex save response lost');
       return localRegexes;
     },
   },
@@ -287,6 +304,7 @@ const diffApi = loadCommonJs(
     require(specifier) {
       if (specifier === './install-registry') return installRegistryApi;
       if (specifier === './project-fetch') return { fetchCreativeWorkshopProjectDetail: async () => currentDetail };
+      if (specifier === './worldbook-stage') return { findCreativeWorkshopInstallLocations: async () => [] };
       if (specifier === './project-type') return { formatCreativeWorkshopEntryName: comment => comment };
       if (specifier === './install-identity') return identityApi;
       if (specifier === './regex-name') return regexNameApi;
@@ -329,6 +347,31 @@ assert.equal(changedDiffResult.diff.reviewDiff.regex[0].previous.replaceString, 
 assert.equal(changedDiffResult.diff.reviewDiff.regex[0].current.replaceString, 'newer');
 assert.match(changedDiffResult.diff.reviewDiff.regex[0].previousReviewText, /replaceString: new/);
 assert.match(changedDiffResult.diff.reviewDiff.regex[0].currentReviewText, /replaceString: newer/);
+
+const priorRegexes = structuredClone(localRegexes);
+regexFailure = 'before-save';
+await assert.rejects(() => regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0'), /验收/);
+assert.deepEqual(localRegexes, priorRegexes);
+regexFailure = 'after-save';
+await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
+regexApi.verifyCreativeWorkshopRegexInstallation(projectId, currentDetail);
+const savedId = localRegexes.find(regex => regex.id !== projectId).id;
+regexFailure = null;
+await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
+assert.equal(localRegexes.find(regex => regex.id !== projectId).id, savedId, 'retry never allocates duplicate Regex');
+localRegexes.find(regex => regex.id !== projectId).enabled = true;
+currentDetail.regexEntriesPreview[0].disabled = true;
+await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
+assert.equal(localRegexes.find(regex => regex.id !== projectId).enabled, true, 'actual user-enabled state wins over package default');
+localRegexes.find(regex => regex.id !== projectId).enabled = false;
+currentDetail.regexEntriesPreview[0].disabled = false;
+await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
+assert.equal(localRegexes.find(regex => regex.id !== projectId).enabled, false);
+regexFailure = 'corrupt-config';
+currentDetail.regexEntriesPreview[0].replaceString = 'new configuration';
+await assert.rejects(() => regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0'), /验收/);
+regexFailure = null;
+await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
 
 await regexApi.uninstallCreativeWorkshopRegex(projectId);
 assert.equal(localRegexes.length, 0, 'record recovery must allow safe uninstall after the script registry is lost');

@@ -14,7 +14,7 @@ assert.match(modals, /chooseOriginalConflictInstallManagement/);
 assert.match(modals, /不用，我自己处理并安装/);
 assert.match(modals, /是，帮我关闭并安装/);
 assert.match(modals, /if \(manageOriginalConflicts === null\) return/);
-assert.match(modals, /confirmProjectUpdate\(project\.id, project\.version, manageOriginalConflicts\)/);
+assert.match(modals, /confirmProjectUpdate\(project\.id, project\.version, manageOriginalConflicts, chosenBook, approvedDuplicates \|\| \[\]\)/);
 assert.doesNotMatch(modals, /fetchCharacterReferenceVersionItems/);
 assert.match(modals, /requestInstallProject\(projectId, \{ worldbookName: target, projectVersion, manageOriginalConflicts \}\)/);
 
@@ -23,8 +23,9 @@ assert.match(host, /event\.data\.payload\?\.manageOriginalConflicts === true/);
 
 assert.match(worldbook, /manageOriginalConflicts = false/);
 assert.match(worldbook, /if \(manageOriginalConflicts\) \{/);
-assert.match(worldbook, /await restoreCreativeWorkshopOriginalConflicts\(projectId\)/);
+assert.doesNotMatch(worldbook, /await restoreCreativeWorkshopOriginalConflicts\(projectId\)/);
 assert.match(admin, /conflictsWithOriginal: project\.conflictsWithOriginal/);
+assert.match(modals, /角色 Regex/);
 assert.match(admin, /originalConflictReferenceItemIds: project\.originalConflictReferenceItemIds/);
 assert.match(admin, /originalConflictEntryNames: project\.originalConflictEntryNames/);
 

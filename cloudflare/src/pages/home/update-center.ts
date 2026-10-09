@@ -4,13 +4,19 @@ const DLC_UPDATE_FALSE_TTL_MS = 6 * 60 * 60 * 1000;
 let dlcUpdateCheckInFlight = null;
 
 function getInstalledProjectVersionPayload() {
-  return (Array.isArray(state.tavern.installedProjects) ? state.tavern.installedProjects : [])
-    .map(project => ({
-      id: String(project?.projectId || project?.id || '').trim(),
-      installedVersion: String(project?.localVersion || '').trim(),
-    }))
-    .filter(item => item.id && item.installedVersion)
-    .slice(0, 500);
+  const byProject = new Map();
+  (Array.isArray(state.tavern.installedProjects) ? state.tavern.installedProjects : [])
+    .forEach(project => {
+      const id = String(project?.projectId || project?.id || '').trim();
+      const version = String(project?.localVersion || '').trim();
+      if (!id) return;
+      // Different or unfinished instances require a check, still once per project.
+      const previous = byProject.get(id);
+      if (!byProject.has(id)) byProject.set(id, version || null);
+      else if (previous !== version) byProject.set(id, null);
+      if (project.mixedVersions || project.regexVersionMismatch) byProject.set(id, null);
+    });
+  return Array.from(byProject, ([id, installedVersion]) => ({ id, installedVersion })).slice(0, 500);
 }
 
 function getInstalledProjectVersionSignature(projects) {
@@ -117,16 +123,29 @@ function scheduleDlcUpdateStatusCheck() {
   });
 }
 
+function expandDlcUpdateInstances(updates) {
+  return updates.flatMap(item => {
+    const instances = getLocalProjectInstallations(item.id)
+      .filter(instance => !instance.localVersion || instance.localVersion !== item.latestVersion || instance.mixedVersions || instance.regexVersionMismatch);
+    return instances.length
+      ? instances.map(instance => ({ ...item, installedVersion: instance.localVersion,
+          worldbookName: instance.worldbookName }))
+      : [item];
+  });
+}
+
 function renderDlcUpdateCenterRows(updates) {
   return updates.map(item => {
     const installed = escapeHtml(item.installedVersion || '未知');
     const latest = escapeHtml(item.latestVersion || '未知');
     const name = escapeHtml(item.name || item.id || '未命名 DLC');
+    const location = item.worldbookName ? '<span>世界书：' + escapeHtml(item.worldbookName) + '</span>' : '';
     return '<article class="dlc-update-center-item">'
-      + '<div class="dlc-update-center-copy"><strong>' + name + '</strong><span>'
+      + '<div class="dlc-update-center-copy"><strong>' + name + '</strong>' + location + '<span>'
       + installed + ' <i class="fas fa-arrow-right"></i> ' + latest
       + '</span></div>'
-      + '<button class="btn btn-primary" type="button" data-dlc-update-project="' + escapeHtml(item.id) + '"><i class="fas fa-arrows-rotate"></i> 更新</button>'
+      + '<button class="btn btn-primary" type="button" data-dlc-update-project="' + escapeHtml(item.id)
+      + '" data-worldbook-name="' + escapeHtml(item.worldbookName || '') + '"><i class="fas fa-arrows-rotate"></i> 更新</button>'
       + '</article>';
   }).join('');
 }
@@ -166,7 +185,7 @@ async function openDlcUpdateCenter() {
   );
   try {
     const result = await requestDlcVersionCheck({ fresh: true });
-    const updates = Array.isArray(result?.updates) ? result.updates : [];
+    const updates = expandDlcUpdateInstances(Array.isArray(result?.updates) ? result.updates : []);
     if (loadingOverlay.isConnected) loadingOverlay.remove();
 
     if (!updates.length) {
@@ -193,9 +212,9 @@ async function openDlcUpdateCenter() {
           const detail = await fetchProjectEntries(projectId, { forceRefresh: true });
           const project = detail?.project;
           if (!project?.id || !project?.version) throw new Error('无法读取这个 DLC 的最新版本');
-          const diff = await requestProjectDiff(project.id, project.version);
+          const diff = await requestProjectDiff(project.id, project.version, button.dataset.worldbookName || null);
           if (overlay.isConnected) overlay.remove();
-          openProjectUpdateModal(project, diff);
+          openProjectUpdateModal(project, diff, button.dataset.worldbookName || null);
         } catch (error) {
           showToast('更新检查失败: ' + (error?.message || String(error)), 'error');
         } finally {

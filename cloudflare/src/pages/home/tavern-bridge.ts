@@ -19,6 +19,11 @@ const SCRIPT_DEPENDENCY_REGISTRY = new Map(
 state.tavern.scriptDependenciesSupported = false;
 state.tavern.scriptDependenciesLoaded = false;
 state.tavern.scriptDependencies = [];
+state.tavern.verifiedDlcInstall = false;
+state.tavern.duplicateDlcConsolidation = false;
+let bridgeHandshakeRequestId = null;
+let bridgeHostSource = null;
+let bridgeHostOrigin = null;
 
 function createBridgeRequest(type, payload) {
   return {
@@ -33,7 +38,12 @@ function postBridgeMessage(type, payload) {
   if (!['bridge:handshake', 'bridge:get-context', 'bridge:close-workshop'].includes(type)) {
     requireLatestWorkshopClient();
   }
+  if (['bridge:install-project', 'bridge:uninstall-project', 'bridge:confirm-project-update', 'bridge:get-project-diff', 'bridge:repair:project'].includes(type)
+      && state.tavern.verifiedDlcInstall !== true) {
+    throw new Error('当前工坊脚本不支持安全安装与按位置操作，请先更新工坊脚本后再试');
+  }
   const message = createBridgeRequest(type, payload);
+  if (type === 'bridge:handshake') bridgeHandshakeRequestId = message.requestId;
   window.parent.postMessage(message, '*');
   return message.requestId;
 }
@@ -69,6 +79,26 @@ function dispatchOAuthResult(payload) {
   }));
 }
 
+const DLC_DUPLICATE_NOTIFICATION_KEY = 'cw_install_duplicate_notice_v1';
+function notifyDuplicateWorldbookInstallations() {
+  const locations = new Map();
+  (state.tavern.installedProjects || []).forEach(instance => {
+    if (!instance.worldbookName || !instance.worldbookBound) return;
+    if (!locations.has(instance.projectId)) locations.set(instance.projectId, new Set());
+    locations.get(instance.projectId).add(instance.worldbookName);
+  });
+  const duplicates = Array.from(locations.entries())
+    .filter(([, books]) => books.size > 1)
+    .map(([id, books]) => [id, ...Array.from(books).sort()]);
+  if (!duplicates.length) return;
+  const signature = JSON.stringify(duplicates.sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  try {
+    if (localStorage.getItem(DLC_DUPLICATE_NOTIFICATION_KEY) === signature) return;
+    localStorage.setItem(DLC_DUPLICATE_NOTIFICATION_KEY, signature);
+  } catch {}
+  showToast('检测到 ' + duplicates.length + ' 个 DLC 安装在多本已启用世界书中。已保留所有副本，可分别更新；请留意重复执行效果。', 'warning');
+}
+
 function syncInstalledProjectsFromBridge(payload, options) {
   const installedProjects = Array.isArray(payload?.projects) ? payload.projects : [];
   const syncMode = payload?.complete === false ? 'merge' : ((options && options.mode) || 'replace');
@@ -84,6 +114,7 @@ function syncInstalledProjectsFromBridge(payload, options) {
       'error',
     );
   }
+  notifyDuplicateWorldbookInstallations();
   renderApp();
   scheduleDlcUpdateStatusCheck();
 }
@@ -162,8 +193,8 @@ function handleInstallResult(payload) {
 
 function handleUninstallResult(payload) {
   const projectId = payload?.projectId || null;
-  if (Array.isArray(payload?.projects) && payload.projects.length > 0) {
-    syncInstalledProjectsFromBridge(payload, { mode: 'merge', removeProjectId: projectId });
+  if (Array.isArray(payload?.projects)) {
+    syncInstalledProjectsFromBridge(payload, { mode: 'replace' });
   } else {
     clearInstalledProject(projectId);
     renderApp();
@@ -172,7 +203,7 @@ function handleUninstallResult(payload) {
 }
 
 function handleUpdateResult(payload) {
-  syncInstalledProjectsFromBridge(payload, { mode: 'merge' });
+  syncInstalledProjectsFromBridge(payload, { mode: 'replace' });
   showToast('项目更新完成');
 }
 
@@ -199,6 +230,12 @@ function handleBridgeMessage(event) {
   if (!data || data.namespace !== TAVERN_BRIDGE_NAMESPACE || !data.type) {
     return;
   }
+  if (data.type === 'bridge:handshake:ok') {
+    if (!bridgeHandshakeRequestId || data.requestId !== bridgeHandshakeRequestId || !event.source) return;
+    bridgeHostSource = event.source;
+    bridgeHostOrigin = event.origin;
+    bridgeHandshakeRequestId = null;
+  } else if (event.source !== bridgeHostSource || !bridgeHostSource || event.origin !== bridgeHostOrigin) return;
 
   const projectId = data.payload?.projectId || null;
 
@@ -206,12 +243,15 @@ function handleBridgeMessage(event) {
     case 'bridge:handshake:ok':
       setTavernConnectionStatus('connected');
       setTavernClientVersion(data.payload?.clientVersion);
+      state.tavern.verifiedDlcInstall = data.payload?.capabilities?.verifiedDlcInstall === true;
+      state.tavern.duplicateDlcConsolidation = data.payload?.capabilities?.duplicateDlcConsolidation === true;
       renderApp();
       if (shouldShowWorkshopReleaseNotice()) {
         openReleaseNoticeModal();
         break;
       }
       postBridgeMessage('bridge:list-installed-projects');
+      postBridgeMessage('bridge:get-context');
       postBridgeMessage('bridge:list-script-dependencies');
       break;
     case 'bridge:context':
@@ -265,6 +305,7 @@ function handleBridgeMessage(event) {
         null,
       );
       const isProjectDiffError = data.payload?.action === 'bridge:get-project-diff';
+      if (Array.isArray(data.payload?.projects)) syncInstalledProjectsFromBridge(data.payload, { mode: 'replace' });
       if (projectId) {
         setProjectPendingAction(projectId, null);
         renderApp();
@@ -314,17 +355,22 @@ async function requestInstallProject(projectId, selection = {}) {
   return true;
 }
 
-function requestUninstallProject(projectId) {
+function requestUninstallProject(projectId, worldbookName = null) {
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
+  if (!worldbookName && getLocalProjectInstallations(projectId).filter(item => item.worldbookName).length > 1) {
+    showToast('此 DLC 安装在多本世界书，请到「订阅 / 已安装」选择具体位置卸载', 'warning');
+    return;
+  }
+  try { postBridgeMessage('bridge:uninstall-project', {
+    projectId,
+    ...(worldbookName ? { worldbookName } : {}),
+    ...(legacyProjectName ? { legacyProjectName } : {}),
+  }); } catch (error) { showToast(error.message, 'error'); return; }
   setProjectPendingAction(projectId, 'uninstall');
   renderApp();
-  postBridgeMessage('bridge:uninstall-project', {
-    projectId,
-    ...(legacyProjectName ? { legacyProjectName } : {}),
-  });
 }
 
-function requestProjectDiff(projectId, projectVersion = null) {
+function requestProjectDiff(projectId, projectVersion = null, worldbookName = null) {
   if (!requireDiscordLoginForDownload('更新 DLC')) {
     const error = new Error('请先 Discord 登录后更新 DLC');
     error.code = 'LOGIN_REQUIRED';
@@ -336,6 +382,7 @@ function requestProjectDiff(projectId, projectVersion = null) {
     return Promise.resolve(cachedDiff);
   }
   const requestId = postBridgeMessage('bridge:get-project-diff', {
+    ...(worldbookName ? { worldbookName } : {}),
     projectId,
     ...(projectVersion ? { projectVersion } : {}),
     ...(legacyProjectName ? { legacyProjectName } : {}),
@@ -350,7 +397,8 @@ function requestProjectDiff(projectId, projectVersion = null) {
   });
 }
 
-async function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false) {
+async function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false, worldbookName = null, approvedDuplicates = []) {
+  if (!state.tavern.duplicateDlcConsolidation) throw new Error('请先更新工坊脚本，才能核验重复安装位置并安全更新');
   if (!requireDiscordLoginForDownload('更新 DLC')) {
     const error = new Error('请先 Discord 登录后更新 DLC');
     error.code = 'LOGIN_REQUIRED';
@@ -366,6 +414,8 @@ async function confirmProjectUpdate(projectId, projectVersion = null, manageOrig
     ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
     ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
     manageOriginalConflicts: manageOriginalConflicts === true,
+    approvedDuplicates,
+    ...(worldbookName ? { worldbookName } : {}),
     ...(legacyProjectName ? { legacyProjectName } : {}),
   });
   return true;

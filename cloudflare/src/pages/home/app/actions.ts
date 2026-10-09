@@ -810,11 +810,12 @@ export const homeAppActionsScript = String.raw`
       button.addEventListener('click', event => {
         event.stopPropagation();
         const projectId = button.dataset.id;
-        const project = filteredProjects.find(item => item.id === projectId);
+        const project = filteredProjects.find(item => item.id === projectId &&
+          (!button.dataset.worldbookName || item.__installedInstance?.worldbookName === button.dataset.worldbookName));
         if (!projectId || !project) return;
-        const localMeta = getLocalProjectMeta(projectId);
+        const localMeta = project.__installedInstance || getLocalProjectMeta(projectId);
         if (localMeta) {
-          requestUninstallProject(projectId);
+          requestUninstallProject(projectId, button.dataset.worldbookName || null);
           return;
         }
         const restore = setButtonLoading(button, '加载安装');
@@ -827,12 +828,14 @@ export const homeAppActionsScript = String.raw`
     document.querySelectorAll('.update-btn').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();
-        const project = filteredProjects.find(item => item.id === button.dataset.id);
+        const project = filteredProjects.find(item => item.id === button.dataset.id &&
+          (!button.dataset.worldbookName || item.__installedInstance?.worldbookName === button.dataset.worldbookName));
         if (project) {
           if (!requireDiscordLoginForDownload('更新 DLC')) return;
+          if (getLocalProjectInstallations(project.id).filter(item => item.worldbookName).length > 1) { openProjectUpdateModal(project, null, button.dataset.worldbookName || null); return; }
           const restore = setButtonLoading(button, '加载差异');
-          requestProjectDiff(project.id, project.version)
-            .then(diff => openProjectUpdateModal(project, diff))
+          requestProjectDiff(project.id, project.version, button.dataset.worldbookName || null)
+            .then(diff => openProjectUpdateModal(project, diff, button.dataset.worldbookName || null))
             .catch(error => showToast('加载更新差异失败: ' + error.message, 'error'))
             .finally(restore);
         }

@@ -23,6 +23,7 @@ function loadCommonJs(compiled, context, filename) {
 }
 
 const workshopConfig = JSON.parse(await readFile(new URL('../../config/workshop.json', import.meta.url), 'utf8'));
+const externalLinkPolicy = await import('../src/utils/external-links/policy.mjs');
 assert.deepEqual(workshopConfig.projectCommunity.discordGuildIds, ['1417861565679669272']);
 
 const discordApi = loadCommonJs(
@@ -35,6 +36,7 @@ const discordApi = loadCommonJs(
     String,
     require(specifier) {
       if (specifier === '../../../config/workshop.json') return workshopConfig;
+      if (specifier === './external-links/policy.mjs') return externalLinkPolicy;
       throw new Error('Unexpected require: ' + specifier);
     },
   },
@@ -179,7 +181,7 @@ assert.match(editorSource, /id=\"discordThreadUrl\"/);
 assert.match(detailSource, /detail-discord-thread/);
 assert.match(detailSource, />Discord 讨论帖</);
 assert.match(detailSource, /target=\"_blank\" rel=\"noopener noreferrer\"/);
-assert.match(layoutSource, /<span>有更新<\/span>/);
+assert.match(layoutSource, /<strong>有更新<\/strong>/);
 assert.match(layoutSource, /无更新/);
 
 const versionCheckClass = readEndpointSource.slice(

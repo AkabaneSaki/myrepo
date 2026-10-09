@@ -1,4 +1,6 @@
 export const homeShellStyles = String.raw`
+.duplicate-install-actions { flex-direction:column; position:static; }
+.duplicate-install-actions .btn { white-space:normal; overflow-wrap:anywhere; }
 /* 2026 desktop shell: reuse the mobile gallery language instead of creating a second visual system. */
 .workshop-shell { width:100%; min-width:0; }
 .workshop-main { min-width:0; }
@@ -1809,4 +1811,10 @@ export const homeShellStyles = String.raw`
   .projects-grid.catalog-layout--list .project-tags .tag { font-size:.64rem; }
   .projects-grid.catalog-layout--list .card-footer .action-btn { min-height:29px; padding:0 7px; }
 }
+
+.cw-installed-location { display:flex; align-items:center; flex-wrap:wrap; gap:7px; padding:7px 9px; margin:0 0 8px; border:1px solid rgba(190,164,125,.24); border-radius:8px; background:rgba(190,164,125,.06); color:var(--cw-text-primary,#ececea); font-size:.8rem; overflow-wrap:anywhere; }
+.cw-installed-location > i { color:#c6aa83; }
+.cw-installed-location > span:nth-of-type(2) { color:#b6b3ae; }
+.cw-installed-duplicate { font-size:.72rem; font-weight:650; color:#e3be83; }
+.update-target-worldbook { margin:0 0 12px; padding:8px 10px; color:#e1c9a4; border-radius:8px; background:rgba(190,164,125,.08); overflow-wrap:anywhere; }
 `;

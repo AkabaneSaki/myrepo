@@ -1043,22 +1043,33 @@ const versionBridgeUi = Function(
   () => { versionNoticeCount += 1; }, () => {},
   version => { versionState.tavern.clientVersion = version; versionState.tavern.clientVersionResolved = true; },
   () => {});
-const versionHandshake = version => versionBridgeUi.handleBridgeMessage({ data: {
-  namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', payload: { clientVersion: version },
+const versionHostSource = {};
+const versionHandshake = (version, verifiedDlcInstall = false) => versionBridgeUi.handleBridgeMessage({ source: versionHostSource, data: {
+  requestId: versionBridgeUi.postBridgeMessage('bridge:handshake'),
+  namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', payload: { clientVersion: version, capabilities: { verifiedDlcInstall } },
 } });
 versionHandshake('2.1.3');
 assert.ok(versionNoticeCount > 0);
-assert.equal(versionMessages.length, 0, 'outdated handshake must not scan installed DLC');
+assert.equal(versionMessages.filter(message => message.type !== 'bridge:handshake').length, 0, 'outdated handshake must not scan installed DLC');
 for (const type of ['bridge:install-project', 'bridge:confirm-project-update', 'bridge:uninstall-project',
   'bridge:repair:project', 'bridge:repair:scan', 'bridge:get-project-diff']) {
   assert.throws(() => versionBridgeUi.postBridgeMessage(type, {}), { code: 'CLIENT_UPDATE_REQUIRED' }, type);
 }
-assert.equal(versionMessages.length, 0, 'blocked operations must never reach the client');
+assert.equal(versionMessages.filter(message => message.type !== 'bridge:handshake').length, 0, 'blocked operations must never reach the client');
 versionBridgeUi.requestCloseWorkshop();
 assert.equal(versionMessages.pop().type, 'bridge:close-workshop', 'outdated client can still close the Workshop');
+versionMessages.length = 0;
 versionHandshake(workshopConfig.client.stable);
 assert.deepEqual(versionMessages.splice(0).map(message => message.type),
-  ['bridge:list-installed-projects', 'bridge:list-script-dependencies']);
+  ['bridge:handshake', 'bridge:list-installed-projects', 'bridge:get-context', 'bridge:list-script-dependencies']);
+for (const type of ['bridge:install-project', 'bridge:confirm-project-update', 'bridge:uninstall-project', 'bridge:get-project-diff', 'bridge:repair:project']) {
+  assert.throws(() => versionBridgeUi.postBridgeMessage(type, { worldbookName: 'B' }), /不支持安全安装/, 'same-version legacy client cannot ignore installation location');
+}
+assert.equal(versionMessages.length, 0);
+versionBridgeUi.handleBridgeMessage({ source: {}, data: { namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', requestId: 'forged', payload: { clientVersion: workshopConfig.client.stable, capabilities: { verifiedDlcInstall: true } } } });
+assert.equal(versionState.tavern.verifiedDlcInstall, false, 'unrequested handshake cannot enable writes');
+versionHandshake(workshopConfig.client.stable, true);
+versionMessages.length = 0;
 versionBridgeUi.postBridgeMessage('bridge:install-project', { projectId: 'latest-client-project' });
 assert.equal(versionMessages.pop().payload.projectId, 'latest-client-project');
 

@@ -1,8 +1,6 @@
 import {
   createCreativeWorkshopRegexIdentityResolver,
   getCreativeWorkshopBoundWorldbookNames,
-  getCreativeWorkshopInstallRecords,
-  getCreativeWorkshopRelevantWorldbookNames,
 } from './install-registry';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 
@@ -20,6 +18,11 @@ export type CreativeWorkshopInstalledProject = {
   canUpdate: boolean;
   hasUpdate: boolean;
   worldbookName: string | null;
+  /** One row per installed worldbook; Regex is shared at character scope. */
+  installKey?: string;
+  mixedVersions?: boolean;
+  worldbookBound?: boolean;
+  regexVersionMismatch?: boolean;
 };
 
 export type CreativeWorkshopInstalledProjectScan = {
@@ -81,7 +84,7 @@ async function refreshWorldbookReadiness() {
 }
 
 async function readRelevantWorldbooksWithRetry(): Promise<WorldbookScanRow[]> {
-  const initialNames = getCreativeWorkshopRelevantWorldbookNames();
+  const initialNames = getCreativeWorkshopBoundWorldbookNames();
   const initialBoundNames = new Set(getCreativeWorkshopBoundWorldbookNames());
   const firstRows = await Promise.all(
     initialNames.map(worldbookName => readWorldbookEntries(worldbookName, initialBoundNames)),
@@ -91,7 +94,7 @@ async function readRelevantWorldbooksWithRetry(): Promise<WorldbookScanRow[]> {
 
   await refreshWorldbookReadiness();
 
-  const refreshedNames = _.uniq([...initialNames, ...getCreativeWorkshopRelevantWorldbookNames()]);
+  const refreshedNames = getCreativeWorkshopBoundWorldbookNames();
   const refreshedBoundNames = new Set(getCreativeWorkshopBoundWorldbookNames());
   const readableRowsByName = new Map(firstRows.filter(row => row.readable).map(row => [row.worldbookName, row]));
   return Promise.all(
@@ -102,10 +105,10 @@ async function readRelevantWorldbooksWithRetry(): Promise<WorldbookScanRow[]> {
 }
 
 export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeWorkshopInstalledProjectScan> {
-  const registry = getCreativeWorkshopInstallRecords();
   const worldbookRows = await readRelevantWorldbooksWithRetry();
   const unreadableWorldbookNames = worldbookRows.filter(row => !row.readable).map(row => row.worldbookName);
   const worldbooks = worldbookRows.filter(row => row.readable);
+  const currentlyBound = new Set(getCreativeWorkshopBoundWorldbookNames());
 
   const entryRows = worldbooks.flatMap(({ worldbookName, entries }) =>
     entries
@@ -134,23 +137,32 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
     row => row.identity?.projectId || '',
   );
 
-  const projects = _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes)])
-    .filter(Boolean)
-    .map(projectId => {
-      const projectRows = groupedEntries[projectId] || [];
-      const projectEntries = projectRows.map(row => row.entry);
-      const projectRegexRows = groupedRegexes[projectId] || [];
-      const projectRegexes = projectRegexRows.map(row => row.regex);
+  const projects: CreativeWorkshopInstalledProject[] = [];
+  for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes)]).filter(Boolean)) {
+    const projectRows = groupedEntries[projectId] || [];
+    const projectRegexRows = groupedRegexes[projectId] || [];
+    const projectRegexes = projectRegexRows.map(row => row.regex);
+    const regexVersions = _.uniq(
+      projectRegexRows
+        .map(row => row.identity?.installedVersion || null),
+    );
+    // Distinct worldbooks are distinct DLC installations.
+    const byWorldbook = _.groupBy(projectRows, row => row.worldbookName);
+    const locations = Object.keys(byWorldbook);
+    for (const worldbookName of locations.length ? locations : ['']) {
+      const projectEntries = (byWorldbook[worldbookName] || []).map(row => row.entry);
       const firstEntry = projectEntries[0];
       const firstRegex = projectRegexes[0];
-      const regexVersions = _.uniq(
-        projectRegexRows
-          .map(row => row.identity?.installedVersion || null)
-          .filter((value): value is string => Boolean(value)),
-      );
-      const localVersion = registry[projectId]?.installedVersion ||
-        (firstEntry ? getCreativeWorkshopWorldbookMetadataString(firstEntry, 'cw_project_version') : null) ||
-        (regexVersions.length === 1 ? regexVersions[0] : null);
+      const versions = _.uniq(projectEntries.map(entry =>
+        getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version'),
+      ));
+      const mixedVersions = firstEntry ? versions.length > 1 : regexVersions.length > 1;
+      const regexVersionMismatch = Boolean(firstEntry && regexVersions.length > 0 &&
+        (regexVersions.length !== 1 || versions.length !== 1 || versions[0] !== regexVersions[0]));
+      // Live entries are authoritative; historical registry versions may be stale.
+      const localVersion = firstEntry
+        ? (versions.length === 1 ? versions[0] : null)
+        : (regexVersions.length === 1 ? regexVersions[0] : null);
       const legacyProjectName =
         projectEntries
           .map(entry => getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name'))
@@ -159,26 +171,29 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
       const projectNameHint = projectEntries
         .map(entry => getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_name_display'))
         .find(value => _.isString(value) && Boolean(String(value).trim()));
-      return {
+      projects.push({
         projectId,
         installedProjectId: projectId,
+        installKey: JSON.stringify([projectId, worldbookName || null]),
         projectNameHint: _.isString(projectNameHint) ? projectNameHint.trim() : legacyProjectName,
         name: firstEntry
           ? getCreativeWorkshopWorldbookMetadataString(firstEntry, 'cw_project_name_display') ||
-            legacyProjectName ||
-            _.get(firstEntry, 'name', '未命名项目')
+            legacyProjectName || _.get(firstEntry, 'name', '未命名项目')
           : legacyProjectName || _.get(firstRegex, 'script_name', '未命名项目'),
         legacyProjectName,
         localVersion,
+        mixedVersions,
+        regexVersionMismatch,
+        worldbookBound: worldbookName ? currentlyBound.has(worldbookName) : false,
         remoteVersion: null,
         entryCount: projectEntries.length,
         regexCount: projectRegexes.length,
         canUpdate: false,
         hasUpdate: false,
-        worldbookName: registry[projectId]?.worldbookName || projectRows[0]?.worldbookName || null,
-      } satisfies CreativeWorkshopInstalledProject;
-    });
-
+        worldbookName: worldbookName || null,
+      });
+    }
+  }
   return {
     projects,
     complete: unreadableWorldbookNames.length === 0,
