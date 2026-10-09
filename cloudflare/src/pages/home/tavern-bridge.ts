@@ -7,8 +7,12 @@ const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
 const SCRIPT_DEPENDENCY_REGISTRY = new Map(
   (WORKSHOP_CONFIG.scriptDependencies || []).map(item => [
-    String(item.key || ''),
-    { name: String(item.displayName || item.key || '脚本'), latestVersion: String(item.latestVersion || '') },
+    String(item.key || '').toLowerCase(),
+    {
+      name: String(item.displayName || item.key || '脚本'),
+      latestVersion: String(item.latestVersion || ''),
+      publicPath: String(item.publicPath || ''),
+    },
   ]),
 );
 
@@ -114,8 +118,9 @@ function getScriptDependencyHealthItems() {
   scripts.forEach(script => {
     const dependencies = Array.isArray(script?.dependencies) ? script.dependencies : [];
     dependencies.forEach(dependency => {
-      const registryEntry = SCRIPT_DEPENDENCY_REGISTRY.get(String(dependency?.repository || ''));
+      const registryEntry = SCRIPT_DEPENDENCY_REGISTRY.get(String(dependency?.repository || '').toLowerCase());
       if (!registryEntry) return;
+      if (registryEntry.publicPath && !new URL(dependency.importUrl).pathname.endsWith('/' + registryEntry.publicPath)) return;
 
       let status = 'unknown';
       if (dependency?.refKind === 'semver' && dependency?.installedVersion) {
