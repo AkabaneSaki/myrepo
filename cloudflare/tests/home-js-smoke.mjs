@@ -545,6 +545,10 @@ assert.match(fragments.homeStateScript, /days7: payload\?\.periodPopularityReady
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);
+assert.doesNotMatch(fragments.homeModalsScript, /codeCheck\?\.gate === "reject" \|\| deviceCheckPending/, 'high EJS finding must not disable human approval');
+assert.match(fragments.homeModalsScript, /data-admin-review-submit="approve"/, 'human override uses the existing approval action');
+assert.match(fragments.homeModalsScript, /manualOverrideReason/, 'human override reason must be sent for server validation');
+assert.match(fragments.homeModalsScript, /highFindings\.length/, 'high-risk confirmation shows finding count');
 assert.match(fragments.homeLayoutRenderScript, /mobileBaseTagFilter/);
 assert.match(fragments.homeLayoutRenderScript, /mobile-breadcrumb/);
 assert.match(fragments.homeLayoutRenderScript, /getMobileCurrentSortLabel/);
