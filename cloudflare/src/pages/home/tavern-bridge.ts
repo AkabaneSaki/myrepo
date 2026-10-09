@@ -477,6 +477,7 @@ async function requestInstallProject(projectId, selection = {}) {
       ...selection,
       ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
       ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+      ...(installInfo?.regexDownloadUrl ? { regexDownloadUrl: installInfo.regexDownloadUrl } : {}),
     });
     bindDlcProgress(task, requestId);
     setProjectPendingAction(projectId, 'install');
@@ -547,6 +548,7 @@ async function confirmProjectUpdate(projectId, projectVersion = null, manageOrig
       projectId,
       ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
       ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+      ...(installInfo?.regexDownloadUrl ? { regexDownloadUrl: installInfo.regexDownloadUrl } : {}),
       manageOriginalConflicts: manageOriginalConflicts === true,
       approvedDuplicates,
       ...(worldbookName ? { worldbookName } : {}),

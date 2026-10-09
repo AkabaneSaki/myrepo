@@ -32,6 +32,7 @@ async function checkStream(withLength) {
     getScriptId: () => 'test',
     require(id) {
       if (id === './config') return { getCreativeWorkshopUrl: () => 'https://workshop.invalid' };
+      if (id === '../../../cloudflare/src/utils/project-content') return { extractProjectEntries: () => [] };
       throw Error('unexpected require ' + id);
     },
     fetch: async () => {

@@ -1,3 +1,4 @@
+import { isCountedProjectDownload } from './utils/download-accounting';
 import { fromHono } from 'chanfana';
 import { Hono } from 'hono';
 import { DurableObject } from 'cloudflare:workers';
@@ -296,16 +297,18 @@ app.get('/api/files/*', async c => {
       return c.json({ error: 'File not found' }, 404);
     }
 
-    if (projectMatch && key.endsWith(`project-${projectMatch[1]}.json`)) {
-      await projectDb.incrementDownloads(c, projectMatch[1]);
-    }
+    const countedProjectFile = Boolean(projectMatch && isCountedProjectDownload(key, projectMatch[1]));
+    if (countedProjectFile) await projectDb.incrementDownloads(c, projectMatch[1]);
 
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set('Content-Length', object.size.toString());
     headers.set(
       'Cache-Control',
-      isPrivateProjectFile ? 'private, no-store' : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+      // Counted project JSON must traverse the Worker; edge cache hits must not skip counting.
+      countedProjectFile || isPrivateProjectFile
+        ? 'private, no-store'
+        : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
     );
 
     return new Response(object.body, {

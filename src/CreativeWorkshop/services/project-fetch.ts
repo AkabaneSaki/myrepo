@@ -1,4 +1,5 @@
 import { getCreativeWorkshopUrl } from './config';
+import { extractProjectEntries } from '../../../cloudflare/src/utils/project-content';
 
 const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -247,6 +248,51 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
       }
     }
     throw error;
+  }
+}
+
+
+/**
+ * Regex-only install/update: fetch the actual published Regex JSON rather than
+ * treating it as a worldbook. Its authorized /api/files/ GET is the same
+ * real-download accounting path as normal worldbook downloads.
+ * Deliberately not cached: each deliberate install/update is a download.
+ */
+export async function fetchCreativeWorkshopProjectRegexSource(
+  downloadUrl: string,
+  detail: CreativeWorkshopProjectDetail,
+  onProgress?: CreativeWorkshopTransferProgress,
+): Promise<void> {
+  const projectId = String(detail.project.id || '');
+  const expectedKey = 'projects/' + projectId + '/regex-' + projectId + '.json';
+  const base = new URL(getCreativeWorkshopUrl());
+  const url = new URL(downloadUrl);
+  if (!projectId || url.origin !== base.origin ||
+      decodeURIComponent(url.pathname) !== '/api/files/' + expectedKey)
+    throw new Error('DLC 正则下载地址与当前工坊或项目身份不符');
+  onProgress?.('download', { source: 'network' });
+  const response = await fetch(url.toString(), { cache: 'no-store' });
+  if (!response.ok) throw new Error('获取 DLC 正则文件失败：' + response.status);
+  const source = await response.text();
+  onProgress?.('download', { loadedBytes: new TextEncoder().encode(source).byteLength });
+  onProgress?.('validate');
+  let raw: unknown;
+  try { raw = JSON.parse(source); }
+  catch { throw new Error('DLC 正则文件不是有效 JSON'); }
+  const entries = extractProjectEntries(raw, 'regex');
+  const preview = detail.regexEntriesPreview || [];
+  if (!entries.length || entries.length !== preview.length)
+    throw new Error('DLC 正则文件与项目预览条目数量不一致');
+  const seen = new Set<string>();
+  for (const { entry, entryKey } of entries) {
+    if (seen.has(entryKey)) throw new Error('DLC 正则文件含重复条目身份');
+    seen.add(entryKey);
+    const expected = preview.filter(item => item.entryKey === entryKey);
+    const findRegex = entry.findRegex ?? entry.find_regex;
+    const replaceString = entry.replaceString ?? entry.replace_string;
+    if (expected.length !== 1 || findRegex !== expected[0].findRegex ||
+        replaceString !== expected[0].replaceString)
+      throw new Error('DLC 正则下载内容与所选版本不一致，已停止安装');
   }
 }
 

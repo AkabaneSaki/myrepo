@@ -3,6 +3,7 @@ import {
   fetchCreativeWorkshopProjectWorldbookSource,
   invalidateCreativeWorkshopProjectCache,
   type CreativeWorkshopTransferProgress,
+  fetchCreativeWorkshopProjectRegexSource,
 } from './project-fetch';
 import { CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, formatCreativeWorkshopEntryName } from './project-type';
 import { findCreativeWorkshopInstallLocations, stageAndSwitchCreativeWorkshopWorldbook, verifyCreativeWorkshopWorldbook, isCreativeWorkshopProjectEntry, writeAndReadCreativeWorkshopWorldbook, matchesCreativeWorkshopWorldbookSnapshot } from './worldbook-stage';
@@ -113,6 +114,7 @@ export async function prepareCreativeWorkshopProject(
   expectedVersion?: string,
   downloadUrlOverride?: string,
   onProgress?: CreativeWorkshopTransferProgress,
+  regexDownloadUrlOverride?: string,
 ) {
   onProgress?.('download', { source: 'detail' });
   const fetchedDetail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
@@ -120,6 +122,15 @@ export async function prepareCreativeWorkshopProject(
     ? { ...fetchedDetail, project: { ...fetchedDetail.project, downloadUrl: downloadUrlOverride } }
     : fetchedDetail;
   const sourceEntries = await fetchCreativeWorkshopProjectWorldbookSource(detail, onProgress);
+  // Do not count a Regex download or install preview-only content when the real
+  // Regex-only file is missing. A worldbook without its URL is not Regex-only.
+  if (!detail.project.downloadUrl && (detail.regexEntriesPreview || []).length > 0) {
+    if ((detail.worldbookEntriesPreview || []).length > 0)
+      throw new Error('项目同时包含世界书和正则，但缺少世界书下载地址，请作者检查发布内容');
+    if (!regexDownloadUrlOverride)
+      throw new Error('Regex-only DLC 缺少实际正则文件下载地址，请刷新项目后重试');
+    await fetchCreativeWorkshopProjectRegexSource(regexDownloadUrlOverride, detail, onProgress);
+  }
   onProgress?.('validate');
   if (detail.project.id !== projectId || typeof detail.project.version !== 'string' || !detail.project.version ||
       (expectedVersion && detail.project.version !== expectedVersion)) throw new Error('下载包的项目身份或版本不一致，已停止安装');
@@ -293,6 +304,7 @@ export async function installCreativeWorkshopProject(
   downloadUrlOverride?: string,
   selectedRegexEntryKeys?: string[],
   onProgress?: CreativeWorkshopTransferProgress,
+  regexDownloadUrlOverride?: string,
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(
@@ -301,6 +313,7 @@ export async function installCreativeWorkshopProject(
     expectedVersion,
     downloadUrlOverride,
     onProgress,
+    regexDownloadUrlOverride,
   );
   if (prepared.length === 0) {
     await assertCreativeWorkshopSharedRegexUpdate(projectId, detail, null, undefined, selectedRegexEntryKeys);
@@ -369,6 +382,7 @@ export async function updateCreativeWorkshopProject(
   requestedWorldbookName?: string,
   approvedDuplicates: Array<{ worldbookName: string; localVersion: string | null; entryCount: number }> = [],
   onProgress?: CreativeWorkshopTransferProgress,
+  regexDownloadUrlOverride?: string,
 ) {
   const found = await findCreativeWorkshopInstallLocations(
     projectId, legacyProjectName);
@@ -398,6 +412,7 @@ export async function updateCreativeWorkshopProject(
     expectedVersion,
     downloadUrlOverride,
     onProgress,
+    regexDownloadUrlOverride,
   );
   const targetVersion = String(detail.project.version || expectedVersion || '');
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });

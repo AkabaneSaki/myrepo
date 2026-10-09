@@ -540,10 +540,16 @@ export class ProjectInstallInfo extends OpenAPIRoute {
       }, 409);
     }
 
+    // Regex-only projects have a separate URL; their JSON must not masquerade as a worldbook.
+    const regexKey = `projects/${project.id}/regex-${project.id}.json`;
+    const regexDownloadUrl = !project.download_url && await c.env.R2_BUCKET.head(regexKey)
+      ? r2Storage.getProxyUrl(c, regexKey) + (currentVersion ? `?v=${encodeURIComponent(currentVersion)}` : '')
+      : null;
     return {
       success: true,
       projectId: project.id,
       version: currentVersion || null,
+      regexDownloadUrl,
       downloadUrl: project.download_url
         ? `${r2Storage.getProxyUrl(c, project.download_url.replace(/^.*\/api\/files\//, '').split(/[?#]/, 1)[0])}${currentVersion ? `?v=${encodeURIComponent(currentVersion)}` : ''}`
         : null,

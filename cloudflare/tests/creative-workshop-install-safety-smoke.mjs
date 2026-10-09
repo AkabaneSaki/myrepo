@@ -39,7 +39,8 @@ function harness(initial = detail('1.0.0')) {
   const h = { books: { Records: [], A: [], B: [], Disabled: [] }, bound: ['Records', 'A', 'B'], regexes: [], variables: {},
     details: new Map([[initial.project.id, initial]]), posts: [], reads: [], worldbookWrites: 0, regexWrites: 0,
     regexFailure: false, downloadFailure: false, corruptRegex: false, unreadable: false, failFinalScan: false,
-    activeWrites: 0, maxWrites: 0, dlcWorldbookWrites: 0 };
+    activeWrites: 0, maxWrites: 0, dlcWorldbookWrites: 0,
+    regexDownloads: 0, regexFileFailure: false, omitRegexUrl: false };
   const clone = value => structuredClone(value);
   const duringWrite = async task => {
     h.activeWrites++; h.maxWrites = Math.max(h.maxWrites, h.activeWrites);
@@ -98,6 +99,12 @@ function harness(initial = detail('1.0.0')) {
           if (h.downloadFailure) throw new Error('download failed'); const current = h.details.get(id);
           if (version && current.project.version !== version) throw new Error('version mismatch'); h.afterDownload?.(); return clone(current);
         }, fetchCreativeWorkshopProjectWorldbookSource: async data => clone(data.source),
+        fetchCreativeWorkshopProjectRegexSource: async (url, data) => {
+          if (h.regexFileFailure) throw new Error('regex download unavailable');
+          assert.match(url, /\/api\/files\/projects\//);
+          assert.equal(data.worldbookEntriesPreview.length, 0);
+          h.regexDownloads++;
+        },
       };
       if (path.endsWith('host.ts')) {
         if (specifier === '../services/config') return { getCreativeWorkshopOrigin: () => 'https://workshop.invalid' };
@@ -119,6 +126,13 @@ function harness(initial = detail('1.0.0')) {
   load(resolve(root, 'bridge/host.ts')).createCreativeWorkshopBridgeHost({ iframe: { contentWindow: frame, getAttribute: () => 'https://workshop.invalid' },
     targetOrigin: 'https://workshop.invalid', hostWindow: { addEventListener(_, listener) { listeners.push(listener); }, removeEventListener() {} } });
   h.send = async (type, payload = {}) => {
+    // Simulate the new Web install-info -> Bridge contract for Regex-only projects.
+    const active = h.details.get(payload.projectId);
+    if ((type === 'bridge:install-project' || type === 'bridge:confirm-project-update') &&
+        active?.source.length === 0 && !h.omitRegexUrl) {
+      payload = { ...payload, regexDownloadUrl: 'https://workshop.invalid/api/files/projects/' +
+        payload.projectId + '/regex-' + payload.projectId + '.json' };
+    }
     const requestId = webcrypto.randomUUID();
     for (const listener of listeners) await listener({ source: frame, origin: 'https://workshop.invalid',
       data: { namespace: 'creative-workshop-bridge', type, requestId, payload } });
@@ -191,8 +205,12 @@ function changeRegexRecordVersion(h, version) {
   assert.equal(result.type, 'bridge:update-result'); assert.equal(h.books.A.length, 0); assert.equal(h.books.B[0].extra.cw_project_version, '2.0.0');
 }
 {
-  const h = harness(detail('1.0.0', true)); await install(h); h.details.set(projectId, detail('2.0.0', true));
-  assert.equal((await update(h, null)).type, 'bridge:update-result'); assert.equal(h.dlcWorldbookWrites, 0);
+  const h = harness(detail('1.0.0', true)); await install(h);
+  assert.equal(h.regexDownloads, 1, 'Regex-only install downloads the real JSON');
+  h.details.set(projectId, detail('2.0.0', true));
+  assert.equal((await update(h, null)).type, 'bridge:update-result');
+  assert.equal(h.regexDownloads, 2, 'Regex-only update downloads the real JSON once more');
+  assert.equal(h.dlcWorldbookWrites, 0);
   assert.equal((await h.send('bridge:uninstall-project', { projectId })).type, 'bridge:uninstall-result'); assert.equal(h.regexes.length, 0);
 }
 {
@@ -434,6 +452,19 @@ for (const [fault, code, phase] of [
     post.type === 'bridge:install-result'), false, 'incomplete final scan cannot report success');
   assert.equal(h.books.A.some(entry => entry.extra?.cw_project_id === projectId), true,
     'error at final verification must not roll back a real successful write');
+}
+
+
+// A missing or failing Regex-only file must not silently fall back to detail preview.
+for (const cause of ['absentUrl','networkFailure']) {
+  const h = harness(detail('1.0.0', true));
+  if (cause === 'absentUrl') h.omitRegexUrl = true;
+  else h.regexFileFailure = true;
+  const result = await install(h);
+  assert.equal(result.type, 'bridge:error');
+  assert.equal(result.payload.errorCode, 'CW-I-020');
+  assert.equal(h.regexes.length, 0);
+  assert.equal(h.dlcWorldbookWrites, 0);
 }
 
 console.log('CreativeWorkshop actual-read install/update/uninstall safety and recovery: ok');

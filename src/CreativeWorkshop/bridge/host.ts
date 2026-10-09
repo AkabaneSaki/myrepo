@@ -413,6 +413,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined,
             Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined,
             emitProgress,
+            _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
           );
           emitProgress('regex');
           try { await applyPreparedCreativeWorkshopRegex(String(event.data.payload?.projectId), installedDetail,
@@ -509,6 +510,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
             Array.isArray(event.data.payload?.approvedDuplicates) ? event.data.payload.approvedDuplicates : [],
             emitProgress,
+            _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
           );
           emitProgress('worldbook_verify');
           try {
