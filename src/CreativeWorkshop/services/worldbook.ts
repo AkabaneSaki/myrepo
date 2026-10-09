@@ -6,6 +6,8 @@ import {
 import { CREATIVE_WORKSHOP_NAME_FORMAT_VERSION, formatCreativeWorkshopEntryName } from './project-type';
 import { findCreativeWorkshopInstallLocations, stageAndSwitchCreativeWorkshopWorldbook, verifyCreativeWorkshopWorldbook, isCreativeWorkshopProjectEntry, writeAndReadCreativeWorkshopWorldbook, matchesCreativeWorkshopPayload } from './worldbook-stage';
 import { assertCreativeWorkshopSharedRegexUpdate } from './regex';
+import { compareProjectVersions } from '../../../cloudflare/src/utils/version.js';
+import { createCreativeWorkshopRegexIdentityResolver } from './install-registry';
 import {
   syncCreativeWorkshopOriginalConflicts,
 } from './original-conflicts';
@@ -386,6 +388,20 @@ export async function updateCreativeWorkshopProject(
     expectedVersion,
     downloadUrlOverride,
   );
+  const targetVersion = String(detail.project.version || expectedVersion || '');
+  const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+  const regexVersions = regexes.map(resolveRegexIdentity).filter(identity => identity &&
+    (identity.projectId === projectId || identity.projectId === legacyProjectName)).map(identity => identity!.installedVersion);
+  const currentVersions = [
+    ...(old || []).map(entry => getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version')),
+    ...duplicateSnapshots.flatMap(snapshot => snapshot.entries.map(entry => getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version'))),
+    ...regexVersions,
+  ];
+  if (!currentVersions.length || currentVersions.some(version => compareProjectVersions(targetVersion, version) === null))
+    throw new Error('无法确认实际已安装版本或目标版本，已停止更新，请重新扫描');
+  const newerLocal = currentVersions.find(version => compareProjectVersions(targetVersion, version) === -1);
+  if (newerLocal) throw new Error('远端版本 ' + targetVersion + ' 比本地 ' + newerLocal + ' 旧，已停止更新，避免降级');
   if (prepared.length === 0 && detail.project.downloadUrl &&
       (detail.worldbookEntriesPreview || []).length > 0) {
     throw new Error('新版世界书数据为空，已停止更新，旧版仍在');

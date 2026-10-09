@@ -1,5 +1,5 @@
 export const homeUpdateCenterScript = String.raw`
-const DLC_UPDATE_STATUS_CACHE_KEY = 'creative_workshop_dlc_update_status_v1';
+const DLC_UPDATE_STATUS_CACHE_KEY = 'creative_workshop_dlc_update_status_v2';
 const DLC_UPDATE_FALSE_TTL_MS = 6 * 60 * 60 * 1000;
 let dlcUpdateCheckInFlight = null;
 
@@ -99,7 +99,7 @@ async function requestDlcVersionCheck(options = {}) {
       body: JSON.stringify({ projects }),
     });
     const checkedAt = Date.now();
-    const hasUpdate = result?.hasUpdate === true;
+    const hasUpdate = result?.hasUpdate === true && expandDlcUpdateInstances(Array.isArray(result?.updates) ? result.updates : []).length > 0;
     writeDlcUpdateStatusCache({ signature, checkedAt, hasUpdate });
     applyDlcUpdateStatus(hasUpdate, checkedAt, signature);
     return {
@@ -125,12 +125,11 @@ function scheduleDlcUpdateStatusCheck() {
 
 function expandDlcUpdateInstances(updates) {
   return updates.flatMap(item => {
-    const instances = getLocalProjectInstallations(item.id)
-      .filter(instance => !instance.localVersion || instance.localVersion !== item.latestVersion || instance.mixedVersions || instance.regexVersionMismatch);
-    return instances.length
-      ? instances.map(instance => ({ ...item, installedVersion: instance.localVersion,
-          worldbookName: instance.worldbookName }))
-      : [item];
+    return getLocalProjectInstallations(item.id)
+      .filter(instance => {
+        const order = compareProjectVersions(item.latestVersion, instance.localVersion);
+        return order === 1 || (order === 0 && instance.regexVersionMismatch) || (instance.mixedVersions && !instance.localVersion);
+      }).map(instance => ({ ...item, installedVersion: instance.localVersion, worldbookName: instance.worldbookName }));
   });
 }
 

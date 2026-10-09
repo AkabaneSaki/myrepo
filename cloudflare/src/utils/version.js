@@ -14,6 +14,17 @@ export function parseProjectVersion(value) {
   return { major, minor, patch };
 }
 
+export function compareProjectVersions(left, right) {
+  const a = parseProjectVersion(left);
+  const b = parseProjectVersion(right);
+  if (!a || !b) return null;
+  for (const key of ['major', 'minor', 'patch']) {
+    if (a[key] < b[key]) return -1;
+    if (a[key] > b[key]) return 1;
+  }
+  return 0;
+}
+
 export function bumpProjectVersion(value, bump = 'patch') {
   const parsed = parseProjectVersion(value);
   if (!parsed) {

@@ -9,7 +9,7 @@ import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-est
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
 import { readProjectContentForEdit } from './content';
 import { r2Storage } from '../../utils/r2';
-import { normalizeProjectVersionBase } from '../../utils/version.js';
+import { normalizeProjectVersionBase, compareProjectVersions } from '../../utils/version.js';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']);
 
@@ -316,7 +316,8 @@ export class ProjectVersionCheck extends OpenAPIRoute {
     const updates = (result.results || []).flatMap(row => {
       const installedVersion = byId.get(String(row.id)) || null;
       const latestVersion = normalizeProjectVersionBase(row.version);
-      if (installedVersion && latestVersion && installedVersion === latestVersion) return [];
+      if (compareProjectVersions(row.version, row.version) !== 0) return [];
+      if (installedVersion && compareProjectVersions(latestVersion, installedVersion) !== 1) return [];
       return [{
         id: String(row.id),
         name: String(row.name || ''),

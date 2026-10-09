@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import ts from '../../node_modules/typescript/lib/typescript.js';
+import * as projectVersionApi from '../src/utils/version.js';
 
 async function compile(relativePath) {
   const source = await readFile(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
@@ -209,6 +210,7 @@ const regexApi = loadCommonJs(
   await compile('src/CreativeWorkshop/services/regex.ts'),
   {
     require(specifier) {
+      if (specifier === '../../../cloudflare/src/utils/version.js') return projectVersionApi;
       if (specifier === './install-registry') return installRegistryApi;
       if (specifier === './install-identity') return identityApi;
       if (specifier === './project-fetch') {

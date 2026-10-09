@@ -3,6 +3,7 @@ import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { CHECKER_LIMITS } from '../src/utils/ejs-checker/limits.mjs';
+import * as projectVersionApi from '../src/utils/version.js';
 
 async function readExportExpression(relativePath, exportName) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -16,7 +17,7 @@ async function readExportExpression(relativePath, exportName) {
 
 async function evaluateStandalone(relativePath, exportName) {
   const expression = await readExportExpression(relativePath, exportName);
-  return Function(`return (${expression});`)();
+  return Function(...Object.keys(projectVersionApi), `return (${expression});`)(...Object.values(projectVersionApi));
 }
 
 const homeAppSource = (await Promise.all([
@@ -768,7 +769,7 @@ const cardViewModelUi = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()}; ${projectVersionApi.compareProjectVersions.toString()}; ${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
@@ -809,7 +810,7 @@ const cardRenderUi = Function(
   'getProjectPublishedAt',
   'getProjectDisplayTags',
   'PROJECT_TAXONOMY',
-  `${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
+  `${projectVersionApi.parseProjectVersion.toString()}; ${projectVersionApi.compareProjectVersions.toString()}; ${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
@@ -947,7 +948,7 @@ const migratedCardUi = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()};${projectVersionApi.compareProjectVersions.toString()};${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => ({ projectId: canonicalProjectId, legacyProjectName: '旧工坊项目', localVersion: null }),
@@ -959,7 +960,7 @@ const migratedCardUi = Function(
 );
 assert.equal(
   migratedCardUi.buildProjectCardViewModel({ id: canonicalProjectId, name: '旧工坊项目', version: '2.0.0' }).canUpdate,
-  true,
+  false,
 );
 
 const legacyConflictView = Function(
@@ -970,7 +971,7 @@ const legacyConflictView = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()};${projectVersionApi.compareProjectVersions.toString()};${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,

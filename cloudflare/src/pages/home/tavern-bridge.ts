@@ -399,6 +399,10 @@ function requestProjectDiff(projectId, projectVersion = null, worldbookName = nu
 
 async function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false, worldbookName = null, approvedDuplicates = []) {
   if (!state.tavern.duplicateDlcConsolidation) throw new Error('请先更新工坊脚本，才能核验重复安装位置并安全更新');
+  const local = worldbookName ? getLocalProjectInstallations(projectId).find(item => item.worldbookName === worldbookName) : getLocalProjectMeta(projectId);
+  const order = compareProjectVersions(projectVersion, local?.localVersion);
+  if (order === -1) throw new Error('远端版本比本地旧，已停止更新，避免降级');
+  if (order === null && !local?.mixedVersions) throw new Error('无法确认版本，请重新扫描后再更新');
   if (!requireDiscordLoginForDownload('更新 DLC')) {
     const error = new Error('请先 Discord 登录后更新 DLC');
     error.code = 'LOGIN_REQUIRED';

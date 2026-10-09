@@ -17,6 +17,7 @@ import {
 } from './regex-name';
 import { matchesCreativeWorkshopPayload, findCreativeWorkshopInstallLocations, isCreativeWorkshopProjectEntry } from './worldbook-stage';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
+import { compareProjectVersions } from '../../../cloudflare/src/utils/version.js';
 
 export type CreativeWorkshopPreparedRegexEntry = {
   entry: Record<string, any>;
@@ -174,6 +175,9 @@ export async function applyPreparedCreativeWorkshopRegex(
       for (const regex of regexes) {
         const identity = resolveIdentity(regex);
         if (!identity || !matchesProjectIdentity(projectId, identity.projectId, legacyProjectName)) continue;
+        const versionOrder = compareProjectVersions(installedVersion, identity.installedVersion);
+        if (versionOrder === null) throw new Error('无法确认实际角色正则版本，已停止写入，请重新扫描');
+        if (versionOrder === -1) throw new Error('实际角色正则版本 ' + identity.installedVersion + ' 比远端 ' + installedVersion + ' 新，已停止写入，避免降级');
         if (existingByEntryKey.has(identity.entryKey)) {
           duplicateEntryKeys.add(identity.entryKey);
           existingByEntryKey.delete(identity.entryKey);

@@ -5,6 +5,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 import ts from '../../node_modules/typescript/lib/typescript.js';
+import * as projectVersionApi from '../src/utils/version.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/CreativeWorkshop');
 const compiled = new Map();
@@ -34,7 +35,7 @@ const lodash = {
   set(object, path, value) { const keys = path.split('.'); let current = object;
     for (const key of keys.slice(0, -1)) current = (current[key] ||= {}); current[keys.at(-1)] = value; },
 };
-function harness(initial = detail('1')) {
+function harness(initial = detail('1.0.0')) {
   const h = { books: { A: [], B: [], Disabled: [] }, bound: ['A', 'B'], regexes: [], variables: {},
     details: new Map([[initial.project.id, initial]]), posts: [], reads: [], worldbookWrites: 0, regexWrites: 0,
     regexFailure: false, downloadFailure: false, corruptRegex: false, unreadable: false,
@@ -84,6 +85,7 @@ function harness(initial = detail('1')) {
     if (cache.has(path)) return cache.get(path).exports;
     const module = { exports: {} }; cache.set(path, module);
     const require = specifier => {
+      if (specifier === '../../../cloudflare/src/utils/version.js') return projectVersionApi;
       if (specifier.endsWith('/project-fetch') || specifier === './project-fetch') return {
         invalidateCreativeWorkshopProjectCache() {},
         fetchCreativeWorkshopProjectDetail: async (id, version) => {
@@ -118,32 +120,32 @@ function harness(initial = detail('1')) {
   };
   return h;
 }
-const install = h => h.send('bridge:install-project', { projectId, worldbookName: 'A', projectVersion: '1' });
-const update = (h, book = 'A') => h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', ...(book ? { worldbookName: book } : {}) });
+const install = h => h.send('bridge:install-project', { projectId, worldbookName: 'A', projectVersion: '1.0.0' });
+const update = (h, book = 'A') => h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', ...(book ? { worldbookName: book } : {}) });
 
 {
   const h = harness(); assert.equal((await install(h)).type, 'bridge:install-result');
-  h.details.set(projectId, detail('2')); h.downloadFailure = true;
+  h.details.set(projectId, detail('2.0.0')); h.downloadFailure = true;
   const old = structuredClone(h.books.A);
   assert.equal((await update(h)).type, 'bridge:error'); assert.deepEqual(h.books.A, old);
   h.downloadFailure = false; h.regexFailure = true;
   const failed = await update(h);
   assert.equal(failed.type, 'bridge:error'); assert.match(failed.payload.message, /部分完成/);
-  assert.equal(failed.payload.projects[0].localVersion, '2'); assert.equal(failed.payload.projects[0].regexVersionMismatch, true);
-  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '1');
+  assert.equal(failed.payload.projects[0].localVersion, '2.0.0'); assert.equal(failed.payload.projects[0].regexVersionMismatch, true);
+  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '1.0.0');
   const saved = structuredClone(h.books.A); const writes = h.worldbookWrites;
   h.regexFailure = false; assert.equal((await update(h)).type, 'bridge:update-result');
   assert.deepEqual(h.books.A, saved); assert.equal(h.worldbookWrites, writes, 'retry completes only Regex');
-  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '2');
+  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '2.0.0');
 }
 {
-  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2'));
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2.0.0'));
   const before = structuredClone(h.books); const writes = h.worldbookWrites;
   const denied = await update(h); assert.match(denied.payload.message, /授权/);
   assert.deepEqual(h.books, before); assert.equal(h.worldbookWrites, writes, 'shared version guard precedes worldbook write');
   // A=v1, B=v2, shared Regex=v2: updating A may reuse Regex v2 and must leave B untouched.
-  const single = harness(detail('2'));
-  assert.equal((await single.send('bridge:install-project', { projectId, worldbookName: 'B', projectVersion: '2' })).type, 'bridge:install-result');
+  const single = harness(detail('2.0.0'));
+  assert.equal((await single.send('bridge:install-project', { projectId, worldbookName: 'B', projectVersion: '2.0.0' })).type, 'bridge:install-result');
   h.books.B = structuredClone(single.books.B); h.regexes = structuredClone(single.regexes);
   const bookB = structuredClone(h.books.B);
   const regexes = structuredClone(h.regexes);
@@ -154,8 +156,8 @@ const update = (h, book = 'A') => h.send('bridge:confirm-project-update', { proj
   assert.equal(h.regexes.length, 0);
 }
 {
-  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2'));
-  const payload = { projectId, projectVersion: '2', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1', entryCount: 1 }] };
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2.0.0'));
+  const payload = { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1.0.0', entryCount: 1 }] };
   h.regexFailure = true;
   assert.match((await h.send('bridge:confirm-project-update', payload)).payload.message, /部分完成/);
   assert.equal(h.books.B.length, 1, 'Regex failure preserves the authorized duplicate until final verification');
@@ -166,61 +168,118 @@ const update = (h, book = 'A') => h.send('bridge:confirm-project-update', { proj
   assert.equal(h.books.B.length, 0, 'only explicitly authorized duplicate is deleted');
 }
 {
-  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2'));
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2.0.0'));
   const before = structuredClone(h.books);
-  const stale = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '0', entryCount: 1 }] });
+  const stale = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '0', entryCount: 1 }] });
   assert.equal(stale.type, 'bridge:error'); assert.deepEqual(h.books, before, 'stale duplicate consent cannot mutate books');
-  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', worldbookName: 'B', approvedDuplicates: [{ worldbookName: 'A', localVersion: '1', entryCount: 1 }] });
-  assert.equal(result.type, 'bridge:update-result'); assert.equal(h.books.A.length, 0); assert.equal(h.books.B[0].extra.cw_project_version, '2');
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'B', approvedDuplicates: [{ worldbookName: 'A', localVersion: '1.0.0', entryCount: 1 }] });
+  assert.equal(result.type, 'bridge:update-result'); assert.equal(h.books.A.length, 0); assert.equal(h.books.B[0].extra.cw_project_version, '2.0.0');
 }
 {
-  const h = harness(detail('1', true)); await install(h); h.details.set(projectId, detail('2', true));
+  const h = harness(detail('1.0.0', true)); await install(h); h.details.set(projectId, detail('2.0.0', true));
   assert.equal((await update(h, null)).type, 'bridge:update-result'); assert.equal(h.worldbookWrites, 0);
   assert.equal((await h.send('bridge:uninstall-project', { projectId })).type, 'bridge:uninstall-result'); assert.equal(h.regexes.length, 0);
 }
 {
   const h = harness(); await install(h); h.books.A[0].enabled = false;
   h.books.B = h.books.A; h.books.A = []; h.books.Disabled = structuredClone(h.books.B);
-  h.details.set(projectId, detail('2'));
+  h.details.set(projectId, detail('2.0.0'));
   const result = await update(h, null); assert.equal(result.type, 'bridge:update-result');
   assert.equal(result.payload.projects[0].worldbookName, 'B'); assert.equal(h.books.B[0].enabled, false);
   assert.equal(h.reads.includes('Disabled'), false, 'unbound worldbooks are outside scan and mutation scope');
 }
 {
-  const h = harness(); await install(h); h.details.set(projectId, detail('2')); h.corruptRegex = true;
+  const h = harness(); await install(h); h.details.set(projectId, detail('2.0.0')); h.corruptRegex = true;
   const result = await update(h); assert.equal(result.type, 'bridge:error'); assert.match(result.payload.message, /验收/);
-  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '1');
+  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '1.0.0');
 }
 {
-  const h = harness(); h.details.set(secondProjectId, detail('1', false, secondProjectId));
-  const results = await Promise.all([install(h), h.send('bridge:install-project', { projectId: secondProjectId, worldbookName: 'A', projectVersion: '1' })]);
+  const h = harness(); h.details.set(secondProjectId, detail('1.0.0', false, secondProjectId));
+  const results = await Promise.all([install(h), h.send('bridge:install-project', { projectId: secondProjectId, worldbookName: 'A', projectVersion: '1.0.0' })]);
   assert.equal(results.every(result => result.type === 'bridge:install-result'), true);
   assert.equal(h.maxWrites, 1, 'Bridge serializes writes from independent projects');
 }
 {
   const h = harness(); await install(h); h.books.B = structuredClone(h.books.A);
   for (const entry of h.books.B) delete entry.extra;
-  h.details.set(projectId, detail('2'));
-  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1', entryCount: 1 }] });
+  h.details.set(projectId, detail('2.0.0'));
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1.0.0', entryCount: 1 }] });
   assert.equal(result.type, 'bridge:update-result'); assert.equal(h.books.B.length, 0, 'content identity remains authoritative after extra is dropped');
 }
 for (const change of ['modify', 'unbind', 'new-location']) {
-  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2'));
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2.0.0'));
   const writes = [h.worldbookWrites, h.regexWrites];
   h.afterDownload = () => {
     if (change === 'modify') h.books.B[0].enabled = false;
     if (change === 'unbind') h.bound = ['B'];
     if (change === 'new-location') { h.books.C = structuredClone(h.books.B); h.bound.push('C'); }
   };
-  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1', entryCount: 1 }] });
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1.0.0', entryCount: 1 }] });
   assert.equal(result.type, 'bridge:error'); assert.deepEqual([h.worldbookWrites, h.regexWrites], writes, change + ' must stop before persistent writes');
 }
 {
-  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2'));
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A); h.details.set(projectId, detail('2.0.0'));
   const regexWrites = h.regexWrites;
-  h.afterWorldbookWrite = () => { if (h.books.A.length === 1 && h.books.A[0].extra.cw_project_version === '2') h.books.B[0].content += ' manual'; };
-  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1', entryCount: 1 }] });
+  h.afterWorldbookWrite = () => { if (h.books.A.length === 1 && h.books.A[0].extra.cw_project_version === '2.0.0') h.books.B[0].content += ' manual'; };
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '1.0.0', entryCount: 1 }] });
   assert.equal(result.type, 'bridge:error'); assert.match(result.payload.message, /部分完成/);
   assert.equal(h.regexWrites, regexWrites, 'changed duplicate stops shared Regex write'); assert.equal(h.books.B.length, 1);
+}
+for (const regexOnly of [false, true]) {
+  const h = harness(detail('1.3.25', regexOnly));
+  assert.equal((await h.send('bridge:install-project', { projectId, worldbookName: 'A', projectVersion: '1.3.25' })).type, 'bridge:install-result');
+  const before = structuredClone({ books: h.books, regexes: h.regexes, variables: h.variables });
+  const writes = [h.worldbookWrites, h.regexWrites];
+  h.details.set(projectId, detail('1.3.19', regexOnly));
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '1.3.19', ...(regexOnly ? {} : { worldbookName: 'A' }) });
+  assert.equal(result.type, 'bridge:error'); assert.match(result.payload.message, /避免降级/);
+  assert.deepEqual({ books: h.books, regexes: h.regexes, variables: h.variables }, before);
+  assert.deepEqual([h.worldbookWrites, h.regexWrites], writes, 'downgrade must perform zero persistent writes');
+}
+{
+  const h = harness(detail('1.3.9')); await h.send('bridge:install-project', { projectId, worldbookName: 'A', projectVersion: '1.3.9' });
+  h.details.set(projectId, detail('1.3.10'));
+  assert.equal((await h.send('bridge:confirm-project-update', { projectId, projectVersion: '1.3.10', worldbookName: 'A' })).type, 'bridge:update-result');
+}
+for (const unknown of [false, true]) {
+  const h = harness(); await install(h);
+  h.details.set(projectId, detail('2.0.0'));
+  const identity = h.load('install-identity');
+  const record = h.regexes.find(regex => regex.id === projectId);
+  const metadata = identity.parseCreativeWorkshopRegexRecordPayload(record.replace_string);
+  metadata.installedVersion = unknown ? null : '3.0.0';
+  metadata.entries.forEach(entry => { entry.installedVersion = metadata.installedVersion; });
+  record.replace_string = identity.buildCreativeWorkshopRegexRecordPayload(metadata);
+  const writes = [h.worldbookWrites, h.regexWrites];
+  assert.equal((await update(h)).type, 'bridge:error');
+  assert.deepEqual([h.worldbookWrites, h.regexWrites], writes, 'unknown or newer Regex stops before worldbook writes');
+}
+{
+  const h = harness(); await install(h); h.books.B = structuredClone(h.books.A);
+  const identity = h.load('install-identity');
+  h.books.B[0].content = identity.injectCreativeWorkshopWorldbookMetadata(h.books.B[0].content,
+    { ...identity.readCreativeWorkshopWorldbookMetadata(h.books.B[0].content), cw_project_version: '3.0.0' });
+  h.books.B[0].extra.cw_project_version = '3.0.0';
+  h.details.set(projectId, detail('2.0.0'));
+  const writes = [h.worldbookWrites, h.regexWrites];
+  const result = await h.send('bridge:confirm-project-update', { projectId, projectVersion: '2.0.0', worldbookName: 'A', approvedDuplicates: [{ worldbookName: 'B', localVersion: '3.0.0', entryCount: 1 }] });
+  assert.equal(result.type, 'bridge:error'); assert.match(result.payload.message, /避免降级/);
+  assert.deepEqual([h.worldbookWrites, h.regexWrites], writes, 'a newer duplicate is preserved');
+}
+{
+  const h = harness(); await install(h); h.details.set(projectId, detail('2.0.0'));
+  h.afterWorldbookWrite = () => {
+    const identity = h.load('install-identity');
+    const record = h.regexes.find(regex => regex.id === projectId);
+    const metadata = identity.parseCreativeWorkshopRegexRecordPayload(record.replace_string);
+    metadata.installedVersion = '3.0.0';
+    metadata.entries.forEach(entry => { entry.installedVersion = '3.0.0'; });
+    record.replace_string = identity.buildCreativeWorkshopRegexRecordPayload(metadata);
+  };
+  const writes = h.regexWrites;
+  const result = await update(h);
+  assert.equal(result.type, 'bridge:error'); assert.match(result.payload.message, /部分完成/);
+  assert.equal(h.regexWrites, writes, 'Regex version is checked again at the actual write');
+  assert.equal(h.load('install-registry').getCreativeWorkshopInstallRecord(projectId).installedVersion, '1.0.0');
 }
 console.log('CreativeWorkshop actual-read install/update/uninstall safety and recovery: ok');
