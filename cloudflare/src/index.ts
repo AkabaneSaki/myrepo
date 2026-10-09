@@ -17,6 +17,7 @@ import type { Env } from './env';
 // 工具函数
 import { projectDb } from './utils/db';
 import { generateProjectRankingDay } from './utils/project-daily-rankings';
+import { generatePeriodPopularitySnapshots } from './utils/project-period-popularity';
 import { jwt } from './utils/jwt';
 
 // 页面
@@ -384,7 +385,7 @@ const worker: ExportedHandler<Env> = {
     return app.fetch(request, env, ctx);
   },
   async scheduled(_controller, env) {
-    const rankingDay = await generateProjectRankingDay({ env });
+    const rankingDay = await generateProjectRankingDay({ env }, Date.now(), () => generatePeriodPopularitySnapshots({ env }));
     console.log(`Project daily ranking ready: ${rankingDay}`);
   },
 };

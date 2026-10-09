@@ -15,6 +15,7 @@ import {
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
 import { generateProjectRankingDay, getReadyProjectRankingBoard } from './project-daily-rankings';
+import { getPeriodPopularityReadiness, isPeriodPopularitySort } from './project-period-popularity';
 import {
   normalizeWorldbookEjsLengthEstimates,
   parseWorldbookEjsLengthEstimates,
@@ -791,8 +792,10 @@ export const projectDb = {
    */
   getPublicCounts: async (c: AppContext) => {
     const rows = await c.env.DB.prepare(
-      'SELECT scope, project_count, revision FROM public_project_counts',
-    ).all<{ scope: string; project_count: number; revision: number }>();
+      `SELECT scope, project_count, revision,
+         (SELECT started_at FROM project_period_tracking_meta WHERE id = 1) AS period_started_at
+       FROM public_project_counts`,
+    ).all<{ scope: string; project_count: number; revision: number; period_started_at: string | null }>();
     const byType = Object.fromEntries(PROJECT_TYPES.map(type => [type, 0])) as Record<ProjectType, number>;
     let total = 0;
     let revision = 0;
@@ -804,7 +807,8 @@ export const projectDb = {
         byType[row.scope as ProjectType] = Number(row.project_count);
       }
     }
-    return { total, byType, revision };
+    const periodPopularityReady = getPeriodPopularityReadiness(rows.results?.[0]?.period_started_at || null);
+    return { total, byType, revision, periodPopularityReady };
   },
 
   recountPublicCounts: async (c: AppContext) => {
@@ -841,7 +845,7 @@ export const projectDb = {
       search?: string;
       minLikes?: number;
       minDownloads?: number;
-      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads';
+      sort?: 'discover' | 'published' | 'rating' | 'updated' | 'likes' | 'subscribes' | 'downloads' | 'downloads_7d' | 'downloads_30d' | 'likes_7d' | 'likes_30d';
       approvedOnly?: boolean;
       currentUser?: JWTPayload | null;
     },
@@ -992,6 +996,36 @@ export const projectDb = {
       : '';
     const offset = options.page * options.pageSize;
     const fetchLimit = options.pageSize + 1;
+
+    if (isPeriodPopularitySort(sortMode)) {
+      const periodWhere = 'WHERE period_snapshot.sort_mode = ? AND p.id = period_rank.value'
+        + (conditions.length ? ' AND ' + conditions.join(' AND ') : '');
+      const periodSearchJoin = hasIndexedTextSearch
+        ? 'JOIN project_search ON project_search.rowid = p.rowid'
+        : hasIndexedShortSearch
+          ? 'JOIN project_search_short ON project_search_short.rowid = p.rowid'
+          : firstExactTag
+            ? 'JOIN project_search_tags tag_candidate ON tag_candidate.project_id = p.id'
+            : '';
+      const rankedRows = await db.prepare(
+        `SELECT p.*, u.global_name
+         FROM project_period_popularity period_snapshot
+         CROSS JOIN json_each(period_snapshot.project_ids) period_rank
+         CROSS JOIN projects p
+         ${periodSearchJoin}
+         LEFT JOIN users u ON p.author_id = u.id
+         ${periodWhere}
+         ORDER BY CAST(period_rank.key AS INTEGER) ASC
+         LIMIT ? OFFSET ?`,
+      ).bind(sortMode, ...values, fetchLimit, offset).all<Record<string, unknown>>();
+      const rows = rankedRows.results || [];
+      return {
+        hasMore: rows.length > options.pageSize,
+        page: options.page,
+        pageSize: options.pageSize,
+        projects: await enrichProjects(c, rows.slice(0, options.pageSize).map(parseProjectRow), options.currentUser),
+      };
+    }
 
     if (rankingKind) {
       let board = await getReadyProjectRankingBoard(c);
@@ -1645,9 +1679,11 @@ export const projectDb = {
        RETURNING counted_downloads`,
     ).bind(MAX_DAILY_COUNTED_DOWNLOADS).first<{ counted_downloads: number }>();
     if (!allowed) return;
-    await c.env.DB.prepare(
-      `UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`,
-    ).bind(projectId).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE projects SET downloads_count = COALESCE(downloads_count, 0) + 1 WHERE id = ?`).bind(projectId),
+      c.env.DB.prepare(`INSERT INTO project_metric_daily (day_key, project_id, downloads) VALUES (date('now'), ?, 1)
+        ON CONFLICT(day_key, project_id) DO UPDATE SET downloads = downloads + 1`).bind(projectId),
+    ]);
   },
 };
 

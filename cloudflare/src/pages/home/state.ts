@@ -144,6 +144,7 @@ const state = {
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
   sortMode: DEFAULT_SORT_MODE,
+  periodPopularityReady: { days7: false, days30: false },
   activeBaseTag: 'all',
   activeTags: [],
   searchDraft: '',
@@ -255,6 +256,10 @@ function setProjectsPage(payload) {
   state.projectPagination.pageSizeLocked = true;
   state.projectPagination.hasMore = Boolean(payload?.hasMore);
   state.projectPagination.publicCounts = payload?.publicCounts || state.projectPagination.publicCounts;
+  state.periodPopularityReady = {
+    days7: payload?.periodPopularityReady?.days7 === true,
+    days30: payload?.periodPopularityReady?.days30 === true,
+  };
   state.projectPagination.loadingPage = false;
   if (state.tavern.installedProjectsLoaded) {
     rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));

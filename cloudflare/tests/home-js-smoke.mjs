@@ -522,10 +522,26 @@ assert.doesNotMatch(fragments.homeApiScript, /key: 'downloads', sort: 'downloads
 assert.doesNotMatch(fragments.homeApiScript, /key: 'likes', sort: 'likes'/);
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /value: \"discover\", label: \"发现\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"published\", label: \"最新发布\"/);
-assert.match(fragments.homeLayoutRenderScript, /value: \"rating\", label: \"玩家好评（暂未开放）\", disabled: true/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /玩家好评（暂未开放）|最低门槛|renderMetricFilters/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"downloads\", label: \"下载最多\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"updated\", label: \"最近更新\"/);
 assert.match(fragments.homeLayoutRenderScript, /value: \"likes\", label: \"点赞最多\"/);
+for (const sort of ['downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']) {
+  assert.match(fragments.homeLayoutRenderScript, new RegExp('value: "' + sort + '"'));
+}
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /data-metric-filter=/);
+// Period sort choices are hidden until the backend reports a full collection window.
+const periodSortSource = fragments.homeLayoutRenderScript.match(/function getBrowseSortOptions\(\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(periodSortSource);
+const periodSortState = { periodPopularityReady: { days7: false, days30: false } };
+const getPeriodSorts = new Function('state', `${periodSortSource}\nreturn getBrowseSortOptions;`)(periodSortState);
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes']);
+periodSortState.periodPopularityReady.days7 = true;
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes', 'downloads_7d', 'likes_7d']);
+periodSortState.periodPopularityReady.days30 = true;
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']);
+assert.match(fragments.homeApiScript, /periodPopularityReady: data\.periodPopularityReady/);
+assert.match(fragments.homeStateScript, /days7: payload\?\.periodPopularityReady\?\.days7 === true/);
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);
@@ -548,10 +564,8 @@ assert.match(fragments.homeLayoutRenderScript, /扩展方向/);
 assert.match(fragments.homeCardsRenderScript, /card-owner-stats/);
 assert.match(fragments.homeCardsRenderScript, /card-public-stats/);
 assert.match(fragments.homeCardsRenderScript, /discover-card-like like-btn/);
-assert.match(fragments.homeLayoutRenderScript, /data-metric-filter=\"likes\"/);
-assert.match(fragments.homeLayoutRenderScript, /data-metric-filter=\"downloads\"/);
-assert.match(fragments.homeApiScript, /params\.set\('minLikes'/);
-assert.match(fragments.homeApiScript, /params\.set\('minDownloads'/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /data-metric-filter=/);
+assert.doesNotMatch(fragments.homeLayoutRenderScript, /data-clear-metric-filter=/);
 assert.match(fragments.homeApiScript, /async function setPrivateProjectRating\(projectId, rating, comment = ''\)/);
 assert.match(fragments.homeDetailModalRenderScript, /data-project-rating/);
 assert.match(fragments.homeDetailModalRenderScript, /记名评分喵，目前只用于 Workshop 内部收集/);
