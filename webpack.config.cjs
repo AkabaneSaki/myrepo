@@ -46,12 +46,12 @@ function createClientConfig({ name, publicPath, entryPath, clientVersion, endpoi
         },
       ],
     },
-    plugins: [
-      new webpack.DefinePlugin({
-        __CREATIVE_WORKSHOP_CLIENT_VERSION__: JSON.stringify(clientVersion),
-        __CREATIVE_WORKSHOP_DEFAULT_URL__: JSON.stringify(endpoint),
-      }),
-    ],
+    plugins: clientVersion
+      ? [new webpack.DefinePlugin({
+          __CREATIVE_WORKSHOP_CLIENT_VERSION__: JSON.stringify(clientVersion),
+          __CREATIVE_WORKSHOP_DEFAULT_URL__: JSON.stringify(endpoint),
+        })]
+      : [],
     optimization: {
       splitChunks: false,
       runtimeChunk: false,
@@ -65,6 +65,11 @@ function createClientConfig({ name, publicPath, entryPath, clientVersion, endpoi
 }
 
 module.exports = [
+  createClientConfig({
+    name: 'auto-dialogue-beautifier',
+    publicPath: 'dist/AutoDialogueBeautifier/index.js',
+    entryPath: 'src/AutoDialogueBeautifier/index.ts',
+  }),
   createClientConfig({
     name: 'creative-workshop-stable',
     publicPath: workshopConfig.client.publicPath,

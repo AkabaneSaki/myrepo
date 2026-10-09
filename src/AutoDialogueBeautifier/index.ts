@@ -1,3 +1,5 @@
+import workshopConfig from '../../config/workshop.json';
+
 // 自适应正则脚本
 // 功能：AI输出完成后，检测最后一层聊天存在的表达式，将匹配的 scriptName 存入变量并排序
 // 加载脚本/变量变化时，检查角色卡正则列表与变量列表，注册缺失的正则
@@ -6,10 +8,10 @@
 
 // regex.json 网络链接列表（主URL + 备用CDN加速URL）
 const REGEX_JSON_URLS = [
-  'https://cdn.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.9/regex.json',
-  'https://gcore.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.9/regex.json',
-  'https://testingcf.jsdelivr.net/gh/AkabaneSaki/myrepo@2.0.9/regex.json',
-];
+  'https://cdn.jsdelivr.net',
+  'https://gcore.jsdelivr.net',
+  'https://testingcf.jsdelivr.net',
+].map(origin => `${origin}/gh/${workshopConfig.release.repository}@${workshopConfig.client.stable}/regex.json`);
 
 $(async () => {
   console.info('自适应正则脚本已加载');

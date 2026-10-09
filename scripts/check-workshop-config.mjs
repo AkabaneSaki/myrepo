@@ -66,6 +66,7 @@ for (const dependency of dependencies) {
   assert.ok(dependency.key, 'script dependency key is required');
   assert.ok(dependency.displayName, `displayName is required for ${dependency.key}`);
   assert.match(dependency.latestVersion, stableSemver, `latestVersion must be X.Y.Z for ${dependency.key}`);
+  if (dependency.publicPath) assert.match(dependency.publicPath, publicBundlePath, `publicPath must be a JS file under dist/ for ${dependency.key}`);
   assert.ok(!dependencyKeys.has(dependency.key), `duplicate script dependency key: ${dependency.key}`);
   dependencyKeys.add(dependency.key);
 }
@@ -173,7 +174,11 @@ for (const [path, source] of [
 
   ['config/README.md', files.configReadme],
 ]) {
-  for (const value of forbiddenValues) {
+  // The bootstrap must name the canonical Git remote; it is not a live client version.
+  const managedValues = path === 'AGENTS.md'
+    ? forbiddenValues.filter(value => value !== manifest.release.repository)
+    : forbiddenValues;
+  for (const value of managedValues) {
     assert.ok(!source.includes(value), `${path} repeats live managed value "${value}"; reference config/workshop.json instead`);
   }
 }
