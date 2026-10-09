@@ -97,6 +97,7 @@ export class ProjectList extends OpenAPIRoute {
               page: z.number(),
               pageSize: z.number(),
               publicCounts: z.object({ total: z.number(), byType: z.record(z.number()) }),
+              periodPopularityReady: z.object({ days7: z.boolean(), days30: z.boolean() }),
               projects: z.array(
                 z.object({
                   id: z.string(),
@@ -197,6 +198,7 @@ export class ProjectList extends OpenAPIRoute {
       ...result,
       hasMore: page < 19 && result.hasMore,
       publicCounts: { total: publicCounts.total, byType: publicCounts.byType },
+      periodPopularityReady: publicCounts.periodPopularityReady,
       projects,
     };
     if (cacheable) {

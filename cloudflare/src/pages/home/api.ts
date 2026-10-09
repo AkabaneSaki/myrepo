@@ -242,6 +242,7 @@ function applyProjectListClientCacheData(data, pageSize) {
     pageSize: data?.pageSize || pageSize,
     hasMore: data?.hasMore,
     publicCounts: data?.publicCounts,
+    periodPopularityReady: data?.periodPopularityReady,
   });
   syncProjectStats(state.projects);
   renderApp();
@@ -322,6 +323,7 @@ async function fetchProjects(forceRefresh = false, options = {}) {
       pageSize: data.pageSize || pageSize,
       hasMore: data.hasMore,
       publicCounts: data.publicCounts,
+      periodPopularityReady: data.periodPopularityReady,
     });
 
     if (state.showSubscribedAndInstalledProjects && state.tavern.connected && state.tavern.installedProjectsLoaded) {

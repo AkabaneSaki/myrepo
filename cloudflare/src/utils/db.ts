@@ -15,7 +15,7 @@ import {
 } from '../config/project-taxonomy';
 import type { JWTPayload } from './jwt';
 import { generateProjectRankingDay, getReadyProjectRankingBoard } from './project-daily-rankings';
-import { isPeriodPopularitySort } from './project-period-popularity';
+import { getPeriodPopularityReadiness, isPeriodPopularitySort } from './project-period-popularity';
 import {
   normalizeWorldbookEjsLengthEstimates,
   parseWorldbookEjsLengthEstimates,
@@ -792,8 +792,10 @@ export const projectDb = {
    */
   getPublicCounts: async (c: AppContext) => {
     const rows = await c.env.DB.prepare(
-      'SELECT scope, project_count, revision FROM public_project_counts',
-    ).all<{ scope: string; project_count: number; revision: number }>();
+      `SELECT scope, project_count, revision,
+         (SELECT started_at FROM project_period_tracking_meta WHERE id = 1) AS period_started_at
+       FROM public_project_counts`,
+    ).all<{ scope: string; project_count: number; revision: number; period_started_at: string | null }>();
     const byType = Object.fromEntries(PROJECT_TYPES.map(type => [type, 0])) as Record<ProjectType, number>;
     let total = 0;
     let revision = 0;
@@ -805,7 +807,8 @@ export const projectDb = {
         byType[row.scope as ProjectType] = Number(row.project_count);
       }
     }
-    return { total, byType, revision };
+    const periodPopularityReady = getPeriodPopularityReadiness(rows.results?.[0]?.period_started_at || null);
+    return { total, byType, revision, periodPopularityReady };
   },
 
   recountPublicCounts: async (c: AppContext) => {

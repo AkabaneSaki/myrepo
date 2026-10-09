@@ -8,6 +8,17 @@ export function isPeriodPopularitySort(value: string): value is PeriodPopularity
   return (PERIOD_POPULARITY_SORTS as readonly string[]).includes(value);
 }
 
+/** A ranking is published only after collecting a complete 7/30 *24h window. */
+export function getPeriodPopularityReadiness(startedAt: string | null, nowMs = Date.now()) {
+  const startedMs = Date.parse(startedAt || '');
+  const ageMs = nowMs - startedMs;
+  const valid = Number.isFinite(startedMs) && ageMs >= 0;
+  return {
+    days7: valid && ageMs >= 7 * DAY_MS,
+    days30: valid && ageMs >= 30 * DAY_MS,
+  };
+}
+
 type MetricRow = { project_id: string; downloads7: number; downloads30: number; likes7: number; likes30: number };
 
 /** Four snapshot rows, built by cron rather than on every public browse request. */

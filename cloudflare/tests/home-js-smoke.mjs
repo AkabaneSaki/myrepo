@@ -530,6 +530,18 @@ for (const sort of ['downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']) {
   assert.match(fragments.homeLayoutRenderScript, new RegExp('value: "' + sort + '"'));
 }
 assert.doesNotMatch(fragments.homeLayoutRenderScript, /data-metric-filter=/);
+// Period sort choices are hidden until the backend reports a full collection window.
+const periodSortSource = fragments.homeLayoutRenderScript.match(/function getBrowseSortOptions\(\) \{[\s\S]*?\n\}/)?.[0];
+assert.ok(periodSortSource);
+const periodSortState = { periodPopularityReady: { days7: false, days30: false } };
+const getPeriodSorts = new Function('state', `${periodSortSource}\nreturn getBrowseSortOptions;`)(periodSortState);
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes']);
+periodSortState.periodPopularityReady.days7 = true;
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes', 'downloads_7d', 'likes_7d']);
+periodSortState.periodPopularityReady.days30 = true;
+assert.deepEqual(getPeriodSorts().map(option => option.value), ['published', 'updated', 'downloads', 'likes', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']);
+assert.match(fragments.homeApiScript, /periodPopularityReady: data\.periodPopularityReady/);
+assert.match(fragments.homeStateScript, /days7: payload\?\.periodPopularityReady\?\.days7 === true/);
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);

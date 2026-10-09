@@ -7,9 +7,26 @@ const tsSource = await readFile(new URL('../src/utils/project-period-popularity.
 const transformed = await transform(tsSource, { loader: 'ts', format: 'esm' });
 const mod = await import('data:text/javascript;base64,' + Buffer.from(transformed.code).toString('base64'));
 const migration = await readFile(new URL('../migrations/0035_project_period_popularity.sql', import.meta.url), 'utf8');
+const trackingMigration = await readFile(new URL('../migrations/0036_project_period_tracking_meta.sql', import.meta.url), 'utf8');
+const DAY_MS = 86_400_000;
+const startedAt = '2026-10-09T12:30:00Z';
+assert.deepEqual(mod.getPeriodPopularityReadiness(null), { days7: false, days30: false });
+assert.deepEqual(mod.getPeriodPopularityReadiness(startedAt, Date.parse(startedAt) + 7 * DAY_MS - 1), { days7: false, days30: false });
+assert.deepEqual(mod.getPeriodPopularityReadiness(startedAt, Date.parse(startedAt) + 7 * DAY_MS), { days7: true, days30: false });
+assert.deepEqual(mod.getPeriodPopularityReadiness(startedAt, Date.parse(startedAt) + 30 * DAY_MS - 1), { days7: true, days30: false });
+assert.deepEqual(mod.getPeriodPopularityReadiness(startedAt, Date.parse(startedAt) + 30 * DAY_MS), { days7: true, days30: true });
+assert.deepEqual(mod.getPeriodPopularityReadiness('not-a-time', Date.parse(startedAt) + 30 * DAY_MS), { days7: false, days30: false });
 const db = new DatabaseSync(':memory:');
 db.exec("PRAGMA foreign_keys=ON; CREATE TABLE projects(id TEXT PRIMARY KEY, status TEXT, is_published INTEGER, visibility INTEGER); CREATE TABLE project_likes(project_id TEXT, user_id TEXT, created_at TEXT, PRIMARY KEY(project_id, user_id), FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE);");
 db.exec(migration);
+db.exec(trackingMigration);
+const trackedTime = db.prepare('SELECT started_at FROM project_period_tracking_meta WHERE id = 1').get().started_at;
+assert.equal(typeof trackedTime, 'string');
+assert.deepEqual(mod.getPeriodPopularityReadiness(trackedTime, Date.parse(trackedTime) + 30 * DAY_MS), { days7: true, days30: true });
+db.exec(trackingMigration);
+assert.equal(db.prepare('SELECT started_at FROM project_period_tracking_meta WHERE id = 1').get().started_at, trackedTime);
+const counts = db.prepare('SELECT (SELECT started_at FROM project_period_tracking_meta WHERE id = 1) AS period_started_at').get();
+assert.equal(counts.period_started_at, trackedTime);
 const project = db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?)');
 for (const id of ['a','b','c','d','e']) project.run(id, 'approved', 1, 1);
 // Duplicate insert and repeated delete must not inflate the daily like delta.

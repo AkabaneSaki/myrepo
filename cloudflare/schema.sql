@@ -369,6 +369,13 @@ CREATE TABLE IF NOT EXISTS project_metric_daily (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS project_period_tracking_meta (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  started_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO project_period_tracking_meta (id, started_at)
+VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
 CREATE TABLE IF NOT EXISTS project_period_popularity (
     sort_mode TEXT PRIMARY KEY,
     project_ids TEXT NOT NULL,
