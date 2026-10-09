@@ -549,6 +549,9 @@ assert.doesNotMatch(fragments.homeModalsScript, /codeCheck\?\.gate === "reject" 
 assert.match(fragments.homeModalsScript, /data-admin-review-submit="approve"/, 'human override uses the existing approval action');
 assert.match(fragments.homeModalsScript, /manualOverrideReason/, 'human override reason must be sent for server validation');
 assert.match(fragments.homeModalsScript, /highFindings\.length/, 'high-risk confirmation shows finding count');
+assert.match(fragments.homeModalsScript, /工具未完成检查 · 待人工复核/, 'processing limit must not be mislabeled a required creator fix');
+assert.match(fragments.homeModalsScript, /检查受限/, 'processing limit must be reported separately from high-risk findings');
+assert.match(fragments.homeModalsScript, /不能证明代码有误，也不能证明安全/, 'reviewer must see that incomplete analysis does not imply a verdict');
 assert.match(fragments.homeLayoutRenderScript, /mobileBaseTagFilter/);
 assert.match(fragments.homeLayoutRenderScript, /mobile-breadcrumb/);
 assert.match(fragments.homeLayoutRenderScript, /getMobileCurrentSortLabel/);
