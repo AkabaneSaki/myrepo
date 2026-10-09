@@ -1146,6 +1146,7 @@ assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: reviewProjectData\.draftRevision/);
 assert.match(homeScript, /reviewerResult: \{ \.\.\.deviceResult, challenge: detail\.deviceCheck\?\.challenge/);
 assert.match(homeScript, /runAdminReviewDeviceCheck\(detail\.deviceCheck\)/);
+assert.match(fragments.homeApiScript, /审核检查器返回了不完整的校验结果/, 'invalid reviewer payload must never reach the approval API');
 assert.doesNotMatch(homeScript, /reviewToken: detail\.reviewToken/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /当前编辑草稿也会一并删除/);
