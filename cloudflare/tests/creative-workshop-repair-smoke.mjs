@@ -121,6 +121,7 @@ function createHarness({ worldbooks: initialWorldbooks, regexes: initialRegexes 
           getCreativeWorkshopRegexIdentity: regex => identityApi.parseCreativeWorkshopRegexId(String(regex?.id || '')),
         };
       }
+      if (specifier === './regex-record') return { readCreativeWorkshopRegexManifest: async () => ({ projects: [], pending: [] }) };
       if (specifier === './install-identity') return identityApi;
       if (specifier === './worldbook') {
         return {

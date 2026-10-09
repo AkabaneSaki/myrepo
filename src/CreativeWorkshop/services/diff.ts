@@ -1,6 +1,7 @@
 import {
   createCreativeWorkshopRegexIdentityResolver,
 } from './install-registry';
+import { readCreativeWorkshopRegexManifest } from './regex-record';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
 import { findCreativeWorkshopInstallLocations } from './worldbook-stage';
 import { formatCreativeWorkshopEntryName } from './project-type';
@@ -230,7 +231,8 @@ export async function getCreativeWorkshopProjectDiff(
   });
 
   const allRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes);
+  const manifest = await readCreativeWorkshopRegexManifest();
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes, [...manifest.projects, ...manifest.pending]);
   const localRegexes = allRegexes
     .filter(regex => {
       const identity = resolveRegexIdentity(regex);

@@ -8,6 +8,7 @@ import {
   getCreativeWorkshopWorldbookInstallEntryKeys,
   setCreativeWorkshopInstallRecord,
 } from './install-registry';
+import { readCreativeWorkshopRegexManifest } from './regex-record';
 import { invalidateCreativeWorkshopProjectCache } from './project-fetch';
 import {
   applyPreparedCreativeWorkshopRegex,
@@ -448,7 +449,8 @@ export async function scanCreativeWorkshopRepairCandidates(options: {
   });
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+  const manifest = await readCreativeWorkshopRegexManifest();
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes, [...manifest.projects, ...manifest.pending]);
   let candidates = Object.entries(grouped).map(([candidateId, candidateRows]) => {
     const entries = candidateRows.map(row => row.entry);
     const name = entries.map(entry => readStringMetadata(entry, 'cw_project_name_display')).find(Boolean) ||
@@ -729,7 +731,8 @@ async function verifyCreativeWorkshopRepair(
   }
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+  const manifest = await readCreativeWorkshopRegexManifest();
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes, [...manifest.projects, ...manifest.pending]);
   const installedRegexCount = regexes.filter(
     regex => resolveRegexIdentity(regex)?.projectId === target.projectId,
   ).length;

@@ -37,6 +37,8 @@
     "check:creative-workshop-install-identity": "node tests/creative-workshop-install-identity-smoke.mjs",
     "check:creative-workshop-install-state": "node tests/creative-workshop-install-state-smoke.mjs",
     "check:creative-workshop-stage": "node tests/creative-workshop-stage-smoke.mjs",
+    "check:creative-workshop-transfer-progress": "node tests/creative-workshop-transfer-progress-smoke.mjs",
+    "check:creative-workshop-progress-ui": "node tests/creative-workshop-progress-ui-smoke.mjs",
     "check:creative-workshop-install-safety": "node tests/creative-workshop-install-safety-smoke.mjs",
     "check:creative-workshop-install-ui": "node tests/creative-workshop-install-ui-smoke.mjs",
     "check:creative-workshop-repair": "node tests/creative-workshop-repair-smoke.mjs",

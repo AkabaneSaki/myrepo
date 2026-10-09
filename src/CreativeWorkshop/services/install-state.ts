@@ -3,6 +3,7 @@ import {
   getCreativeWorkshopBoundWorldbookNames,
 } from './install-registry';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
+import { readCreativeWorkshopRegexManifest } from './regex-record';
 
 
 export type CreativeWorkshopInstalledProject = {
@@ -23,6 +24,8 @@ export type CreativeWorkshopInstalledProject = {
   mixedVersions?: boolean;
   worldbookBound?: boolean;
   regexVersionMismatch?: boolean;
+  regexInstallPending?: boolean;
+  regexRecordWorldbookName?: string | null;
 };
 
 export type CreativeWorkshopInstalledProjectScan = {
@@ -128,7 +131,8 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
   );
 
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+  const manifest = await readCreativeWorkshopRegexManifest(worldbooks.find(row => row.worldbookName === getCharWorldbookNames('current').primary)?.entries || []);
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(regexes, [...manifest.projects, ...manifest.pending]);
   const managedRegexRows = regexes
     .map(regex => ({ regex, identity: resolveRegexIdentity(regex) }))
     .filter(row => Boolean(row.identity));
@@ -138,7 +142,7 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
   );
 
   const projects: CreativeWorkshopInstalledProject[] = [];
-  for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes)]).filter(Boolean)) {
+  for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes), ...manifest.pending.map(record => record.projectId)]).filter(Boolean)) {
     const projectRows = groupedEntries[projectId] || [];
     const projectRegexRows = groupedRegexes[projectId] || [];
     const projectRegexes = projectRegexRows.map(row => row.regex);
@@ -156,13 +160,15 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
       const versions = _.uniq(projectEntries.map(entry =>
         getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version'),
       ));
-      const mixedVersions = firstEntry ? versions.length > 1 : regexVersions.length > 1;
-      const regexVersionMismatch = Boolean(firstEntry && regexVersions.length > 0 &&
+      const pendingRecord = manifest.pending.find(record => record.projectId === projectId);
+      const pendingRegex = Boolean(pendingRecord);
+      const mixedVersions = firstEntry ? versions.length > 1 : pendingRegex || regexVersions.length > 1;
+      const regexVersionMismatch = pendingRegex || Boolean(firstEntry && regexVersions.length > 0 &&
         (regexVersions.length !== 1 || versions.length !== 1 || versions[0] !== regexVersions[0]));
       // Live entries are authoritative; historical registry versions may be stale.
       const localVersion = firstEntry
         ? (versions.length === 1 ? versions[0] : null)
-        : (regexVersions.length === 1 ? regexVersions[0] : null);
+        : (!pendingRegex && regexVersions.length === 1 ? regexVersions[0] : null);
       const legacyProjectName =
         projectEntries
           .map(entry => getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name'))
@@ -179,11 +185,14 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
         name: firstEntry
           ? getCreativeWorkshopWorldbookMetadataString(firstEntry, 'cw_project_name_display') ||
             legacyProjectName || _.get(firstEntry, 'name', '未命名项目')
-          : legacyProjectName || _.get(firstRegex, 'script_name', '未命名项目'),
+          : legacyProjectName || pendingRecord?.projectNameDisplay || _.get(firstRegex, 'script_name', '未命名项目'),
         legacyProjectName,
         localVersion,
         mixedVersions,
         regexVersionMismatch,
+        regexInstallPending: pendingRegex,
+        regexRecordWorldbookName: [...manifest.projects, ...manifest.pending].some(record => record.projectId === projectId)
+          ? getCharWorldbookNames('current').primary || null : null,
         worldbookBound: worldbookName ? currentlyBound.has(worldbookName) : false,
         remoteVersion: null,
         entryCount: projectEntries.length,

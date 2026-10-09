@@ -98,6 +98,7 @@ assert.equal(regexNameApi.getCreativeWorkshopRegexEntryKey({ id: 0 }, 5), 'id:0'
 assert.equal(regexNameApi.getCreativeWorkshopRegexEntryKey({}, 2), 'index:2');
 
 let scriptVariables = {};
+let recordWorldbook = [];
 const registryContext = {
   require(specifier) {
     if (specifier === './install-identity') return identityApi;
@@ -112,11 +113,11 @@ const registryContext = {
     scriptVariables = updater(scriptVariables);
     return scriptVariables;
   },
-  getCharWorldbookNames: () => ({ primary: null, additional: [] }),
+  getCharWorldbookNames: () => ({ primary: 'Records', additional: [] }),
   getChatWorldbookName: () => null,
   getGlobalWorldbookNames: () => [],
-  getWorldbookNames: () => [],
-  getWorldbook: async () => [],
+  getWorldbookNames: () => ['Records'],
+  getWorldbook: async () => structuredClone(recordWorldbook),
 };
 const installRegistryApi = loadCommonJs(
   await compile('src/CreativeWorkshop/services/install-registry.ts'),
@@ -206,6 +207,22 @@ const stageApi = loadCommonJs(await compile('src/CreativeWorkshop/services/world
   getWorldbookNames: () => [], getWorldbook: async () => [],
 }, 'worldbook-stage.ts');
 
+const regexRecordApi = loadCommonJs(await compile('src/CreativeWorkshop/services/regex-record.ts'), {
+  require(specifier) { if (specifier === './install-identity') return identityApi; throw new Error(specifier); },
+  SillyTavern: { getContext: () => ({ characterId: 0, characters: [{ avatar: 'Test Card.png' }] }) },
+  getCharWorldbookNames: () => ({ primary: 'Records', additional: [] }),
+  getWorldbook: async () => structuredClone(recordWorldbook),
+  createWorldbookEntries: async (_, entries) => {
+    const created = structuredClone(entries).map((entry, index) => ({ ...entry, uid: 99 + index }));
+    recordWorldbook = [...recordWorldbook, ...created];
+    return { worldbook: structuredClone(recordWorldbook), new_entries: structuredClone(created) };
+  },
+  updateWorldbookWith: async (_, updater) => {
+    recordWorldbook = structuredClone(updater(structuredClone(recordWorldbook)));
+    return structuredClone(recordWorldbook);
+  },
+}, 'regex-record.ts');
+
 const regexApi = loadCommonJs(
   await compile('src/CreativeWorkshop/services/regex.ts'),
   {
@@ -218,6 +235,7 @@ const regexApi = loadCommonJs(
       }
       if (specifier === './regex-name') return regexNameApi;
       if (specifier === './worldbook-stage') return stageApi;
+      if (specifier === './regex-record') return regexRecordApi;
       throw new Error(`Unexpected require: ${specifier}`);
     },
     console, Promise, Map, Set, Date, JSON,
@@ -237,16 +255,16 @@ const regexApi = loadCommonJs(
 );
 
 await regexApi.installCreativeWorkshopRegex(projectId, undefined, '1.0.0');
-assert.equal(localRegexes.length, 2, 'migration should leave one real regex plus one disabled recovery record');
+assert.equal(localRegexes.length, 1, 'metadata lives in a disabled worldbook entry, not a Regex');
 const migratedRegex = localRegexes.find(regex => regex.id !== projectId);
-const migratedRecord = localRegexes.find(regex => regex.id === projectId);
+const migratedRecord = recordWorldbook[0];
 assert.ok(migratedRegex);
 assert.ok(migratedRecord);
 assert.equal(identityApi.isCreativeWorkshopUuid(migratedRegex.id), true, 'new Workshop content regex ids must be UUIDs');
 assert.equal(String(migratedRegex.id).startsWith('creative_workshop:'), false);
 assert.equal(migratedRegex.id, generatedRegexIds[0], 'legacy encoded ids must migrate to a fresh UUID exactly once');
 assert.equal(migratedRecord.enabled, false);
-assert.equal(migratedRecord.script_name, '[工坊记录] 测试项目（请勿删除）');
+assert.equal(migratedRecord.name, '[工坊记录] 角色正则（禁用）');
 
 let registry = scriptVariables.creative_workshop_install_registry['Test Card'][projectId];
 assert.deepEqual(
@@ -265,7 +283,8 @@ await regexApi.updateCreativeWorkshopRegex(projectId, '1.1.0');
 const updatedRealRegex = localRegexes.find(regex => regex.id !== projectId);
 assert.equal(updatedRealRegex.id, generatedRegexIds[0], 'normal updates must preserve the stable UUID for the same entryKey');
 assert.equal(updatedRealRegex.replace_string, 'new');
-assert.equal(localRegexes.filter(regex => regex.id === projectId).length, 1, 'updates must replace, not duplicate, the recovery record');
+assert.equal(localRegexes.filter(regex => regex.id === projectId).length, 0);
+assert.equal(recordWorldbook.length, 1, 'updates reuse one disabled worldbook record');
 
 registry = scriptVariables.creative_workshop_install_registry['Test Card'][projectId];
 assert.equal(registry.installedVersion, '1.1.0');
@@ -279,12 +298,14 @@ const installStateApi = loadCommonJs(
     require(specifier) {
       if (specifier === './install-registry') return installRegistryApi;
       if (specifier === './install-identity') return identityApi;
+      if (specifier === './regex-record') return regexRecordApi;
       throw new Error(`Unexpected require: ${specifier}`);
     },
     console, Promise, Map, Set, Date, JSON,
     _: lodash,
-    getWorldbookNames: () => [],
-    getWorldbook: async () => [],
+    getCharWorldbookNames: () => ({ primary: 'Records', additional: [] }),
+    getWorldbookNames: () => ['Records'],
+    getWorldbook: async () => structuredClone(recordWorldbook),
     getTavernRegexes: () => localRegexes,
     SillyTavern: {
       getContext: () => ({
@@ -310,6 +331,7 @@ const diffApi = loadCommonJs(
       if (specifier === './project-type') return { formatCreativeWorkshopEntryName: comment => comment };
       if (specifier === './install-identity') return identityApi;
       if (specifier === './regex-name') return regexNameApi;
+      if (specifier === './regex-record') return regexRecordApi;
       throw new Error(`Unexpected require: ${specifier}`);
     },
     console, Promise, Map, Set, Date, JSON,
@@ -356,7 +378,7 @@ await assert.rejects(() => regexApi.updateCreativeWorkshopRegex(projectId, '1.2.
 assert.deepEqual(localRegexes, priorRegexes);
 regexFailure = 'after-save';
 await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');
-regexApi.verifyCreativeWorkshopRegexInstallation(projectId, currentDetail);
+await regexApi.verifyCreativeWorkshopRegexInstallation(projectId, currentDetail);
 const savedId = localRegexes.find(regex => regex.id !== projectId).id;
 regexFailure = null;
 await regexApi.updateCreativeWorkshopRegex(projectId, '1.2.0');

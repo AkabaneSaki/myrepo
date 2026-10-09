@@ -25,7 +25,7 @@ function desiredEntries() {
   });
 }
 
-function createHarness({ stageCount = 10, failSwitch = false, stageThrowAfterSave = false, switchThrowAfterSave = false, corruptStage = false, mutateOld = false, unreadableAfterWrite = false } = {}) {
+function createHarness({ stageCount = 10, failSwitch = false, stageThrowAfterSave = false, switchThrowAfterSave = false, corruptStage = false, mutateOld = false, unreadableAfterWrite = false, normalizeImplicit = false } = {}) {
   const worldbooks = {
     A: Array.from({ length: 10 }, (_, n) => entry(n + 1, 'key-' + n, '1.0.0', 'old:' + n)),
     B: [
@@ -62,6 +62,14 @@ function createHarness({ stageCount = 10, failSwitch = false, stageThrowAfterSav
     createWorldbookEntries: async (name, inputs) => {
       const created = clone(inputs.slice(0, actualStageCount)).map(item => ({ ...item, uid: ++nextUid }));
       worldbooks[name].push(...clone(created));
+      if (normalizeImplicit) worldbooks[name] = worldbooks[name].map(item => ({
+        addMemo: true, matchPersonaDescription: false, matchCharacterDescription: false,
+        matchCharacterPersonality: false, matchCharacterDepthPrompt: false, matchScenario: false,
+        matchCreatorNotes: false, group: '', groupOverride: false, groupWeight: 100,
+        caseSensitive: null, matchWholeWords: null, useGroupScoring: null, automationId: '',
+        ignoreBudget: false, outletName: '', triggers: [], characterFilter: { isExclude: false, names: [], tags: [] },
+        ...item,
+      }));
       writes++;
       if (corruptStage) worldbooks[name].at(-1).name = 'corrupted';
       if (mutateOld) worldbooks[name][0].content = 'manual edit during update';
@@ -88,7 +96,7 @@ function createHarness({ stageCount = 10, failSwitch = false, stageThrowAfterSav
     clone };
 }
 
-for (const options of [{ stageThrowAfterSave: true }, { switchThrowAfterSave: true }]) {
+for (const options of [{ stageThrowAfterSave: true }, { switchThrowAfterSave: true }, { normalizeImplicit: true }]) {
   const h = createHarness(options);
   await h.api.stageAndSwitchCreativeWorkshopWorldbook('B', projectId, '2.0.0', desiredEntries());
   assert.equal(h.worldbooks.B.filter(e => e.extra?.cw_project_id === projectId).length, 10);

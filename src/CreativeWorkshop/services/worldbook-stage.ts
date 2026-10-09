@@ -1,3 +1,4 @@
+import type { CreativeWorkshopTransferProgress } from './project-fetch';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 import type { CreativeWorkshopDesiredWorldbookEntry } from './worldbook-reconcile';
 import { getCreativeWorkshopBoundWorldbookNames } from './install-registry';
@@ -25,6 +26,25 @@ export function matchesCreativeWorkshopPayload(actual: any, expected: any): bool
     matchesCreativeWorkshopPayload(actual[key], expected[key]));
 }
 
+// TavernHelper fills these implicit ST defaults whenever it saves a whole book.
+// Missing and explicit defaults mean the same thing; every other change must fail.
+const WORLD_BOOK_IMPLICIT_DEFAULTS = {
+  addMemo: true, matchPersonaDescription: false, matchCharacterDescription: false,
+  matchCharacterPersonality: false, matchCharacterDepthPrompt: false, matchScenario: false,
+  matchCreatorNotes: false, group: '', groupOverride: false, groupWeight: 100,
+  caseSensitive: null, matchWholeWords: null, useGroupScoring: null, automationId: '',
+  ignoreBudget: false, outletName: '', triggers: [],
+  characterFilter: { isExclude: false, names: [], tags: [] },
+};
+
+export function matchesCreativeWorkshopWorldbookSnapshot(actual: WorldbookEntry | WorldbookEntry[], expected: WorldbookEntry | WorldbookEntry[]): boolean {
+  if (Array.isArray(actual) || Array.isArray(expected)) return Array.isArray(actual) && Array.isArray(expected) &&
+    actual.length === expected.length && actual.every((entry, index) => matchesCreativeWorkshopWorldbookSnapshot(entry, expected[index]));
+  const left = { ...WORLD_BOOK_IMPLICIT_DEFAULTS, ...actual };
+  const right = { ...WORLD_BOOK_IMPLICIT_DEFAULTS, ...expected };
+  return matchesCreativeWorkshopPayload(left, right) && matchesCreativeWorkshopPayload(right, left);
+}
+
 export async function writeAndReadCreativeWorkshopWorldbook(name: string, write: () => Promise<unknown>) {
   let writeError: unknown;
   try { await write(); } catch (error) { writeError = error; }
@@ -45,7 +65,7 @@ function assertUnique(entries: WorldbookEntry[], label: string) {
 function assertSnapshots(actual: WorldbookEntry[], expected: WorldbookEntry[]) {
   for (const entry of expected) {
     const saved = actual.filter(item => uid(item) === uid(entry));
-    if (saved.length !== 1 || !matchesCreativeWorkshopPayload(saved[0], entry) || !matchesCreativeWorkshopPayload(entry, saved[0]))
+    if (saved.length !== 1 || !matchesCreativeWorkshopWorldbookSnapshot(saved[0], entry))
       throw new Error('世界书条目在写入期间被修改或缺失，已停止更新，请重新扫描');
   }
 }
@@ -115,6 +135,7 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
   desired: CreativeWorkshopDesiredWorldbookEntry[],
   legacyName?: string,
   expectedOriginal?: WorldbookEntry[],
+  onProgress?: CreativeWorkshopTransferProgress,
 ) {
   if (!version || !desired.length) throw new Error('新版世界书版本或内容为空，已中止更新');
   if (new Set(desired.map(item => item.stableKey)).size !== desired.length)
@@ -123,12 +144,13 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
   const original = await getWorldbook(worldbookName);
   assertUnique(original, '目标世界书');
   let old = original.filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyName));
-  if (expectedOriginal && (!matchesCreativeWorkshopPayload(old, expectedOriginal) || !matchesCreativeWorkshopPayload(expectedOriginal, old)))
+  if (expectedOriginal && (old.length !== expectedOriginal.length || old.some((entry, index) => !matchesCreativeWorkshopWorldbookSnapshot(entry, expectedOriginal[index]))))
     throw new Error('下载期间旧版条目被修改，已停止更新，请重新扫描');
   if (!old.length) throw new Error('目标世界书中找不到旧版 DLC，无法安全更新');
   assertUnique(old, '旧版世界书');
   if (old.every(entry => !(entry as any).extra?.cw_update_stage &&
       getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_version') === version)) {
+    onProgress?.('worldbook_verify', { source: 'existing' });
     verifyCreativeWorkshopWorldbook(worldbookName, original, projectId, version, desired, legacyName);
     return; // Worldbook phase already passed; retry only the remaining Regex phase.
   }
@@ -143,15 +165,16 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
     }
     assertUnique(unfinished, '上次更新暂存');
     const staleIds = new Set(unfinished.map(uid));
+    onProgress?.('recover');
     const recovery = await writeAndReadCreativeWorkshopWorldbook(worldbookName, () => updateWorldbookWith(worldbookName, entries => {
       for (const staged of unfinished) {
         const matches = entries.filter(entry => uid(entry) === uid(staged));
-        if (matches.length !== 1 || !matchesCreativeWorkshopPayload(matches[0], staged) || !matchesCreativeWorkshopPayload(staged, matches[0]))
+        if (matches.length !== 1 || !matchesCreativeWorkshopWorldbookSnapshot(matches[0], staged))
           throw new Error('暂存条目在恢复期间被修改，不能自动清理');
       }
       for (const previous of liveOld) {
         const matches = entries.filter(entry => uid(entry) === uid(previous));
-        if (matches.length !== 1 || !matchesCreativeWorkshopPayload(matches[0], previous) || !matchesCreativeWorkshopPayload(previous, matches[0]))
+        if (matches.length !== 1 || !matchesCreativeWorkshopWorldbookSnapshot(matches[0], previous))
           throw new Error('旧版条目在恢复期间被修改，已停止清理暂存内容');
       }
       return entries.filter(entry => !staleIds.has(uid(entry)));
@@ -175,9 +198,11 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
     enabled: false,
     extra: { ...(item.payload as any).extra, cw_update_stage: operationId },
   }));
+  onProgress?.('install');
   const staged = await writeAndReadCreativeWorkshopWorldbook(worldbookName,
     () => createWorldbookEntries(worldbookName, input as WorldbookEntry[]));
   const afterStage = staged.entries;
+  onProgress?.('install_verify');
   assertUnique(afterStage, '暂存后的世界书');
   assertSnapshots(afterStage, original.filter(entry => !(entry as any).extra?.cw_update_stage));
   const createdEntries = afterStage.filter(entry => (entry as any).extra?.cw_update_stage === operationId);
@@ -209,16 +234,17 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
 
   // A single worldbook mutation switches old -> new; no cross-worldbook deletion.
   let expectedFinal: WorldbookEntry[] = [];
+  onProgress?.('remove_old');
   const switched = await writeAndReadCreativeWorkshopWorldbook(worldbookName, () => updateWorldbookWith(worldbookName, entries => {
     for (const previous of old) {
       const matches = entries.filter(entry => uid(entry) === uid(previous));
-      if (matches.length !== 1 || !matchesCreativeWorkshopPayload(matches[0], previous) || !matchesCreativeWorkshopPayload(previous, matches[0])) {
+      if (matches.length !== 1 || !matchesCreativeWorkshopWorldbookSnapshot(matches[0], previous)) {
         throw new Error('更新期间旧版条目被修改，已停止替换');
       }
     }
     for (let i = 0; i < newUids.length; i++) {
       const matches = entries.filter(entry => uid(entry) === newUids[i]);
-      if (matches.length !== 1 || !matchesCreativeWorkshopPayload(matches[0], newEntries[i]) || !matchesCreativeWorkshopPayload(newEntries[i], matches[0])) {
+      if (matches.length !== 1 || !matchesCreativeWorkshopWorldbookSnapshot(matches[0], newEntries[i])) {
         throw new Error('新版暂存条目已改变，不能安全切换');
       }
     }
@@ -236,6 +262,7 @@ export async function stageAndSwitchCreativeWorkshopWorldbook(
     return expectedFinal;
   }));
   const installed = switched.entries;
+  onProgress?.('worldbook_verify');
   if (switched.writeError && installed.some(entry => oldUidSet.has(uid(entry)))) throw switched.writeError;
   verifyCreativeWorkshopWorldbook(worldbookName, installed, projectId, version, desired, legacyName, enabledByKey);
   if (installed.length !== expectedFinal.length) throw new Error('世界书最终验收失败：条目数量异常，请重新扫描');

@@ -134,6 +134,7 @@ function addRegexIdentity(
 
 export function createCreativeWorkshopRegexIdentityResolver(
   regexes: Array<Record<string, any>>,
+  worldbookRecords: CreativeWorkshopRegexRecordMetadata[] = [],
 ): (regex: Record<string, any>) => CreativeWorkshopRegexIdentity | null {
   const identities = new Map<string, CreativeWorkshopRegexIdentity>();
   const ambiguousIds = new Set<string>();
@@ -160,6 +161,16 @@ export function createCreativeWorkshopRegexIdentityResolver(
         schemaVersion: 2,
         projectId: record.projectId,
         entryKey: entry.entryKey,
+        installedVersion: entry.installedVersion ?? record.installedVersion ?? null,
+      });
+    }
+  }
+
+  for (const record of worldbookRecords) {
+    for (const entry of record.entries) {
+      if (!presentIds.has(entry.regexId)) continue;
+      addRegexIdentity(identities, ambiguousIds, entry.regexId, {
+        schemaVersion: 2, projectId: record.projectId, entryKey: entry.entryKey,
         installedVersion: entry.installedVersion ?? record.installedVersion ?? null,
       });
     }

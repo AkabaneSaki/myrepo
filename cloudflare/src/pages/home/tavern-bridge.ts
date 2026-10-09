@@ -5,6 +5,87 @@ const PROJECT_DIFF_TIMEOUT_MS = 10000;
 const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
 const pendingRepairRequests = new Map();
+
+const pendingDlcTransfers = new Map();
+const DLC_TRANSFER_PHASES = [
+  ['queued','排队等待'], ['preflight','检查安装环境'], ['download','下载 DLC JSON'],
+  ['validate','检查下载内容'], ['recover','恢复上次中断'], ['install','写入新版'],
+  ['install_verify','验证暂存新版'], ['remove_old','删除旧版并启用新版'],
+  ['worldbook_verify','验证世界书'], ['conflicts','处理原版冲突'],
+  ['regex','安装 Regex'], ['regex_verify','验证 Regex'],
+  ['cleanup','清理已授权的重复副本'], ['registry','保存安装记录'],
+  ['final_verify','最终重新扫描']
+];
+const DLC_TRANSFER_LABELS = Object.fromEntries(DLC_TRANSFER_PHASES);
+function drawDlcProgress(task) {
+  if (!task.overlay?.isConnected) return;
+  const root = task.overlay;
+  root.querySelector('[data-dlc-phase]').textContent = task.failed ? '操作未完成' :
+    task.done ? '安装完整性验收通过' : (DLC_TRANSFER_LABELS[task.phase] || '准备中');
+  let message = task.failed ? '已停止。请保留错误码，重新扫描后再决定是否重试。' :
+    task.done ? '已重新读取并检查最终状态。' : '正在处理当前步骤，请勿强制关闭酒馆。';
+  if (task.phase === 'download' && !task.failed && !task.done) {
+    const p = task.download || {};
+    if (p.source === 'cache') message = '已复用完整的本地下载缓存';
+    else if (p.source === 'none') message = '此项目无独立世界书下载包';
+    else if (Number(p.loadedBytes) > 0) {
+      message = '已接收 ' + Math.round(p.loadedBytes / 1024) + ' KB';
+      if (Number(p.totalBytes) > 0 && p.loadedBytes <= p.totalBytes)
+        message += ' / ' + Math.round(p.totalBytes / 1024) + ' KB（' +
+          Math.floor(p.loadedBytes / p.totalBytes * 100) + '%）';
+    } else message = '正在下载；总大小未知时不显示虚假的百分比';
+  }
+  root.querySelector('[data-dlc-detail]').textContent = message;
+  const list = root.querySelector('[data-dlc-steps]');
+  list.replaceChildren();
+  for (const [phase, label] of DLC_TRANSFER_PHASES) {
+    if (!task.visited.has(phase)) continue;
+    const row = document.createElement('li');
+    const current = phase === task.phase;
+    row.className = 'cw-transfer-step ' + (task.failed && current ? 'is-error' : !task.done && current ? 'is-active' : 'is-done');
+    row.textContent = (task.failed && current ? '✕ ' : !task.done && current ? '◌ ' : '✓ ') + label;
+    list.appendChild(row);
+  }
+  const bar = root.querySelector('[data-dlc-bar]');
+  const bytes = task.download || {};
+  const percent = task.phase === 'download' && !task.failed && Number(bytes.totalBytes) > 0 &&
+    Number(bytes.loadedBytes) <= Number(bytes.totalBytes)
+      ? Math.max(0, Math.min(100, Math.floor(bytes.loadedBytes / bytes.totalBytes * 100))) : null;
+  bar.style.width = percent === null ? '100%' : percent + '%';
+  bar.classList.toggle('is-indeterminate', !task.failed && !task.done && percent === null);
+  bar.classList.toggle('is-error', task.failed);
+  const error = root.querySelector('[data-dlc-error]');
+  error.hidden = !task.error;
+  if (task.error) {
+    root.querySelector('[data-dlc-code]').textContent = task.error.code;
+    root.querySelector('[data-dlc-message]').textContent = task.error.message;
+    root.querySelector('[data-dlc-request]').textContent = task.requestId || '本地请求';
+  }
+}
+function startDlcProgress(projectId, mode) {
+  const html = '<div class="cw-dlc-progress" role="status" aria-live="polite">' +
+    '<strong data-dlc-phase>正在准备</strong><p data-dlc-detail>正在获取下载信息</p>' +
+    '<div class="cw-transfer-track"><span data-dlc-bar class="is-indeterminate"></span></div>' +
+    '<ol data-dlc-steps class="cw-transfer-list"></ol>' +
+    '<section class="cw-transfer-error" data-dlc-error hidden><b>错误码：<code data-dlc-code></code></b>' +
+    '<p data-dlc-message></p><small>请求：<span data-dlc-request></span></small>' +
+    '<button type="button" class="btn btn-outline" data-dlc-copy>复制错误详情</button></section>' +
+    '<p class="cw-transfer-hint">关闭此窗口不会取消安装；可稍后重新扫描实际安装状态。</p></div>';
+  const overlay = openModal(html, mode === 'update' ? 'DLC 更新进度' : 'DLC 安装进度');
+  overlay.classList.add('cw-transfer-modal');
+  const task = { overlay, projectId, mode, phase:'queued', visited:new Set(['queued']),
+    requestId:null, download:null, failed:false, done:false, error:null };
+  overlay.querySelector('[data-dlc-copy]').onclick = () => {
+    if (!task.error) return;
+    const message = task.error.code + ' / ' + task.error.message + ' / ' + (task.requestId || '本地');
+    if (!navigator.clipboard?.writeText) { showToast(message, 'info'); return; }
+    navigator.clipboard.writeText(message).then(() => showToast('错误详情已复制'))
+      .catch(() => showToast(message, 'info'));
+  };
+  drawDlcProgress(task);
+  return task;
+}
+
 const SCRIPT_DEPENDENCY_REGISTRY = new Map(
   (WORKSHOP_CONFIG.scriptDependencies || []).map(item => [
     String(item.key || '').toLowerCase(),
@@ -225,6 +306,44 @@ function syncDiffFromBridge(payload) {
   }
 }
 
+
+function bindDlcProgress(task, requestId) {
+  task.requestId = requestId;
+  pendingDlcTransfers.set(requestId, task);
+  drawDlcProgress(task);
+}
+function advanceDlcProgress(requestId, payload) {
+  const task = pendingDlcTransfers.get(requestId);
+  if (!task || task.done || task.failed || payload?.projectId !== task.projectId ||
+      !DLC_TRANSFER_LABELS[payload?.phase]) return false;
+  task.phase = payload.phase;
+  task.visited.add(payload.phase);
+  if (payload.phase === 'download') task.download = payload;
+  drawDlcProgress(task);
+  return true;
+}
+function completeDlcProgress(requestId, payload, failed = false) {
+  const task = pendingDlcTransfers.get(requestId);
+  if (!task || payload?.projectId !== task.projectId) return false;
+  task.failed = failed;
+  task.done = !failed;
+  if (failed) task.error = {
+    code: String(payload.errorCode || 'CW-' + (task.mode === 'update' ? 'U' : 'I') + '-999'),
+    message: String(payload.message || '操作中断，请重新扫描')
+  };
+  pendingDlcTransfers.delete(requestId);
+  drawDlcProgress(task);
+  return true;
+}
+function failLocalDlcProgress(task, error) {
+  task.failed = true;
+  task.error = {
+    code: 'CW-' + (task.mode === 'update' ? 'U' : 'I') + '-005',
+    message: error?.message || String(error)
+  };
+  drawDlcProgress(task);
+}
+
 function handleBridgeMessage(event) {
   const data = event.data;
   if (!data || data.namespace !== TAVERN_BRIDGE_NAMESPACE || !data.type) {
@@ -260,10 +379,15 @@ function handleBridgeMessage(event) {
     case 'bridge:script-dependencies':
       syncScriptDependenciesFromBridge(data.payload || {});
       break;
+    case 'bridge:operation-progress':
+      advanceDlcProgress(data.requestId, data.payload || {});
+      break;
     case 'bridge:installed-projects':
     case 'bridge:install-result':
     case 'bridge:uninstall-result':
     case 'bridge:update-result':
+      if (data.type === 'bridge:install-result' || data.type === 'bridge:update-result')
+        completeDlcProgress(data.requestId, data.payload || {});
       if (projectId) {
         setProjectPendingAction(projectId, null);
       }
@@ -294,6 +418,7 @@ function handleBridgeMessage(event) {
       dispatchOAuthResult(data.payload || {});
       break;
     case 'bridge:error':
+      const handledDlcError = completeDlcProgress(data.requestId, data.payload || {}, true);
       const handledProjectDiffError = settleProjectDiffRequest(
         data.requestId,
         new Error(data.payload?.message || '更新差异加载失败'),
@@ -310,8 +435,9 @@ function handleBridgeMessage(event) {
         setProjectPendingAction(projectId, null);
         renderApp();
       }
-      if (!handledProjectDiffError && !handledRepairError && !isProjectDiffError) {
-        showToast(data.payload?.message || '酒馆桥接错误', 'error');
+      if (!handledDlcError && !handledProjectDiffError && !handledRepairError && !isProjectDiffError) {
+        showToast((data.payload?.errorCode ? '[' + data.payload.errorCode + '] ' : '') +
+          (data.payload?.message || '酒馆桥接错误'), 'error');
       }
       break;
   }
@@ -343,16 +469,20 @@ async function requestInstallProject(projectId, selection = {}) {
     throw error;
   }
 
-  const installInfo = await fetchProjectInstallInfo(projectId, selection?.projectVersion || null);
-  setProjectPendingAction(projectId, 'install');
-  renderApp();
-  postBridgeMessage('bridge:install-project', {
-    projectId,
-    ...selection,
-    ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
-    ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
-  });
-  return true;
+  const task = startDlcProgress(projectId, 'install');
+  try {
+    const installInfo = await fetchProjectInstallInfo(projectId, selection?.projectVersion || null);
+    const requestId = postBridgeMessage('bridge:install-project', {
+      projectId,
+      ...selection,
+      ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
+      ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+    });
+    bindDlcProgress(task, requestId);
+    setProjectPendingAction(projectId, 'install');
+    renderApp();
+    return true;
+  } catch (error) { failLocalDlcProgress(task, error); throw error; }
 }
 
 function requestUninstallProject(projectId, worldbookName = null) {
@@ -409,20 +539,24 @@ async function confirmProjectUpdate(projectId, projectVersion = null, manageOrig
     throw error;
   }
 
-  const installInfo = await fetchProjectInstallInfo(projectId, projectVersion);
-  const legacyProjectName = getLegacyProjectNameForBridge(projectId);
-  setProjectPendingAction(projectId, 'update');
-  renderApp();
-  postBridgeMessage('bridge:confirm-project-update', {
-    projectId,
-    ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
-    ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
-    manageOriginalConflicts: manageOriginalConflicts === true,
-    approvedDuplicates,
-    ...(worldbookName ? { worldbookName } : {}),
-    ...(legacyProjectName ? { legacyProjectName } : {}),
-  });
-  return true;
+  const task = startDlcProgress(projectId, 'update');
+  try {
+    const installInfo = await fetchProjectInstallInfo(projectId, projectVersion);
+    const legacyProjectName = getLegacyProjectNameForBridge(projectId);
+    const requestId = postBridgeMessage('bridge:confirm-project-update', {
+      projectId,
+      ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
+      ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
+      manageOriginalConflicts: manageOriginalConflicts === true,
+      approvedDuplicates,
+      ...(worldbookName ? { worldbookName } : {}),
+      ...(legacyProjectName ? { legacyProjectName } : {}),
+    });
+    bindDlcProgress(task, requestId);
+    setProjectPendingAction(projectId, 'update');
+    renderApp();
+    return true;
+  } catch (error) { failLocalDlcProgress(task, error); throw error; }
 }
 
 function requestRepairBridge(type, payload = {}) {

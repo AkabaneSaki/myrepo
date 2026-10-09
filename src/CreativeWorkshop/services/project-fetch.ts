@@ -12,6 +12,8 @@ export type CreativeWorkshopProjectDetail = {
 
 export type CreativeWorkshopWorldbookSourceEntry = Partial<WorldbookEntry> & Record<string, any>;
 
+export type CreativeWorkshopTransferProgress = (stage: string, details?: { loadedBytes?: number; totalBytes?: number; source?: string }) => void;
+
 
 type CreativeWorkshopCacheStore = {
   projectDetails?: Record<
@@ -169,23 +171,26 @@ function normalizeWorldbookSourceEntries(raw: unknown): CreativeWorkshopWorldboo
   return [];
 }
 
-export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail: CreativeWorkshopProjectDetail) {
+export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail: CreativeWorkshopProjectDetail, onProgress?: CreativeWorkshopTransferProgress) {
   const projectId = _.get(projectDetail, 'project.id');
   const downloadUrl = _.get(projectDetail, 'project.downloadUrl');
   const projectVersion = _.isString(_.get(projectDetail, 'project.version'))
     ? String(_.get(projectDetail, 'project.version'))
     : null;
   if (!_.isString(downloadUrl) || !downloadUrl) {
+    onProgress?.('download', { source: 'none' });
     return [] as CreativeWorkshopWorldbookSourceEntry[];
   }
 
   if (_.isString(projectId) && projectId) {
     const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
     if (cached) {
+      onProgress?.('download', { source: 'cache' });
       return cached;
     }
   }
 
+  onProgress?.('download', { source: 'network' });
   try {
     const response = await fetch(downloadUrl, {
       cache: 'no-store',
@@ -194,7 +199,40 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
       throw new Error(`获取世界书原始配置失败: ${response.status}`);
     }
 
-    const raw = await response.json();
+    let raw: unknown;
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      const statedTotal = Number(response.headers.get('content-length'));
+      const totalBytes = Number.isSafeInteger(statedTotal) && statedTotal > 0 ? statedTotal : undefined;
+      const decoder = new TextDecoder();
+      const parts: string[] = [];
+      let loadedBytes = 0;
+      let previousBucket = -1;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        loadedBytes += value.byteLength;
+        parts.push(decoder.decode(value, { stream: true }));
+        // Limit messages without pretending that downloaded bytes equal install progress.
+        const bucket = totalBytes
+          ? Math.floor((loadedBytes / totalBytes) * 20)
+          : Math.floor(loadedBytes / (128 * 1024));
+        if (bucket !== previousBucket) {
+          previousBucket = bucket;
+          onProgress?.('download', {
+            loadedBytes,
+            ...(totalBytes && loadedBytes <= totalBytes ? { totalBytes } : {}),
+          });
+        }
+      }
+      parts.push(decoder.decode());
+      onProgress?.('download', { loadedBytes, ...(totalBytes && loadedBytes === totalBytes ? { totalBytes } : {}) });
+      raw = JSON.parse(parts.join(''));
+    } else {
+      raw = await response.json();
+      onProgress?.('download', { source: 'complete' });
+    }
     const normalized = normalizeWorldbookSourceEntries(raw);
     if (_.isString(projectId) && projectId) {
       setCachedWorldbookSource(projectId, downloadUrl, projectVersion, normalized);

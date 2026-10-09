@@ -23,6 +23,7 @@ export type CreativeWorkshopBridgeResponseType =
   | 'bridge:uninstall-result'
   | 'bridge:project-diff'
   | 'bridge:update-result'
+  | 'bridge:operation-progress'
   | 'bridge:repair:scan-result'
   | 'bridge:repair:project-result'
   | 'bridge:oauth:result'

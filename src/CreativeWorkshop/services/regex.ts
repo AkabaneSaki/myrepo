@@ -5,7 +5,6 @@ import {
   type CreativeWorkshopRegexInstallEntry,
 } from './install-registry';
 import {
-  buildCreativeWorkshopRegexRecordPayload,
   isCreativeWorkshopUuid,
 } from './install-identity';
 import { fetchCreativeWorkshopProjectDetail, type CreativeWorkshopProjectDetail } from './project-fetch';
@@ -18,6 +17,7 @@ import {
 import { matchesCreativeWorkshopPayload, findCreativeWorkshopInstallLocations, isCreativeWorkshopProjectEntry } from './worldbook-stage';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 import { compareProjectVersions } from '../../../cloudflare/src/utils/version.js';
+import { readCreativeWorkshopRegexManifest, saveCreativeWorkshopRegexManifest } from './regex-record';
 
 export type CreativeWorkshopPreparedRegexEntry = {
   entry: Record<string, any>;
@@ -62,50 +62,6 @@ function allocateRegexId(occupiedIds: Set<string>): string {
   throw new Error('无法为 Workshop Regex 分配唯一 UUID');
 }
 
-function buildCreativeWorkshopRegexRecord(
-  projectId: string,
-  detail: CreativeWorkshopProjectDetail,
-  entries: CreativeWorkshopRegexInstallEntry[],
-): TavernRegex | null {
-  if (!isCreativeWorkshopUuid(projectId) || entries.length === 0) return null;
-  const installedVersion = detail.project.version || null;
-  const projectName = detail.project.name || '未命名项目';
-
-  return {
-    id: projectId,
-    script_name: `[工坊记录] ${projectName}（请勿删除）`,
-    enabled: false,
-    scope: 'character' as const,
-    find_regex: '(?!)',
-    replace_string: buildCreativeWorkshopRegexRecordPayload({
-      schemaVersion: 1,
-      projectId,
-      projectNameDisplay: projectName,
-      installedVersion,
-      entries: entries.map(entry => ({
-        regexId: entry.regexId,
-        entryKey: entry.entryKey,
-        installedVersion: entry.installedVersion ?? installedVersion,
-      })),
-    }),
-    trim_strings: [],
-    source: {
-      user_input: false,
-      ai_output: false,
-      slash_command: false,
-      world_info: false,
-      reasoning: false,
-    },
-    destination: {
-      display: false,
-      prompt: false,
-    },
-    run_on_edit: false,
-    min_depth: null,
-    max_depth: null,
-  } as unknown as TavernRegex;
-}
-
 function regexPayload(detail: CreativeWorkshopProjectDetail, item: CreativeWorkshopPreparedRegexEntry, id: string, enabled: boolean): TavernRegex {
   const { entry, originalIndex } = item;
   return {
@@ -127,7 +83,7 @@ export async function assertCreativeWorkshopSharedRegexUpdate(projectId: string,
   targetWorldbook: string | null, legacyProjectName?: string, selectedEntryKeys?: string[], approvedRemovalBooks: string[] = []) {
   prepareCreativeWorkshopRegexEntries(detail, selectedEntryKeys);
   const current = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  try { verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, selectedEntryKeys, current); return; }
+  try { await verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, selectedEntryKeys, current); return; }
   catch (error) {
     // A differing shared Regex may only be replaced when every other active installation agrees.
     for (const name of await findCreativeWorkshopInstallLocations(projectId, legacyProjectName)) {
@@ -148,13 +104,14 @@ export async function applyPreparedCreativeWorkshopRegex(
   const installedVersion = detail.project.version || null;
   const registryEntries: CreativeWorkshopRegexInstallEntry[] = [];
   const before = getTavernRegexes({ scope: 'character', enable_state: 'all' });
+  const manifest = await readCreativeWorkshopRegexManifest();
   let alreadyInstalled = false;
   try {
-    verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, regexEntries.map(item => item.entryKey), before);
+    await verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, regexEntries.map(item => item.entryKey), before);
     alreadyInstalled = true;
   } catch { /* The saved content differs; proceed through the guarded write below. */ }
   if (alreadyInstalled) {
-    const resolve = createCreativeWorkshopRegexIdentityResolver(before);
+    const resolve = createCreativeWorkshopRegexIdentityResolver(before, [...manifest.projects, ...manifest.pending]);
     setCreativeWorkshopInstallRecord(projectId, { installedVersion, regexEntries: before.flatMap(regex => {
       const identity = resolve(regex);
       return identity && matchesProjectIdentity(projectId, identity.projectId, legacyProjectName)
@@ -166,9 +123,33 @@ export async function applyPreparedCreativeWorkshopRegex(
   let expectedList: TavernRegex[] = [];
   let writeError: unknown;
 
+  const resolveBefore = createCreativeWorkshopRegexIdentityResolver(before, [...manifest.projects, ...manifest.pending]);
+  const occupied = new Set(before.map(regex => getCreativeWorkshopRegexId(regex)));
+  const pendingEntries = regexEntries.map(item => {
+    const existing = before.filter(regex => {
+      const identity = resolveBefore(regex);
+      return identity && matchesProjectIdentity(projectId, identity.projectId, legacyProjectName) && identity.entryKey === item.entryKey;
+    });
+    if (existing.length > 1) throw new Error('DLC 正则身份重复，已停止更新');
+    const currentVersion = existing.length ? resolveBefore(existing[0])!.installedVersion : installedVersion;
+    const order = compareProjectVersions(installedVersion, currentVersion);
+    if (order === null || order === -1) throw new Error('无法确认角色正则版本或远端版本较旧，已停止写入');
+    const regexId = existing.length && isCreativeWorkshopUuid(existing[0].id) ? existing[0].id : allocateRegexId(occupied);
+    occupied.add(regexId);
+    return { regexId, entryKey: item.entryKey, installedVersion };
+  });
+  const pendingRecord = { schemaVersion: 1 as const, projectId, projectNameDisplay: detail.project.name || '未命名项目', installedVersion, entries: pendingEntries };
+  const pendingManifest = await saveCreativeWorkshopRegexManifest(value => {
+    for (const record of [...value.projects, ...value.pending].filter(record => matchesProjectIdentity(projectId, record.projectId, legacyProjectName))) {
+      const order = compareProjectVersions(installedVersion, record.installedVersion);
+      if (order === null || order === -1) throw new Error('主世界书中的正则版本未知或更高，已停止写入，避免降级');
+    }
+    return { ...value, pending: [...value.pending.filter(record => record.projectId !== projectId), pendingRecord] };
+  });
+
   try { await updateTavernRegexesWith(
     regexes => {
-      const resolveIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+      const resolveIdentity = createCreativeWorkshopRegexIdentityResolver(regexes, [...pendingManifest.projects, ...pendingManifest.pending]);
       const existingByEntryKey = new Map<string, Record<string, any>>();
       const duplicateEntryKeys = new Set<string>();
 
@@ -197,18 +178,12 @@ export async function applyPreparedCreativeWorkshopRegex(
       });
 
       const occupiedIds = new Set(filtered.map(regex => getCreativeWorkshopRegexId(regex)));
-      if (isCreativeWorkshopUuid(projectId) && occupiedIds.has(projectId)) {
-        throw new Error('存在与 Workshop 项目 UUID 冲突的 Regex ID，无法安全建立工坊记录');
-      }
-      if (isCreativeWorkshopUuid(projectId)) occupiedIds.add(projectId);
 
       const appended = regexEntries.map(item => {
         const { entry, entryKey } = item;
         const existing = existingByEntryKey.get(entryKey);
-        const existingId = existing ? getCreativeWorkshopRegexId(existing) : '';
-        const id = isCreativeWorkshopUuid(existingId) && existingId !== projectId
-          ? existingId
-          : allocateRegexId(occupiedIds);
+        const id = pendingEntries.find(record => record.entryKey === entryKey)!.regexId;
+        if (occupiedIds.has(id)) throw new Error('角色正则 UUID 已被其他内容使用，已停止写入');
         occupiedIds.add(id);
         registryEntries.push({
           regexId: id,
@@ -219,8 +194,7 @@ export async function applyPreparedCreativeWorkshopRegex(
         return regexPayload(detail, item, id, typeof existing?.enabled === 'boolean' ? existing.enabled : !entry.disabled);
       });
 
-      const record = buildCreativeWorkshopRegexRecord(projectId, detail, registryEntries);
-      expectedRegexes = record ? [...appended, record] : appended;
+      expectedRegexes = appended;
       expectedList = [...filtered, ...expectedRegexes];
       return expectedList;
     },
@@ -237,7 +211,14 @@ export async function applyPreparedCreativeWorkshopRegex(
     if (saved.length !== 1 || !matchesCreativeWorkshopPayload(saved[0], expected))
       throw new Error('部分完成：角色正则保存后验收失败，请重新扫描并重试');
   }
-  verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, regexEntries.map(item => item.entryKey));
+  await saveCreativeWorkshopRegexManifest(value => {
+    if (JSON.stringify(value.pending.find(record => record.projectId === projectId)) !== JSON.stringify(pendingRecord))
+      throw new Error('角色正则待验收记录已改变，已停止完成安装');
+    return { ...value,
+      projects: [...value.projects.filter(record => !matchesProjectIdentity(projectId, record.projectId, legacyProjectName)), pendingRecord],
+      pending: value.pending.filter(record => record.projectId !== projectId) };
+  });
+  await verifyCreativeWorkshopRegexInstallation(projectId, detail, legacyProjectName, regexEntries.map(item => item.entryKey));
 
   setCreativeWorkshopInstallRecord(projectId, {
     installedVersion,
@@ -258,10 +239,11 @@ export async function installCreativeWorkshopRegex(
 }
 
 export async function uninstallCreativeWorkshopRegex(projectId: string, legacyProjectName?: string) {
+  const manifest = await readCreativeWorkshopRegexManifest();
   let writeError: unknown;
   try { await updateTavernRegexesWith(
     regexes => {
-      const resolveIdentity = createCreativeWorkshopRegexIdentityResolver(regexes);
+      const resolveIdentity = createCreativeWorkshopRegexIdentityResolver(regexes, [...manifest.projects, ...manifest.pending]);
       return regexes.filter(regex => {
         const record = getCreativeWorkshopRegexRecordMetadata(regex);
         if (record && matchesProjectIdentity(projectId, record.projectId, legacyProjectName)) return false;
@@ -275,9 +257,12 @@ export async function uninstallCreativeWorkshopRegex(projectId: string, legacyPr
   try { result = getTavernRegexes({ scope: 'character', enable_state: 'all' }); } catch {
     throw new Error('状态未知：无法重新读取角色正则，请重新扫描后再操作');
   }
-  const resolve = createCreativeWorkshopRegexIdentityResolver(result);
+  const resolve = createCreativeWorkshopRegexIdentityResolver(result, [...manifest.projects, ...manifest.pending]);
   if (result.some(regex => matchesProjectIdentity(projectId, resolve(regex)?.projectId || getCreativeWorkshopRegexRecordMetadata(regex)?.projectId, legacyProjectName)))
     throw new Error('部分完成：角色正则仍然存在，请重新扫描并重试卸载');
+  if ([...manifest.projects, ...manifest.pending].some(record => matchesProjectIdentity(projectId, record.projectId, legacyProjectName))) await saveCreativeWorkshopRegexManifest(value => ({ ...value,
+    projects: value.projects.filter(record => !matchesProjectIdentity(projectId, record.projectId, legacyProjectName)),
+    pending: value.pending.filter(record => !matchesProjectIdentity(projectId, record.projectId, legacyProjectName)) }));
   setCreativeWorkshopInstallRecord(projectId, { regexEntries: [] });
   return result;
 }
@@ -294,7 +279,7 @@ export async function updateCreativeWorkshopRegex(
 
 
 /** Fresh-read verification. Only the actual SillyTavern regex list can confirm success. */
-export function verifyCreativeWorkshopRegexInstallation(
+export async function verifyCreativeWorkshopRegexInstallation(
   projectId: string,
   detail: CreativeWorkshopProjectDetail,
   legacyProjectName?: string,
@@ -303,7 +288,8 @@ export function verifyCreativeWorkshopRegexInstallation(
 ) {
   const expected = prepareCreativeWorkshopRegexEntries(detail, selectedEntryKeys);
   const regexes = savedRegexes || getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolve = createCreativeWorkshopRegexIdentityResolver(regexes);
+  const manifest = await readCreativeWorkshopRegexManifest();
+  const resolve = createCreativeWorkshopRegexIdentityResolver(regexes, [...manifest.projects, ...manifest.pending]);
   const actual = regexes
     .map(regex => ({ regex, identity: resolve(regex) }))
     .filter(row => row.identity && matchesProjectIdentity(projectId, row.identity.projectId, legacyProjectName));
@@ -322,10 +308,11 @@ export function verifyCreativeWorkshopRegexInstallation(
       throw new Error('Regex 验收失败：版本、内容或配置不一致，请重新扫描后重试');
     }
   }
-  const records = regexes.filter(regex => matchesProjectIdentity(projectId, getCreativeWorkshopRegexRecordMetadata(regex)?.projectId, legacyProjectName));
-  const recordPayload = buildCreativeWorkshopRegexRecord(projectId, detail, actual.map(row => ({
-    regexId: row.regex.id, entryKey: row.identity!.entryKey, installedVersion: version,
-  })));
-  if (recordPayload ? records.length !== 1 || !matchesCreativeWorkshopPayload(records[0], recordPayload) : records.length !== 0)
-    throw new Error('角色正则的工坊记录缺失、重复或设置异常，无法确认安装版本');
+  if (manifest.pending.some(record => matchesProjectIdentity(projectId, record.projectId, legacyProjectName)))
+    throw new Error('角色正则写入尚未完成验收，请重新扫描后重试');
+  const records = manifest.projects.filter(record => matchesProjectIdentity(projectId, record.projectId, legacyProjectName));
+  if (expected.length && (records.length !== 1 || records[0].installedVersion !== version ||
+      records[0].entries.length !== actual.length || records[0].entries.some(entry =>
+        !actual.some(row => row.regex.id === entry.regexId && row.identity!.entryKey === entry.entryKey && entry.installedVersion === version))))
+    throw new Error('主世界书中的角色正则记录不一致，无法确认安装版本');
 }

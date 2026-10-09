@@ -1361,6 +1361,29 @@ button.discover-card-stat:disabled { cursor:default; opacity:.58; }
 .workshop-update-hub-section strong { color:#ece9e2; }
 .workshop-update-hub-section small { color:#8f8b84; }
 .workshop-update-hub-ok { display:flex !important; grid-auto-flow:column; align-items:center; gap:6px !important; color:#86b291; font-size:.78rem; }
+
+.cw-transfer-modal .modal-content { width:min(510px,calc(100vw - 24px)); }
+.cw-dlc-progress { display:grid; gap:12px; color:#ddd9d2; }
+.cw-dlc-progress > strong { font-size:1rem; }
+.cw-dlc-progress p { margin:0; line-height:1.55; font-size:.82rem; }
+.cw-transfer-track { height:7px; overflow:hidden; border-radius:5px; background:rgba(255,255,255,.1); }
+.cw-transfer-track > span { display:block; height:100%; background:#9bbd9b; transition:width .18s; transform-origin:left; }
+.cw-transfer-track > span.is-indeterminate { width:38% !important; animation:cw-transfer-indeterminate 1.3s ease-in-out infinite alternate; }
+.cw-transfer-track > span.is-error { background:#d68585; animation:none; }
+@keyframes cw-transfer-indeterminate { from { transform:translateX(0); } to { transform:translateX(165%); } }
+.cw-transfer-list { display:grid; gap:6px; max-height:230px; overflow:auto; list-style:none; padding:0; margin:0; }
+.cw-transfer-step { padding:6px 9px; border-radius:6px; background:rgba(255,255,255,.035); color:#aaa6a1; font-size:.79rem; }
+.cw-transfer-step.is-active { background:rgba(190,164,125,.12); color:#e9cd9a; font-weight:600; }
+.cw-transfer-step.is-done { color:#9fc4a6; }
+.cw-transfer-step.is-error { background:rgba(197,95,95,.12); color:#efaaaa; font-weight:700; }
+.cw-transfer-error { display:grid; gap:9px; border:1px solid rgba(220,111,111,.45); border-radius:8px; padding:12px; background:rgba(159,68,68,.085); overflow-wrap:anywhere; }
+.cw-transfer-error[hidden] { display:none; }
+.cw-transfer-error code { color:#f2aaaa; }
+.cw-transfer-error small { color:#c1b8b5; }
+.cw-transfer-error .btn { justify-self:start; }
+.cw-transfer-hint { color:#aaa6a1; font-size:.72rem !important; }
+@media (prefers-reduced-motion:reduce) { .cw-transfer-track > span.is-indeterminate { animation:none; } }
+
 .dlc-update-center { display:grid; gap:14px; }
 .dlc-update-center-head { display:grid; gap:4px; padding:12px 13px; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.025); }
 .dlc-update-center-head strong { color:#ebe9e3; font-size:.9rem; }

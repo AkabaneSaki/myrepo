@@ -401,6 +401,8 @@ function normalizeInstalledProject(project) {
     installKey: project.installKey || JSON.stringify([installedProjectId, project.worldbookName || null]),
     mixedVersions: Boolean(project.mixedVersions),
     regexVersionMismatch: Boolean(project.regexVersionMismatch),
+    regexInstallPending: Boolean(project.regexInstallPending),
+    regexRecordWorldbookName: project.regexRecordWorldbookName || null,
     worldbookBound: project.worldbookBound !== false,
   };
 }
