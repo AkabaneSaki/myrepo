@@ -4,6 +4,11 @@ const TOKEN_KEY = 'creative_workshop_token';
 const USER_KEY = 'creative_workshop_user';
 const DEFAULT_SORT_MODE = 'discover';
 const CONTENT_FONT_KEY = 'creative_workshop_content_font_v1';
+const CATALOG_LAYOUT_KEY = 'creative_workshop_catalog_layout_v1';
+function readSavedCatalogLayout() {
+  try { return localStorage.getItem(CATALOG_LAYOUT_KEY) === 'list' ? 'list' : 'grid'; }
+  catch { return 'grid'; }
+}
 const DEFAULT_CONTENT_FONT = 'noto-sans';
 const CONTENT_FONT_OPTIONS = [
   { value: 'wenkai', label: '霞鹜文楷', family: '\"LXGW WenKai Lite\", \"Microsoft YaHei\", sans-serif', stylesheets: [] },
@@ -135,6 +140,7 @@ const state = {
   editorRecommendationsRequestToken: 0,
   myRecommendedProjectIds: [],
   viewMode: 'discover',
+  catalogLayout: readSavedCatalogLayout(),
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
   sortMode: DEFAULT_SORT_MODE,

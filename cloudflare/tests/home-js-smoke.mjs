@@ -67,6 +67,25 @@ for (const [name, script] of Object.entries(fragments)) {
   new Function(script);
 }
 
+// Catalog layout is a display choice; the existing card renderer and pagination stay shared.
+const catalogLayoutTestState = { catalogLayout: 'list', filterRequestPending: false, searchKeyword: '' };
+const catalogToggleSource = fragments.homeLayoutRenderScript.match(/function renderCatalogLayoutToggle\(\) \{[\s\S]*?\n\}/)?.[0];
+const catalogGridSource = fragments.homeLayoutRenderScript.match(/function renderProjectsGrid\(projects\) \{[\s\S]*?\n\}/g)?.at(-1);
+assert.ok(catalogToggleSource && catalogGridSource);
+const catalogLayoutTestUi = new Function(
+  'state', 'getActivePublicTags', 'renderProjectCard',
+  `${catalogToggleSource}\n${catalogGridSource}\nreturn { renderCatalogLayoutToggle, renderProjectsGrid };`,
+)(
+  catalogLayoutTestState, () => [],
+  project => `<article class="project-card">${project.name}</article>`,
+);
+assert.match(catalogLayoutTestUi.renderCatalogLayoutToggle(), /data-catalog-layout="list" class="active"/);
+assert.match(catalogLayoutTestUi.renderProjectsGrid([{ name: 'test-work' }]), /class="projects-grid catalog-layout--list"/);
+catalogLayoutTestState.catalogLayout = 'grid';
+assert.match(catalogLayoutTestUi.renderCatalogLayoutToggle(), /data-catalog-layout="grid" class="active"/);
+assert.match(catalogLayoutTestUi.renderProjectsGrid([{ name: 'test-work' }]), /class="projects-grid catalog-layout--grid"/);
+assert.match(fragments.homeAppActionsScript, /localStorage\.setItem\(CATALOG_LAYOUT_KEY, nextLayout\)/);
+
 // A browse shelf refresh must not zero out editor picks absent from that shelf.
 const statsSyncSource = fragments.homeStateScript.match(/function syncProjectStats\(projects, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(statsSyncSource, 'syncProjectStats must remain testable');

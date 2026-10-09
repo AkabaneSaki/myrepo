@@ -1,6 +1,15 @@
 export const homeAppActionsScript = String.raw`
   function bindStaticActions(filteredProjects) {
     bindDailyRandomDrawEntry();
+    document.querySelectorAll('[data-catalog-layout]').forEach(button => {
+      button.onclick = () => {
+        const nextLayout = button.dataset.catalogLayout;
+        if ((nextLayout !== 'grid' && nextLayout !== 'list') || nextLayout === state.catalogLayout) return;
+        state.catalogLayout = nextLayout;
+        try { localStorage.setItem(CATALOG_LAYOUT_KEY, nextLayout); } catch {}
+        renderApp();
+      };
+    });
     const loginBtn = document.getElementById('loginBtn');
     const localAdminLoginBtn = document.getElementById('localAdminLoginBtn');
     const logoutBtn = document.getElementById('logoutBtn');
