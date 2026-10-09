@@ -1768,4 +1768,45 @@ export const homeShellStyles = String.raw`
     border-radius:14px;
   }
 }
+
+/* Optional catalog list: do not change the featured/discover shelves. */
+.catalog-layout-toolbar { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin:12px 0 0; }
+.catalog-layout-toolbar > span { color:var(--cw-text-secondary); font-size:.72rem; }
+.catalog-layout-switch { display:inline-flex; gap:2px; padding:3px; border:1px solid rgba(255,255,255,.09); border-radius:9px; background:#1b1c1f; }
+.catalog-layout-switch button { min-height:34px; display:flex; align-items:center; gap:6px; padding:0 11px; border:0; border-radius:6px; background:transparent; color:var(--cw-text-secondary); font-size:.74rem; cursor:pointer; }
+.catalog-layout-switch button:hover { color:var(--cw-text-primary); background:rgba(255,255,255,.055); }
+.catalog-layout-switch button.active { color:#ead4b4; background:rgba(190,164,125,.16); }
+.catalog-layout-switch button:focus-visible { outline:2px solid #c4a87f; outline-offset:2px; }
+.projects-grid.catalog-layout--list { grid-template-columns:minmax(0,1fr); grid-auto-rows:auto; gap:8px; margin-top:10px; }
+.projects-grid.catalog-layout--list .project-card { display:grid; grid-template-columns:136px minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr); min-height:136px; height:auto; overflow:visible; border-radius:9px; }
+.projects-grid.catalog-layout--list .card-cover-wrap { grid-column:1; grid-row:1 / 4; width:136px; height:136px; border-radius:8px 0 0 8px; }
+.projects-grid.catalog-layout--list .card-cover,
+.projects-grid.catalog-layout--list .card-text-preview { width:100%; height:100%; aspect-ratio:1/1; border:0; }
+.projects-grid.catalog-layout--list .card-text-preview { padding:10px; }
+.projects-grid.catalog-layout--list .card-text-preview p { -webkit-line-clamp:3; line-clamp:3; font-size:.73rem; }
+.projects-grid.catalog-layout--list .card-head { grid-column:2; grid-row:1; height:25px; padding:2px 8px 0 11px; border:0; background:transparent; }
+.projects-grid.catalog-layout--list .card-title-row { grid-column:2; grid-row:2; padding:2px 11px 5px; border:0; background:transparent; }
+.projects-grid.catalog-layout--list .project-name { height:auto; min-height:0; max-height:none; line-height:1.34; font-size:.91rem; text-align:left; }
+.projects-grid.catalog-layout--list .card-content { grid-column:2; grid-row:3; padding:2px 11px 8px; gap:5px; }
+.projects-grid.catalog-layout--list .project-tags { max-height:calc(1.7em * 2 + 5px); gap:4px; overflow:hidden; }
+.projects-grid.catalog-layout--list .project-tags .tag { padding:1px 5px; border-radius:5px; background:rgba(255,255,255,.055); color:#aaa8a3; font-size:.69rem; line-height:1.65; }
+.projects-grid.catalog-layout--list .card-status-line { margin:0; }
+.projects-grid.catalog-layout--list .card-footer { flex-wrap:wrap; gap:4px 8px; min-height:0; margin-top:auto; padding:3px 0 0; border:0; }
+.projects-grid.catalog-layout--list .card-signals { gap:8px; }
+.projects-grid.catalog-layout--list .card-footer .action-btn { min-height:30px; }
+.projects-grid.catalog-layout--list .card-art-badge { top:6px; left:6px; }
+@media (max-width:640px) {
+  .catalog-layout-toolbar { margin-top:9px; }
+  .catalog-layout-switch button { min-height:36px; }
+  .projects-grid.catalog-layout--list { gap:7px; }
+  .projects-grid.catalog-layout--list .project-card { grid-template-columns:108px minmax(0,1fr); min-height:120px; }
+  .projects-grid.catalog-layout--list .card-cover-wrap { width:108px; height:108px; }
+  .projects-grid.catalog-layout--list .card-head { height:24px; padding-left:9px; }
+  .projects-grid.catalog-layout--list .card-title-row { padding:2px 9px 3px; }
+  .projects-grid.catalog-layout--list .project-name { font-size:.81rem; }
+  .projects-grid.catalog-layout--list .card-content { padding:2px 9px 7px; gap:3px; }
+  .projects-grid.catalog-layout--list .project-tags { max-height:calc(1.55em * 2 + 6px); }
+  .projects-grid.catalog-layout--list .project-tags .tag { font-size:.64rem; }
+  .projects-grid.catalog-layout--list .card-footer .action-btn { min-height:29px; padding:0 7px; }
+}
 `;
