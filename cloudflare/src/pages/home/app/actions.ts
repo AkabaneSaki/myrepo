@@ -1,6 +1,7 @@
 export const homeAppActionsScript = String.raw`
   function bindStaticActions(filteredProjects) {
     bindDailyRandomDrawEntry();
+    bindInstalledManagerActions();
     document.querySelectorAll('[data-catalog-layout]').forEach(button => {
       button.onclick = () => {
         const nextLayout = button.dataset.catalogLayout;
@@ -333,7 +334,10 @@ export const homeAppActionsScript = String.raw`
       checkbox.addEventListener('change', event => { void setInstalledProjectsView(event.target.checked); });
     }
     if (mobileInstalledProjectsBtn) {
-      mobileInstalledProjectsBtn.onclick = () => { void setInstalledProjectsView(!state.showSubscribedAndInstalledProjects); };
+      mobileInstalledProjectsBtn.onclick = () => {
+        state.installedManagerTab = 'installed';
+        void setInstalledProjectsView(true);
+      };
     }
 
     if (sortMenuTrigger && sortMenu) {

@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/Creativ
 const compiled = new Map();
 for (const path of ['bridge/host', 'bridge/protocol', ...['worldbook', 'worldbook-stage', 'worldbook-normalize',
   'worldbook-reconcile', 'project-type', 'regex', 'regex-name', 'install-registry', 'install-identity',
-  'install-state', 'original-conflicts', 'regex-record'].map(name => 'services/' + name)]) {
+  'install-state', 'original-conflicts', 'regex-record', 'installed-transfer'].map(name => 'services/' + name)]) {
   compiled.set(resolve(root, path + '.ts'), ts.transpileModule(await readFile(resolve(root, path + '.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText);
@@ -48,7 +48,7 @@ function harness(initial = detail('1.0.0')) {
     try { await new Promise(resolve => setTimeout(resolve, 1)); return await task(); } finally { h.activeWrites--; }
   };
   const globals = {
-    _: lodash, crypto: webcrypto, setTimeout, clearTimeout, console: { info() {}, warn() {}, error() {} },
+    _: lodash, crypto: webcrypto, structuredClone, setTimeout, clearTimeout, console: { info() {}, warn() {}, error() {} },
     getScriptId: () => 'script', getCurrentCharacterName: () => 'card', getVariables: () => clone(h.variables),
     updateVariablesWith: updater => { h.variables = clone(updater(clone(h.variables))); return clone(h.variables); },
     getCharWorldbookNames: () => ({ primary: h.bound[0] || null, additional: h.bound.slice(1) }),
@@ -524,6 +524,103 @@ for (const [sourceLabel, raw] of [
   assert.equal(h.regexes[0].destination.display, true);
   assert.equal(h.regexes[0].destination.prompt, true);
   assert.equal((await h.load('regex').verifyCreativeWorkshopRegexInstallation(projectId, next)), undefined);
+}
+
+
+// Transfer preserves all non-DLC entries and character Regex, changes only the
+// selected source worldbook, and re-reads the destination before removing source.
+{
+  const h = harness(detail('1.0.0'));
+  const tracked = {uid:17,name:'DLC',content:'content',enabled:true,
+    extra:{cw_project_id:projectId,cw_project_version:'1.0.0',cw_entry_key:'1'}};
+  h.books.A=[tracked,{uid:18,name:'User note',content:'private',enabled:true,extra:{}}];
+  h.books.B=[{uid:2,name:'Other DLC',content:'other',enabled:true,extra:{}}];
+  h.regexes=[{id:'character-rx',script_name:'user regex',enabled:true}];
+  const beforeRegexes=structuredClone(h.regexes);
+  const beforeUnrelated=structuredClone(h.books.B[0]);
+  await h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B');
+  assert.equal(h.books.A.length,1);
+  assert.equal(h.books.A[0].name,'User note');
+  assert.equal(h.books.B.length,2);
+  assert.deepEqual(h.books.B[0],beforeUnrelated);
+  assert.equal(h.books.B[1].content,tracked.content);
+  assert.equal(h.books.B[1].enabled,true);
+  assert.equal(Boolean(h.books.B[1].extra.cw_transfer_stage),false);
+  assert.notEqual(h.books.B[1].uid,2);
+  assert.deepEqual(h.regexes,beforeRegexes);
+  assert.equal(h.regexWrites,0,'transfer must never write character Regex');
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B'),/没有此 DLC/,
+  );
+}
+{
+  const h=harness(detail('1.0.0'));
+  h.books.A=[{uid:17,enabled:true,content:'DLC',extra:{cw_project_id:projectId,cw_entry_key:'1'}}];
+  h.books.B=[{uid:20,enabled:true,content:'same project',extra:{cw_project_id:projectId,cw_entry_key:'1'}}];
+  const before=structuredClone(h.books);
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B'),/已包含此 DLC/,
+  );
+  assert.deepEqual(h.books,before,'duplicate destination must be rejected without writes');
+}
+{
+  const h=harness(detail('1.0.0'));
+  h.books.A=[{uid:17,enabled:true,content:'DLC',extra:{cw_project_id:projectId,cw_entry_key:'1'}}];
+  const before=structuredClone(h.books);
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','Disabled'),
+    /仅允许在当前角色已绑定/,
+  );
+  assert.deepEqual(h.books,before,'unbound destination is never mutated');
+}
+{
+  const h=harness(detail('1.0.0',true));
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B'),
+    /Regex-only/,
+  );
+  assert.equal(h.worldbookWrites,0,'Regex-only transfer must not write worldbooks');
+}
+{
+  const h=harness(detail('1.0.0'));
+  h.books.A=[{uid:17,enabled:true,content:'DLC',extra:{cw_project_id:projectId,cw_entry_key:'1'}}];
+  const sourceBefore=structuredClone(h.books.A);
+  let once=false;
+  h.afterWorldbookWrite=()=>{ if (!once){once=true;h.books.A[0].content='edited by user';} };
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B'),
+    /来源世界书.*变化/,
+  );
+  assert.equal(h.books.A.length,1,'source is never removed after concurrent modification');
+  assert.notEqual(h.books.A[0].content,sourceBefore[0].content);
+}
+
+{
+  const h=harness(detail('1.0.0'));
+  h.books.A=[{uid:17,enabled:true,content:'legacy',extra:{cw_project_id:projectId}}];
+  await assert.rejects(
+    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','B'),
+    /缺少唯一的现代条目身份/,
+  );
+  assert.equal(h.worldbookWrites,0,'unidentified legacy content must not be moved');
+}
+
+// Bridge transfer stays serialized and does not run legacy Regex-migration writes.
+{
+  const h=harness(detail('1.0.0'));
+  h.books.A=[{uid:17,name:'DLC',enabled:true,content:'moved through bridge',
+    extra:{cw_project_id:projectId,cw_project_version:'1.0.0',cw_entry_key:'key:one'}}];
+  h.books.B=[];
+  const reply=await h.send('bridge:transfer-installed-worldbook',{
+    projectId,sourceWorldbookName:'A',targetWorldbookName:'B',
+  });
+  assert.equal(reply.type,'bridge:transfer-installed-result');
+  assert.equal(reply.payload.complete,true);
+  assert.equal(reply.payload.projects.some(item => item.projectId===projectId &&
+    item.worldbookName==='B'),true);
+  assert.equal(h.books.A.length,0);
+  assert.equal(h.books.B.length,1);
+  assert.equal(h.regexWrites,0);
 }
 
 console.log('CreativeWorkshop actual-read install/update/uninstall safety and recovery: ok');

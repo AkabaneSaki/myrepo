@@ -20,6 +20,7 @@ import {
   verifyCreativeWorkshopApprovedDuplicateState,
 } from '../services/worldbook';
 import { createBridgeMessage, isCreativeWorkshopBridgeMessage } from './protocol';
+import { transferCreativeWorkshopInstalledWorldbook } from '../services/installed-transfer';
 import { migrateCreativeWorkshopLegacyRegexRecords } from '../services/regex-record';
 
 type HostOption = {
@@ -348,6 +349,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const isProjectMutation =
       actionType === 'bridge:install-project' ||
       actionType === 'bridge:uninstall-project' ||
+      actionType === 'bridge:transfer-installed-worldbook' ||
       actionType === 'bridge:confirm-project-update' ||
       actionType === 'bridge:repair:project';
 
@@ -362,13 +364,14 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
 
     try {
       if (isTransferMutation) emitProgress('preflight');
-      if (isProjectMutation || actionType === 'bridge:list-installed-projects') await migrateCreativeWorkshopLegacyRegexRecords();
+      if ((isProjectMutation || actionType === 'bridge:list-installed-projects') &&
+          actionType !== 'bridge:transfer-installed-worldbook') await migrateCreativeWorkshopLegacyRegexRecords();
       switch (event.data.type) {
         case 'bridge:handshake':
           onReady?.();
           await post(
             'bridge:handshake:ok',
-            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true } },
+            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true } },
             event.data.requestId,
           );
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
@@ -384,7 +387,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             scan = await getInitialInstalledProjectScan();
           } catch (error) {
             console.warn('[CreativeWorkshopBridgeHost] initial installed-project scan failed', error);
-            scan = { projects: [], complete: false, unreadableWorldbookNames: [] };
+            scan = { projects: [], complete: false, unreadableWorldbookNames: [], scannedWorldbookNames: [] };
           }
           await post(
             'bridge:installed-projects',
@@ -447,6 +450,24 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           );
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
           break;
+        case 'bridge:transfer-installed-worldbook': {
+          const projectId = actionProjectId || '';
+          const sourceName = _.isString(event.data.payload?.sourceWorldbookName)
+            ? String(event.data.payload.sourceWorldbookName) : '';
+          const targetName = _.isString(event.data.payload?.targetWorldbookName)
+            ? String(event.data.payload.targetWorldbookName) : '';
+          await transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName);
+          const scan = await scanInstalledCreativeWorkshopProjects();
+          if (!scan.complete || scan.projects.some(project =>
+              project.projectId === projectId && project.worldbookName === sourceName) ||
+              !scan.projects.some(project =>
+                project.projectId === projectId && project.worldbookName === targetName))
+            throw new Error('迁移写入完成但最终扫描未通过，请检查来源与目标，勿重复操作');
+          await post('bridge:transfer-installed-result',
+            { success: true, projectId, ...scan }, event.data.requestId);
+          await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
+          break;
+        }
         case 'bridge:uninstall-project':
           if (!_.isString(_.get(event.data, 'payload.projectId'))) {
             throw new Error('缺少 projectId');

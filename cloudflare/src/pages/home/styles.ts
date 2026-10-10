@@ -2654,4 +2654,55 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
   .project-detail-modal .mobile-reader-picker-item small { font-size:.76rem; }
 }
 
+
+/* Dedicated personal DLC manager. Compact, device-friendly and distinct from storefront cards. */
+.installed-manager-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; padding:20px 0 17px; }
+.installed-manager-head small { font-size:.65rem; color:#bba57e; letter-spacing:.08em; }
+.installed-manager-head h2 { margin:3px 0; font-size:1.35rem; color:#ece9e5; }
+.installed-manager-head p,.installed-manager-description { font-size:.81rem; color:#bbb5aa; line-height:1.6; }
+.installed-manager-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 15px; border-bottom:1px solid rgba(255,255,255,.1); }
+.installed-manager-tabs button { min-height:43px; display:flex; gap:7px; align-items:center; padding:8px 15px; border:0; border-bottom:2px solid transparent; background:none; color:#a8a49d; cursor:pointer; font:inherit; font-size:.82rem; }
+.installed-manager-tabs button.active { color:#e8d3ac; border-color:#c5aa7e; font-weight:700; }
+.installed-manager-tabs button span { padding:2px 5px; border-radius:6px; font-size:.72rem; background:rgba(255,255,255,.065); }
+.installed-manager-list { display:grid; gap:9px; padding:0 0 22px; }
+.installed-manager-item { min-width:0; display:flex; align-items:center; gap:13px; padding:12px; border:1px solid rgba(255,255,255,.095); border-radius:10px; background:#1b1c20; }
+.installed-manager-cover { flex:none; width:62px; height:62px; object-fit:cover; border-radius:8px; background:#222326; }
+.installed-manager-cover--empty { display:grid; place-items:center; color:#bba57e; }
+.installed-manager-copy { flex:1; min-width:0; }
+.installed-manager-copy strong { display:block; color:#e9e7e2; font-size:.87rem; line-height:1.4; overflow-wrap:anywhere; }
+.installed-manager-copy p { margin:6px 0 2px; color:#b8b2a8; font-size:.77rem; overflow-wrap:anywhere; }
+.installed-manager-ready,.installed-manager-problem { display:inline-flex; padding:2px 0; font-size:.72rem; color:#9ed5ad; }
+.installed-manager-problem { color:#e9bd8c; }
+.installed-manager-actions { flex:none; display:flex; gap:7px; flex-wrap:wrap; }
+.installed-manager-actions .btn { min-height:36px; font-size:.75rem; }
+.installed-manager-actions .btn:disabled { opacity:.45; cursor:not-allowed; }
+.installed-manager-warning { display:flex; align-items:center; gap:10px; padding:12px; margin-bottom:12px; border:1px solid rgba(205,141,75,.35); border-radius:9px; color:#e7c395; background:rgba(205,141,75,.08); font-size:.8rem; }
+.installed-manager-empty { padding:30px 20px; color:#bcb6ad; text-align:center; border:1px dashed rgba(255,255,255,.12); border-radius:10px; }
+.installed-manager-description { margin:3px 0 13px; }
+.installed-manager-scan-list { display:grid; gap:7px; padding-bottom:18px; }
+.installed-manager-scan-row { min-width:0; display:flex; align-items:center; gap:13px; padding:12px; border:1px solid rgba(255,255,255,.095); border-radius:9px; background:#1b1c20; }
+.installed-manager-scan-row > i { color:#c1ab87; }
+.installed-manager-scan-row > span { flex:1; min-width:0; }
+.installed-manager-scan-row strong { display:block; font-size:.83rem; overflow-wrap:anywhere; }
+.installed-manager-scan-row small { display:block; margin-top:3px; color:#a9a49b; font-size:.73rem; }
+.installed-manager-scan-row em { flex:none; font-size:.72rem; color:#9ed5ad; font-style:normal; }
+.installed-manager-scan-row em.failed { color:#efb69b; }
+.installed-transfer-dialog { display:grid; gap:13px; min-width:0; }
+.installed-transfer-dialog > p { color:#c4bfb6; font-size:.81rem; line-height:1.6; }
+.installed-transfer-dialog label { display:grid; gap:5px; color:#c7c2b9; font-size:.78rem; }
+.installed-transfer-dialog label strong { overflow-wrap:anywhere; }
+.installed-transfer-dialog select { width:100%; min-height:43px; background:#1e2025; color:#ececea; border:1px solid #5b5145; border-radius:9px; font:inherit; padding:8px; }
+.installed-transfer-dialog .installed-transfer-warning { color:#e2bf91; }
+.installed-manager-dialog-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+@media (max-width:660px) {
+ .installed-manager-head { align-items:flex-start; padding:14px 0 10px; }
+ .installed-manager-head h2 { font-size:1.12rem; }
+ .installed-manager-tabs { flex-wrap:nowrap; overflow:auto; }
+ .installed-manager-tabs button { flex:1; min-width:max-content; justify-content:center; font-size:.76rem; padding:10px 7px; }
+ .installed-manager-item { align-items:flex-start; flex-wrap:wrap; gap:10px; }
+ .installed-manager-cover { width:50px; height:50px; }
+ .installed-manager-copy { flex-basis:calc(100% - 65px); }
+ .installed-manager-actions { width:100%; justify-content:flex-end; }
+ .installed-manager-dialog-actions .btn { flex:1; }
+}
 `;

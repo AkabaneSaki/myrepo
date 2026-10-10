@@ -32,6 +32,7 @@ export type CreativeWorkshopInstalledProjectScan = {
   projects: CreativeWorkshopInstalledProject[];
   complete: boolean;
   unreadableWorldbookNames: string[];
+  scannedWorldbookNames: string[];
 };
 
 type WorldbookScanRow = {
@@ -207,6 +208,7 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
     projects,
     complete: unreadableWorldbookNames.length === 0,
     unreadableWorldbookNames,
+    scannedWorldbookNames: worldbookRows.map(row => row.worldbookName),
   };
 }
 
