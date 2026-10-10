@@ -560,7 +560,9 @@ export const homeShellStyles = String.raw`
     gap:10px;
     margin-top:12px;
   }
+}
 
+@media (max-width:1023px) {
   .mobile-tool-dock {
     position:fixed;
     left:50%;
