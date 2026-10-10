@@ -1067,7 +1067,12 @@ function runAdminReviewDeviceCheck(deviceCheck) {
         finish(new Error(result?.error || '本机未能完成这条内容的检查。'));
         return;
       }
-      resolve(result);
+      if (!/^[a-f0-9]{64}$/.test(String(result.filesHash || "")) ||
+          !result.auditSnapshot || result.auditSnapshot.filesHash !== result.filesHash) {
+        finish(new Error('审核检查器返回了不完整的校验结果。请刷新工坊网页，再重新打开审核详情。'));
+        return;
+      }
+      finish(null, result);
     };
     worker.onerror = () => finish(new Error('本机未能启动内容检查。请刷新页面后重试。'));
     worker.postMessage({

@@ -11,6 +11,7 @@ import {
   contentFilesHash,
   issueReviewChallenge,
   verifyReviewerResult,
+  validateHumanReviewOverride,
 } from '../utils/ejs-checker/attestation.mjs';
 import { CHECKER_VERSION } from '../utils/ejs-checker/index.mjs';
 import { buildReviewPolicyVersion } from '../utils/ejs-checker/audit.mjs';
@@ -136,8 +137,9 @@ async function verifyReviewerApproval(
   c: AppContext,
   project: { id: string; draftRevision: number },
   deviceResult: unknown,
+  manualOverrideReason: string | undefined,
 ): Promise<
-  | { valid: true; snapshot: Record<string, unknown>; codeFiles: Array<{ type: ProjectEntryKind; text: string }> }
+  | { valid: true; snapshot: Record<string, unknown>; codeFiles: Array<{ type: ProjectEntryKind; text: string }>; checkerGate: 'accept' | 'reject' }
   | { valid: false; error: string }
 > {
   const content = await collectReviewContent(c, project);
@@ -183,13 +185,17 @@ async function verifyReviewerApproval(
     return { valid: false, error: '无法确认这份检查结果与当前内容的绑定，请重新检查后再通过。' };
   }
 
-  if (verified.gate === 'reject') {
-    return { valid: false, error: '项目仍有自动检查阻断项。请在审核详情查看后要求 Creator 修改。' };
+  const overrideDecision = validateHumanReviewOverride(verified.gate, manualOverrideReason);
+  if (!overrideDecision.valid) {
+    return { valid: false, error: '人工批准自动阻断项目时，必须确认风险并填写 8 至 500 字的审核理由。' };
   }
 
   return {
     valid: true,
-    snapshot: verified.snapshot,
+    snapshot: verified.gate === 'reject'
+      ? { ...verified.snapshot, manualOverride: { checkerGate: 'reject', reason: overrideDecision.reason } }
+      : verified.snapshot,
+    checkerGate: verified.gate,
     codeFiles: content.codeFiles.map(({ type, text }) => ({ type, text })),
   };
 }
@@ -457,6 +463,7 @@ export class AdminReview extends OpenAPIRoute {
             schema: z.object({
               action: z.enum(['approve', 'reject']),
               rejectReason: Str({ required: false }),
+              manualOverrideReason: z.string().trim().max(500).optional(),
               expectedRevision: z.number().int().min(1).optional(),
               reviewerResult: z
                 .object({
@@ -506,7 +513,7 @@ export class AdminReview extends OpenAPIRoute {
 
     const data = await this.getValidatedData<typeof this.schema>();
     const { projectId } = data.params;
-    const { action, rejectReason, expectedRevision, reviewerResult } = data.body;
+    const { action, rejectReason, expectedRevision, reviewerResult, manualOverrideReason } = data.body;
 
     // 检查项目是否存在
     const project = await projectDb.get(c, projectId);
@@ -527,17 +534,19 @@ export class AdminReview extends OpenAPIRoute {
     }
 
     let acceptedSnapshot: Record<string, unknown> | undefined;
+    let reviewerCheckerGate: 'accept' | 'reject' | undefined;
     let reviewedCodeFiles: Array<{ type: ProjectEntryKind; text: string }> | undefined;
     if (action === 'approve') {
       // #42: cheap authoritative validation of content/revision binding.
       // The reviewer is the trusted approval authority. The Worker never re-runs
       // the checker; it only verifies that the submitted result belongs to this
       // exact content, exact draft revision and exact checker build.
-      const contentValidation = await verifyReviewerApproval(c, project, reviewerResult);
+      const contentValidation = await verifyReviewerApproval(c, project, reviewerResult, manualOverrideReason);
       if (contentValidation.valid === false) {
         return c.json({ error: contentValidation.error }, 409);
       }
       acceptedSnapshot = contentValidation.snapshot;
+      reviewerCheckerGate = contentValidation.checkerGate;
       reviewedCodeFiles = contentValidation.codeFiles;
     }
 
@@ -713,6 +722,8 @@ export class AdminReview extends OpenAPIRoute {
       actorName: payload.globalName || payload.username,
       detail: {
         rejectReason: rejectReason || null,
+        checkerGate: reviewerCheckerGate || null,
+        manualOverrideReason: reviewerCheckerGate === 'reject' ? manualOverrideReason?.trim() || null : null,
         projectName: project.name,
         version: approvedVersion || project.version,
         previousVersion: publishedVersionBeforeApproval,

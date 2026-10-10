@@ -12,6 +12,16 @@ export const REVIEW_CHALLENGE_TTL_MS = 20 * 60 * 1000;
 const encoder = new TextEncoder();
 const GATE_VALUES = ['accept', 'reject'];
 
+/** Only a deliberate, reasoned decision by an authenticated reviewer may
+ * override the checker's high-risk verdict. Other content/auth gates still apply. */
+export function validateHumanReviewOverride(gate, reason) {
+  if (gate !== 'reject') return { valid: true, reason: null };
+  const value = typeof reason === 'string' ? reason.trim() : '';
+  return value.length >= 8 && value.length <= 500
+    ? { valid: true, reason: value }
+    : { valid: false, reason: null };
+}
+
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(String(value)));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
