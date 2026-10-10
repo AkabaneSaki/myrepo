@@ -80,10 +80,10 @@ function inspectDecorators(entry,findings){
     {sourceText:entry.rawContent||entry.content}));
 }
 function compareFindings(a,b){return a.bookOrder-b.bookOrder||a.entryOrder-b.entryOrder||a.line-b.line||a.ruleId.localeCompare(b.ruleId,'en')}
-function gateStatus(findings){return findings.some(f=>f.severity==='high')?'reject':'accept'}
+function gateStatus(findings){return findings.some(f=>f.severity==='high'&&/^L[1-7]$/.test(f.ruleId))?'reject':'accept'}
 function auditStatus(findings){
   if(gateStatus(findings)==='reject')return'not_applicable';
-  return findings.some(f=>f.severity==='warn'||f.severity==='hint')?'yellow':'green';
+  return findings.some(f=>['high','warn','hint'].includes(f.severity))?'yellow':'green';
 }
 function certificationStatus(findings){
   if(findings.some(f=>f.severity==='high'))return'fail';
@@ -108,9 +108,9 @@ export function toUploaderCodeCheck(report){
     if(['M3','M4'].includes(f.ruleId))return{ruleId:'SCRIPT-REVIEW',severity:'warn',title:'这段脚本需要额外审核',detail:'上传可以继续。审核员会进一步确认这段脚本的用途与影响；这条提示不代表违规。',suggestion:'如审核员需要补充说明，请介绍这项功能为何必要。',visibility:'uploader_generic',book:f.book||'',entry:f.entry||'',uid:f.uid??'',line:f.line||1,column:f.column||1};
     if(f.visibility!=='uploader_generic')return f;
     const behavior={
-      M1:{title:'检测到动态代码执行 eval()',detail:'这段代码使用或保存了 eval 能力，可能执行运行时生成的代码，工坊不接受。',suggestion:'请改为明确的函数调用或固定逻辑，再重新上传。'},
-      M2:{title:'检测到动态创建函数',detail:'这段代码使用或保存了通过 Function(...) 动态生成函数的能力，工坊不接受。',suggestion:'请改用普通函数或明确的分支逻辑，再重新上传。'},
-      M5:{title:'检测到可能无法自行结束的循环',detail:'这段循环没有明确的结束条件，可能导致页面卡死。',suggestion:'请设置清楚可靠的结束条件，再重新上传。'},
+      M1:{title:'检测到动态代码执行 eval()',detail:'这段代码使用或保存了 eval 能力，可能执行运行时生成的代码，需要人工审核。',suggestion:'请向审核员说明这项能力的用途与影响。'},
+      M2:{title:'检测到动态创建函数',detail:'这段代码使用或保存了通过 Function(...) 动态生成函数的能力，需要人工审核。',suggestion:'请向审核员说明为什么需要动态生成函数。'},
+      M5:{title:'检测到可能无法自行结束的循环',detail:'这段循环没有明确的结束条件，可能导致页面卡死，需要人工审核。',suggestion:'请向审核员说明循环如何结束及其用途。'},
     }[f.ruleId];
     return{
       ruleId:'SCRIPT-RISK',
@@ -136,7 +136,7 @@ export function toUploaderCodeCheck(report){
 export function formatUploaderCodeCheckError(report){
   const uploader=toUploaderCodeCheck(report);
   if(uploader.gate!=='reject')return '';
-  const first=uploader.findings.find(f=>f.severity==='high');
+  const first=uploader.findings.find(f=>f.severity==='high'&&/^L[1-7]$/.test(f.ruleId));
   if(!first)return '文件没有通过自动检查，请修改脚本后重新上传。';
   const where=first.entry ? '「'+first.entry+'」' : (first.book ? '「'+first.book+'」' : '文件');
   if(first.ruleId==='SCRIPT-RISK')return where+'：'+first.title+'（第 '+first.line+' 行，第 '+first.column+' 列）。'+first.suggestion;

@@ -1,3 +1,4 @@
+import { validateOriginalConflictReferenceItems } from '../../utils/character-reference.ts';
 import { Bool, OpenAPIRoute, Str } from 'chanfana';
 import { z } from 'zod';
 import type { AppContext } from '../../types';
@@ -609,11 +610,26 @@ export class ProjectFetch extends OpenAPIRoute {
     ]);
 
     const viewerProject = hideProjectReviewStateForViewer(project, payload);
+    // The reference registry already stores immutable Regex source keys and
+    // names. Resolve selected IDs only for the project detail/install route,
+    // not for discovery cards; no schema change or per-card D1 reads.
+    let originalConflictTargets = null;
+    if (project.conflictsWithOriginal && project.originalConflictReferenceItemIds?.length) {
+      try {
+        originalConflictTargets = (await validateOriginalConflictReferenceItems(
+          c, project.builtForReferenceVersionId, project.originalConflictReferenceItemIds,
+        )).targets;
+      } catch {
+        // A missing/outdated baseline must not be guessed from similarly named Regex.
+        originalConflictTargets = null;
+      }
+    }
 
     return {
       success: true,
       project: {
         ...viewerProject,
+        originalConflictTargets,
         downloadUrl: null,
         ...preview,
         privateRating,

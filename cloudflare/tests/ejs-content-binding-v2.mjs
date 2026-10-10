@@ -12,6 +12,7 @@ import {
   issueReviewChallenge,
   verifyCreatorAttestation,
   verifyReviewerResult,
+  validateHumanReviewOverride,
 } from '../src/utils/ejs-checker/attestation.mjs';
 import { analyzeProjectCodeV2, CHECKER_VERSION } from '../src/utils/ejs-checker/index.mjs';
 import { applyAuditBaseline, buildAuditSnapshot, buildReviewPolicyVersion } from '../src/utils/ejs-checker/audit.mjs';
@@ -50,7 +51,7 @@ assert.match(attestation, /^[a-f0-9]{64}\./, 'receipts carry no readable verdict
 async function deviceResultFor(text, overrides = {}) {
   const inputs = worldbookFiles(text);
   const report = analyzeProjectCodeV2(inputs);
-  const auditSnapshot = report.gate === 'reject' ? null : await buildAuditSnapshot(inputs, report);
+  const auditSnapshot = await buildAuditSnapshot(inputs, report);
   const result = {
     success: true,
     gate: report.gate,
@@ -115,11 +116,33 @@ assert.equal((await verifyReviewerResult(TEST_KEY, { ...safeResult, challenge: f
 
 // creator pass / creator reject
 assert.equal((await verifyCreatorAttestation(TEST_KEY, await issueCreatorAttestation(TEST_KEY, base), base)).ok, true, 'creator pass');
-const rejectedText = worldbook('<% eval("1") %>');
+const rejectedText = worldbook('<% const exposed = eval("1"); %>');
 const rejectedResult = await deviceResultFor(rejectedText);
-assert.equal(rejectedResult.gate, 'reject', 'the complete rule set still rejects eval()');
-assert.equal(rejectedResult.auditSnapshot, null, 'a rejected device run produces no approvable snapshot');
+assert.equal(rejectedResult.gate, 'reject', 'L2 still rejects exposed top-level declarations');
+assert.equal(validateHumanReviewOverride('reject', undefined).valid, false, 'high findings cannot be overridden without a reason');
+assert.equal(validateHumanReviewOverride('reject', 'short').valid, false, 'high findings require an explicit explanation');
+assert.equal(validateHumanReviewOverride('reject', 'x'.repeat(501)).valid, false, 'override reasons are bounded');
+assert.deepEqual(validateHumanReviewOverride('reject', '  已检查全部源代码并确认可接受风险  '), { valid: true, reason: '已检查全部源代码并确认可接受风险' });
+assert.deepEqual(validateHumanReviewOverride('accept', undefined), { valid: true, reason: null }, 'ordinary approval needs no override reason');
+assert.ok(rejectedResult.auditSnapshot?.filesHash, 'a blocked device run retains a content-bound audit snapshot for explicit human override');
+const rejectedHash = await contentFilesHash(worldbookFiles(rejectedText));
+const rejectedChallenge = await issueReviewChallenge(TEST_KEY, { projectId: 'project-1', draftRevision: 3, filesHash: rejectedHash, checkerRevision: CHECKER_REVISION });
+assert.equal((await verifyReviewerResult(TEST_KEY, { ...rejectedResult, challenge: rejectedChallenge }, { ...expected, filesHash: rejectedHash })).gate, 'reject', 'the gate must remain reject after content binding');
+assert.equal((await verifyReviewerResult(TEST_KEY, { ...rejectedResult, challenge: rejectedChallenge }, expected)).reason, 'content', 'human override cannot bypass file-hash binding');
 assert.ok(rejectedResult.report.findings.some(item => item.ruleId === 'M1'), 'M rules are unchanged');
+
+// Exercise the real reviewer Web Worker, not only the in-process test helper.
+let reviewerWorkerOutput;
+globalThis.self = { postMessage: value => { reviewerWorkerOutput = value; } };
+await import('../src/utils/ejs-checker/review-worker.mjs');
+await globalThis.self.onmessage({ data: {
+  files: worldbookFiles(rejectedText), baseline: null, projectId: 'project-1', draftRevision: 3,
+} });
+delete globalThis.self;
+assert.equal(reviewerWorkerOutput?.success, true, 'high-risk content still completes the reviewer device check');
+assert.equal(reviewerWorkerOutput?.gate, 'reject', 'the checker verdict is never rewritten by override');
+assert.ok(reviewerWorkerOutput?.auditSnapshot?.filesHash, 'high-risk content includes a bound reviewer snapshot');
+assert.equal(reviewerWorkerOutput.auditSnapshot.filesHash, rejectedHash);
 
 // reviewer re-check produces a stable binding for identical content
 const rerun = await deviceResultFor(safeText);

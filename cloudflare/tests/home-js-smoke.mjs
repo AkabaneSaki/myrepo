@@ -42,6 +42,7 @@ const fragments = {
   homeExternalLinksScript: await evaluateStandalone('src/pages/home/external-links.ts', 'homeExternalLinksScript'),
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
+  homeInstalledManagerScript: await evaluateStandalone('src/pages/home/installed-manager.ts', 'homeInstalledManagerScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homePublishCheckScript: await evaluateStandalone('src/pages/home/publish-check.ts', 'homePublishCheckScript'),
   homeAppAuthFlowScript: await evaluateStandalone('src/pages/home/app/auth-flow.ts', 'homeAppAuthFlowScript'),
@@ -546,6 +547,13 @@ assert.match(fragments.homeStateScript, /days7: payload\?\.periodPopularityReady
 assert.match(fragments.homeApiScript, /projectType/);
 assert.match(fragments.homeApiScript, /params\.set\('tags', activeTags\.join\(','\)\)/);
 assert.match(fragments.homeLayoutRenderScript, /data-unified-search/);
+assert.doesNotMatch(fragments.homeModalsScript, /codeCheck\?\.gate === "reject" \|\| deviceCheckPending/, 'high EJS finding must not disable human approval');
+assert.match(fragments.homeModalsScript, /data-admin-review-submit="approve"/, 'human override uses the existing approval action');
+assert.match(fragments.homeModalsScript, /manualOverrideReason/, 'human override reason must be sent for server validation');
+assert.match(fragments.homeModalsScript, /highFindings\.length/, 'high-risk confirmation shows finding count');
+assert.match(fragments.homeModalsScript, /工具未完成检查 · 待人工复核/, 'processing limit must not be mislabeled a required creator fix');
+assert.match(fragments.homeModalsScript, /检查受限/, 'processing limit must be reported separately from high-risk findings');
+assert.match(fragments.homeModalsScript, /不能证明代码有误，也不能证明安全/, 'reviewer must see that incomplete analysis does not imply a verdict');
 assert.match(fragments.homeLayoutRenderScript, /mobileBaseTagFilter/);
 assert.match(fragments.homeLayoutRenderScript, /mobile-breadcrumb/);
 assert.match(fragments.homeLayoutRenderScript, /getMobileCurrentSortLabel/);
@@ -1151,6 +1159,7 @@ assert.match(homeScript, /reviewProject\(project\.id, \{ action,/);
 assert.match(homeScript, /expectedRevision: reviewProjectData\.draftRevision/);
 assert.match(homeScript, /reviewerResult: \{ \.\.\.deviceResult, challenge: detail\.deviceCheck\?\.challenge/);
 assert.match(homeScript, /runAdminReviewDeviceCheck\(detail\.deviceCheck\)/);
+assert.match(fragments.homeApiScript, /审核检查器返回了不完整的校验结果/, 'invalid reviewer payload must never reach the approval API');
 assert.doesNotMatch(homeScript, /reviewToken: detail\.reviewToken/);
 assert.match(homeScript, /确定撤回这次更新吗/);
 assert.match(homeScript, /当前编辑草稿也会一并删除/);

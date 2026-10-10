@@ -11,7 +11,9 @@ import { applyAuditBaseline, buildAuditSnapshot } from './audit.mjs';
 self.onmessage = async ({ data: { files, baseline, projectId, draftRevision } }) => {
   try {
     const report = analyzeProjectCodeV2(files);
-    const auditSnapshot = report.gate === 'reject' ? null : await buildAuditSnapshot(files, report);
+    // Keep a content-bound snapshot even for high-severity findings. The machine
+    // result remains reject; authorized humans can explicitly override it.
+    const auditSnapshot = await buildAuditSnapshot(files, report);
     const merged = auditSnapshot
       ? applyAuditBaseline(report, auditSnapshot, baseline || null)
       : report;

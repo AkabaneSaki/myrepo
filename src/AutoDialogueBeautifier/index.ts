@@ -13,6 +13,27 @@ const REGEX_JSON_URLS = [
   'https://testingcf.jsdelivr.net',
 ].map(origin => `${origin}/gh/${workshopConfig.release.repository}@${workshopConfig.client.stable}/regex.json`);
 
+// 系统核心使用世界书写入聊天变量的名称；前缀不包含规则版本号。
+const SYSTEM_REGEX_PREFIXES: Record<string, string[]> = {
+  长颈鹿核心: ['长颈鹿核心', '长颈鹿对话美化'],
+  '奥托·阿波卡利斯核心': ['命定核心-奥托'],
+  类脑娘: ['命定核心-类脑娘'],
+  '阿比盖尔核心-表': ['命定核心-阿比盖尔美化-表', '命定核心-阿比奖励技能'],
+  '阿比盖尔核心-里': ['命定核心-阿比盖尔美化-里', '命定核心-阿比奖励技能'],
+  妲丽安: ['命定核心-妲丽安'],
+  奶龙核心: ['命定核心-奶龙'],
+  小夜莺核心: ['命定核心-小夜莺'],
+  艾莉亚: ['命定核心-艾莉亚'],
+  莉莉丝: ['命定核心-莉莉丝'],
+  九十九夜梦: ['读者对话渲染'],
+};
+
+const isSystemBeautifier = (name: string): boolean =>
+  name.startsWith('命定核心-') || Object.values(SYSTEM_REGEX_PREFIXES).flat().some(prefix => name.startsWith(prefix));
+
+const matchesSystemCore = (name: string, core: string): boolean =>
+  SYSTEM_REGEX_PREFIXES[core]?.some(prefix => name.startsWith(prefix)) ?? false;
+
 $(async () => {
   console.info('自适应正则脚本已加载');
 
@@ -58,6 +79,8 @@ $(async () => {
 
   // 同步锁，防止无限循环
   let isSyncing = false;
+  // 自动检测临时注册的规则；手动更新和明确保留的规则不随脚本卸载删除。
+  const automaticallyRegisteredNames = new Set<string>();
   // 上次处理的聊天ID，用于防抖
   let lastChatId: string | null = null;
   // 防抖定时器
@@ -92,12 +115,13 @@ $(async () => {
         scope: 'character' as const,
         find_regex: rule.findRegex,
         replace_string: rule.replaceString,
-        trim_strings: Array.isArray(rule.trimStrings) ? rule.trimStrings.join('\n') : '',
+        trim_strings: Array.isArray(rule.trimStrings) ? [...rule.trimStrings] : [],
         source: {
           user_input: false,
           ai_output: true,
           slash_command: false,
           world_info: false,
+          reasoning: false,
         },
         destination: {
           display: true,
@@ -182,8 +206,14 @@ $(async () => {
     const patterns = extractDetectionPatterns();
     const neededNames: string[] = [];
     const skipSet = new Set(skipStoredNames);
+    const core = getVariables({ type: 'chat' }).系统核心;
 
     for (const { scriptName, pattern, quickCheck } of patterns) {
+      // 已选择系统核心时，避免旧对白重新装回用户刚移除的其他系统美化。
+      if (typeof core === 'string' && SYSTEM_REGEX_PREFIXES[core]
+        && isSystemBeautifier(scriptName) && !matchesSystemCore(scriptName, core)) {
+        continue;
+      }
       // 跳过已存储的正则（它们已经匹配过了，不需要再次检测）
       if (skipSet.has(scriptName)) {
         continue;
@@ -231,6 +261,7 @@ $(async () => {
       console.info(`自适应正则: 已保存 ${sortedNames.length} 个正则名称到聊天变量`);
     } catch (e) {
       console.warn('保存正则名称失败:', e);
+      throw e;
     }
   };
 
@@ -250,6 +281,7 @@ $(async () => {
         const filtered = regexes.filter((r: TavernRegex) => r.script_name !== rule.script_name);
         return [...filtered, rule];
       }, { type: 'character' });
+      automaticallyRegisteredNames.add(rule.script_name);
     } catch (e) {
       console.warn(`注册正则失败: ${rule.script_name}`, e);
       throw e;
@@ -350,7 +382,8 @@ $(async () => {
       console.info('自适应正则: 获取到的消息:', messages);
 
       if (!messages || messages.length === 0) {
-        console.info('自适应正则: 没有找到消息，返回');
+        console.info('自适应正则: 没有找到消息，同步已存储的规则');
+        await syncRegexWithVariable();
         return;
       }
 
@@ -389,19 +422,6 @@ $(async () => {
     }
   };
 
-  // 初始化：根据变量中的列表注册缺失的正则
-  const initializeFromVariable = async (): Promise<void> => {
-    const storedNames = getStoredRegexNames();
-    if (storedNames.length > 0) {
-      console.info(`自适应正则: 初始化，从变量加载 ${storedNames.length} 个正则`);
-      await syncRegexWithVariable();
-    } else {
-      // 如果变量为空，扫描当前消息
-      console.info('自适应正则: 变量为空，扫描当前消息');
-      await scanAndUpdateVariable();
-    }
-  };
-
   // 监听变量变化的事件回调
   let previousStoredNames: string[] = [];
 
@@ -437,6 +457,119 @@ $(async () => {
       return result;
     };
   };
+
+  const forceUpdateSystemBeautifiers = async (): Promise<void> => {
+    if (isSyncing) {
+      toastr.info('美化规则正在更新，请稍后再试');
+      return;
+    }
+
+    isSyncing = true;
+    try {
+      const chatId = SillyTavern.getCurrentChatId();
+      const characterId = SillyTavern.characterId;
+      const characterName = SillyTavern.characters[Number(characterId)]?.avatar;
+      if (!chatId || !characterName) {
+        toastr.warning('请先打开角色聊天，再更新美化规则');
+        return;
+      }
+      const presetName = SillyTavern.getPresetManager('openai').getSelectedPresetName();
+      const characterOption = { type: 'character' as const, name: characterName };
+      const core = getVariables({ type: 'chat' }).系统核心;
+      if (typeof core !== 'string' || !core.trim()) {
+        toastr.warning('聊天中还没有系统核心，请先选择系统核心后重试');
+        return;
+      }
+
+      const targetRules = getEnabledRegexRules().filter(rule => matchesSystemCore(rule.script_name, core));
+      if (targetRules.length === 0) {
+        toastr.warning(`暂未找到「${core}」对应的美化规则，请检查系统核心名称`);
+        return;
+      }
+
+      const scopes = ['character', 'global', 'preset'] as const;
+      const scopeLabels = { character: '角色卡', global: '全局', preset: '预设' };
+      const conflicts = scopes.flatMap(type => getTavernRegexes(type === 'character' ? characterOption : { type }).filter(rule =>
+        isSystemBeautifier(rule.script_name)
+        && !(type === 'character' && targetRules.some(target => target.id === rule.id || target.script_name === rule.script_name)),
+      ).map(rule => ({ ...rule, type })));
+
+      let action: 'keep' | 'disable' | 'remove' = 'keep';
+      if (conflicts.length > 0) {
+        const result = await SillyTavern.callGenericPopup(
+          `<h3>强制更新美化</h3><p>当前系统核心：${_.escape(core)}。将重装 ${targetRules.length} 条对应规则。</p>`
+          + '<p>对应规则会安装到当前角色卡。停用或删除全局、预设规则，也会影响其他使用这些规则的聊天。</p>'
+          + '<p>还发现以下系统美化规则，请选择如何处理：</p><ul>'
+          + conflicts.map(rule => `<li>${_.escape(rule.script_name)}（${scopeLabels[rule.type]}，${rule.enabled ? '已启用' : '已停用'}）</li>`).join('')
+          + '</ul><p>你的选择会应用到上面列出的所有规则。</p>',
+          SillyTavern.POPUP_TYPE.TEXT, '', {
+            okButton: '保留并更新', cancelButton: '取消',
+            customButtons: [
+              { text: '停用并更新', result: SillyTavern.POPUP_RESULT.CUSTOM1 },
+              { text: '删除并更新', result: SillyTavern.POPUP_RESULT.CUSTOM2 },
+            ],
+            defaultResult: SillyTavern.POPUP_RESULT.CANCELLED,
+            allowVerticalScrolling: true,
+          },
+        );
+        if (result === SillyTavern.POPUP_RESULT.CUSTOM1) action = 'disable';
+        else if (result === SillyTavern.POPUP_RESULT.CUSTOM2) action = 'remove';
+        else if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+      }
+
+      if (SillyTavern.getCurrentChatId() !== chatId || SillyTavern.characterId !== characterId
+        || getVariables({ type: 'chat' }).系统核心 !== core
+        || SillyTavern.getPresetManager('openai').getSelectedPresetName() !== presetName) {
+        toastr.warning('聊天、预设或系统核心已改变，请重新点击强制更新美化');
+        return;
+      }
+
+      const applyChoice = (regexes: TavernRegex[], type: typeof scopes[number]): TavernRegex[] => regexes.flatMap(rule => {
+        if (action === 'keep' || !conflicts.some(other => other.type === type && other.id === rule.id && other.script_name === rule.script_name)) {
+          return [rule];
+        }
+        return action === 'remove' ? [] : [{ ...rule, enabled: false }];
+      });
+
+      const updated = await updateTavernRegexesWith(regexes => [
+        ...applyChoice(regexes, 'character').filter(rule =>
+          !targetRules.some(target => target.id === rule.id || target.script_name === rule.script_name)),
+        ...targetRules,
+      ], characterOption);
+      if (SillyTavern.getCurrentChatId() !== chatId || SillyTavern.characterId !== characterId
+        || getVariables({ type: 'chat' }).系统核心 !== core) {
+        throw new Error('更新期间聊天或系统核心改变，已停止后续操作');
+      }
+      for (const rule of [...targetRules, ...conflicts.filter(rule => rule.type === 'character')]) {
+        automaticallyRegisteredNames.delete(rule.script_name);
+      }
+      const catalogueNames = new Set(getEnabledRegexRules().map(rule => rule.script_name));
+      saveStoredRegexNames([...new Set([
+        ...getStoredRegexNames().filter(name => !isSystemBeautifier(name)),
+        ...updated.filter(rule => catalogueNames.has(rule.script_name)).map(rule => rule.script_name),
+      ])]);
+
+      if (action !== 'keep') {
+        for (const type of ['global', 'preset'] as const) {
+          if (conflicts.some(rule => rule.type === type)) {
+            if (SillyTavern.getPresetManager('openai').getSelectedPresetName() !== presetName) {
+              throw new Error('更新期间预设改变，已停止后续操作');
+            }
+            await updateTavernRegexesWith(regexes => applyChoice(regexes, type), { type });
+          }
+        }
+      }
+      toastr.success(`已更新「${core}」的 ${targetRules.length} 条美化规则`);
+    } catch (error) {
+      console.error('强制更新美化失败:', error);
+      toastr.error('美化更新未完成，请重试；已经完成的修改会保留');
+    } finally {
+      isSyncing = false;
+    }
+  };
+
+  appendInexistentScriptButtons([{ name: '强制更新美化', visible: true }]);
+  eventOn(getButtonEvent('强制更新美化'), forceUpdateSystemBeautifiers);
 
   // 监听新消息事件（AI输出完成时）
   eventOn(tavern_events.MESSAGE_RECEIVED, async (messageId: number) => {
@@ -477,24 +610,24 @@ $(async () => {
     // 防抖：延迟 500ms 执行同步
     syncTimeout = setTimeout(async () => {
       if (!isSyncing) {
-        await syncRegexWithVariable();
+        await scanAndUpdateVariable();
       }
     }, 500);
   });
 
   // 卸载时移除所有本脚本注册的正则
   $(window).on('pagehide', async () => {
-    const storedNames = getStoredRegexNames();
-    if (storedNames.length > 0) {
-      await removeRegexByNames(storedNames);
-      console.info(`自适应正则: 已卸载 ${storedNames.length} 条规则`);
+    const registeredNames = [...automaticallyRegisteredNames];
+    if (registeredNames.length > 0) {
+      await removeRegexByNames(registeredNames);
+      console.info(`自适应正则: 已卸载 ${registeredNames.length} 条自动注册的规则`);
     }
     console.info('自适应正则脚本已卸载');
   });
 
   // 启动
   console.info('自适应正则: 启动初始化');
-  await initializeFromVariable();
+  await scanAndUpdateVariable();
   watchVariableChange();
 
   const enabledRules = regexData.filter((r: any) => !r.disabled).length;

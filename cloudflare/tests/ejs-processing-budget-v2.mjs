@@ -9,11 +9,12 @@ const worldbookInput = contents => [{ fileName: 'book.json', type: 'worldbook', 
 for (const source of ['eval("globalThis.checkerExecuted = true")', 'Function("return 1")()', 'while(true){}']) {
   const input = regexInput(['<script>' + source + '</script>']);
   assert.equal(analyzeLocalProjectCode(input).gate, 'accept', 'local phase handles compatibility and syntax only');
-  assert.equal(analyzeProjectCodeV2(input).gate, 'reject', 'server phase enforces hard capability rules');
+  assert.equal(analyzeProjectCodeV2(input).gate, 'accept', 'capability risks are decided by the human reviewer');
+  assert.equal(analyzeProjectCodeV2(input).audit, 'yellow');
 }
 assert.equal(globalThis.checkerExecuted, undefined, 'neither checker phase executes author code');
 assert.equal(analyzeLocalProjectCode(worldbookInput(['<% const exposed = 1; %>'])).gate, 'reject');
-assert.equal(analyzeLocalProjectCode(regexInput(['<script>const broken = ;</script>'])).gate, 'reject');
+assert.equal(analyzeLocalProjectCode(regexInput(['<script>const broken = ;</script>'])).gate, 'accept');
 assert.equal(analyzeProjectCodeV2(regexInput(['<script>fetch("https://example.com/data")</script>'])).gate, 'accept');
 
 const cases = [
@@ -41,10 +42,11 @@ for (const analyze of [analyzeLocalProjectCode, analyzeProjectCodeV2]) {
   }
   // Unsafe executable scripts must still be checked, even after a large CSS block.
   const unsafe = analyze(regexInput([longCss + '<script>eval("bad")</script>']));
-  if (analyze === analyzeProjectCodeV2) assert.equal(unsafe.gate, 'reject');
+  if (analyze === analyzeProjectCodeV2) assert.equal(unsafe.audit, 'yellow');
   for (const [caseIndex, input] of cases.entries()) {
     const result = analyze(input);
-    assert.equal(result.gate, 'reject');
+    assert.equal(result.gate, 'accept');
+    assert.equal(result.audit, 'yellow');
     assert.ok(result.findings.some(item => item.ruleId === 'CHECKER-LIMIT'), 'case ' + caseIndex + ': ' + JSON.stringify(result.findings.map(item => ({ rule: item.ruleId, detail: item.detail }))));
     assert.ok(!result.findings.some(item => item.ruleId === 'EJS-PARSE' || item.ruleId === 'JS-PARSE'));
   }

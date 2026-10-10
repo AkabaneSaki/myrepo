@@ -1,3 +1,4 @@
+// Creative Workshop Installed Manager / STAGING ONLY. Source 77e2345. Not a production release.
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
 
@@ -23,7 +24,7 @@ function createScriptIdIframe() {
 }
 
 ;// ./src/CreativeWorkshop/services/config.ts
-const DEFAULT_CREATIVE_WORKSHOP_URL = "https://poemofdestinycreativeworkshop.1528779666.workers.dev";
+const DEFAULT_CREATIVE_WORKSHOP_URL = "https://workshop-test.uika.cc.cd";
 const CREATIVE_WORKSHOP_URL_VARIABLE_KEY = 'creative_workshop_worker_url';
 function normalizeCreativeWorkshopUrl(url) {
     return url.trim().replace(/\/+$/, '');
@@ -65,7 +66,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.3.0";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.3.0-dev1";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -2001,7 +2002,6 @@ async function scanInstalledCreativeWorkshopProjects() {
     const unreadableWorldbookNames = worldbookRows.filter(row => !row.readable).map(row => row.worldbookName);
     const worldbooks = worldbookRows.filter(row => row.readable);
     const currentlyBound = new Set(getCreativeWorkshopBoundWorldbookNames());
-    const existingWorldbookNames = new Set(getWorldbookNames());
     const entryRows = worldbooks.flatMap(({ worldbookName, entries }) => entries
         .filter(entry => Boolean(install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id')) ||
         Boolean(install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name')))
@@ -2019,12 +2019,6 @@ async function scanInstalledCreativeWorkshopProjects() {
     const projects = [];
     for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes), ...manifest.pending.map(record => record.projectId)]).filter(Boolean)) {
         const projectRows = groupedEntries[projectId] || [];
-        // Exclude DLCs intentionally moved out of this character's scan;
-        // retained character Regex must not resurrect a phantom installed row.
-        const recordedBook = getCreativeWorkshopInstallRecord(projectId)?.worldbookName;
-        if (!projectRows.length && recordedBook && !currentlyBound.has(recordedBook) &&
-            existingWorldbookNames.has(recordedBook))
-            continue;
         const projectRegexRows = groupedRegexes[projectId] || [];
         const projectRegexes = projectRegexRows.map(row => row.regex);
         const regexVersions = _.uniq(projectRegexRows
@@ -2432,40 +2426,6 @@ async function verifyCreativeWorkshopRegexInstallation(projectId, detail, legacy
 
 ;// ./src/CreativeWorkshop/services/original-conflicts.ts
 
-function normalizedOriginalRegexName(raw) {
-    return raw.trim().replace(/^\[本体\]/, '').trim();
-}
-function originalConflictTargets(detail) {
-    const project = detail.project || {};
-    if (!project.conflictsWithOriginal)
-        return [];
-    const selectedIds = Array.isArray(project.originalConflictReferenceItemIds)
-        ? project.originalConflictReferenceItemIds : [];
-    if (selectedIds.length) {
-        if (!Array.isArray(project.originalConflictTargets) ||
-            project.originalConflictTargets.length !== selectedIds.length)
-            throw new Error('原版条目基准信息不完整，请刷新详情或自行处理后安装');
-        const byId = new Map();
-        for (const item of project.originalConflictTargets) {
-            if (!item || !selectedIds.includes(item.referenceItemId) ||
-                (item.kind !== 'worldbook' && item.kind !== 'regex') ||
-                typeof item.displayName !== 'string' || !item.displayName.trim() ||
-                byId.has(item.referenceItemId))
-                throw new Error('原版条目身份信息不一致，已停止自动关闭');
-            byId.set(item.referenceItemId, item);
-        }
-        return selectedIds.map(id => byId.get(id));
-    }
-    const names = Array.isArray(project.originalConflictEntryNames)
-        ? Array.from(new Set(project.originalConflictEntryNames.map(String).map((name) => name.trim()).filter(Boolean)))
-        : [];
-    return names.map((displayName, i) => ({
-        referenceItemId: 'legacy:' + i,
-        kind: 'worldbook',
-        sourceKey: null,
-        displayName,
-    }));
-}
 function getOriginalEntryName(entry) {
     return String(entry.comment || entry.name || '').trim();
 }
@@ -2543,91 +2503,44 @@ async function applyOriginalEntryStates(desiredStates, worldbooks) {
         }
     }
 }
-function resolveOriginalConflictActions(detail, worldbooks, regexes, selections) {
-    const targets = originalConflictTargets(detail);
-    if (detail.project?.conflictsWithOriginal && !targets.length)
-        throw new Error('这个 DLC 没有可自动匹配的原版条目名称，请自己关闭冲突条目后继续安装');
-    const allowed = new Set(targets.map(item => item.referenceItemId));
-    if (new Set(selections.map(item => item.referenceItemId)).size !== selections.length ||
-        selections.some(item => !allowed.has(item.referenceItemId)))
-        throw new Error('原版 Regex 选择信息无效，请重新确认');
-    const chosen = new Map(selections.map(item => [item.referenceItemId, item.regexId]));
-    const desiredStates = [];
-    const conflictingRegexIds = [];
-    const ambiguities = [];
-    for (const target of targets) {
-        const entryName = target.displayName.trim();
-        const legacy = target.referenceItemId.startsWith('legacy:');
-        const located = target.kind === 'worldbook'
-            ? findUniqueOriginalEntryByName(entryName, worldbooks) : null;
-        const expectedId = target.kind === 'regex' && target.sourceKey?.startsWith('id:')
-            ? target.sourceKey.slice(3) : null;
-        const idMatches = expectedId
-            ? regexes.filter(regex => String(regex.id || '') === expectedId) : [];
-        if (idMatches.length > 1)
-            throw new Error('原版 Regex ID 重复，已停止自动关闭');
-        const regexMatches = target.kind === 'regex' || legacy
-            ? (idMatches.length ? idMatches : regexes.filter(regex => normalizedOriginalRegexName(String(regex.script_name || '')) === normalizedOriginalRegexName(entryName)))
-            : [];
-        if (legacy && located && regexMatches.length)
-            throw new Error('原版冲突「' + entryName + '」同时匹配多个世界书/Regex 条目，已停止自动修改');
-        if (located) {
-            desiredStates.push({
-                worldbookName: located.worldbookName,
-                displayName: entryName,
-                entryUid: getEntryUid(located.entry),
-                wasEnabled: getEntryEnabled(located.entry),
-            });
-            continue;
-        }
-        if (!regexMatches.length)
-            continue;
-        const candidates = regexMatches.map(regex => ({
-            regexId: String(regex.id || ''),
-            displayName: String(regex.script_name || ''),
-            enabled: regex.enabled !== false,
-        }));
-        if (candidates.some(item => !item.regexId) ||
-            new Set(candidates.map(item => item.regexId)).size !== candidates.length)
-            throw new Error('原版 Regex ID 不可区分，请手动关闭');
-        const selectedId = chosen.get(target.referenceItemId);
-        if (candidates.length > 1 && !selectedId) {
-            ambiguities.push({ referenceItemId: target.referenceItemId, displayName: entryName, candidates });
-            continue;
-        }
-        if (selectedId && !candidates.some(item => item.regexId === selectedId))
-            throw new Error('玩家选择的原版 Regex 已变化，请重新选择后再安装');
-        conflictingRegexIds.push(selectedId || candidates[0].regexId);
-    }
-    if (new Set(conflictingRegexIds).size !== conflictingRegexIds.length)
-        throw new Error('多个原版冲突指向同一条 Regex，请重新确认');
-    return { desiredStates, conflictingRegexIds, ambiguities };
-}
-async function assertCreativeWorkshopOriginalConflictsResolved(detail, selections = []) {
-    if (!detail.project?.conflictsWithOriginal)
-        return;
-    const worldbooks = await loadCharacterWorldbooks();
-    const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-    const result = resolveOriginalConflictActions(detail, worldbooks, regexes, selections);
-    if (result.ambiguities.length)
-        throw new Error('发现多条同名原版 Regex，请在安装前选择要关闭的条目');
-}
-async function inspectCreativeWorkshopOriginalConflicts(detail) {
-    if (!detail.project?.conflictsWithOriginal)
-        return { ambiguities: [] };
-    const worldbooks = await loadCharacterWorldbooks();
-    const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-    const result = resolveOriginalConflictActions(detail, worldbooks, regexes, []);
-    return { ambiguities: result.ambiguities };
-}
-async function syncCreativeWorkshopOriginalConflicts(projectId, detail, selections = []) {
-    if (!detail.project?.conflictsWithOriginal)
+async function syncCreativeWorkshopOriginalConflicts(projectId, detail) {
+    const project = detail.project || {};
+    const requestedNames = project.conflictsWithOriginal && Array.isArray(project.originalConflictEntryNames)
+        ? Array.from(new Set(project.originalConflictEntryNames.map(String).map(name => name.trim()).filter(Boolean)))
+        : [];
+    if (!project.conflictsWithOriginal)
         return [];
+    if (requestedNames.length === 0) {
+        throw new Error('这个 DLC 没有可自动匹配的原版条目名称，请自己关闭冲突条目后继续安装');
+    }
     const worldbooks = await loadCharacterWorldbooks();
+    const desiredStates = [];
     const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-    const { desiredStates, conflictingRegexIds, ambiguities } = resolveOriginalConflictActions(detail, worldbooks, regexes, selections);
-    if (ambiguities.length)
-        throw new Error('发现多条同名原版 Regex，请在安装前选择要关闭的条目');
+    const conflictingRegexIds = [];
+    for (const entryName of requestedNames) {
+        const located = findUniqueOriginalEntryByName(entryName, worldbooks);
+        const regexMatches = regexes.filter(regex => String(regex.script_name || '').trim() === entryName);
+        if ((located ? 1 : 0) + regexMatches.length > 1) {
+            throw new Error(`原版冲突「${entryName}」未找到或同时匹配多个世界书/Regex 条目，已停止自动修改。请手动处理后再安装`);
+        }
+        if (!located && !regexMatches.length)
+            continue; // The user may already have deleted the original.
+        if (!located) {
+            const regexId = String(regexMatches[0].id || '');
+            if (!regexId || regexes.filter(regex => String(regex.id || '') === regexId).length !== 1)
+                throw new Error('原版正则缺少唯一标识或重复，不能安全关闭，请手动检查');
+            conflictingRegexIds.push(regexId);
+            continue;
+        }
+        const localStateIdentity = {
+            worldbookName: located.worldbookName,
+            displayName: entryName,
+            entryUid: getEntryUid(located.entry),
+            wasEnabled: getEntryEnabled(located.entry),
+        };
+        // Use the latest real setting; old registry snapshots cannot override user edits.
+        desiredStates.push(localStateIdentity);
+    }
     // The historical snapshot is not authority over the user's current choices.
     await applyOriginalEntryStates(desiredStates, worldbooks);
     if (conflictingRegexIds.length) {
@@ -3081,15 +2994,13 @@ async function deleteProjectEntriesFromWorldbook(projectId, worldbookName, legac
         throw new Error('部分完成：世界书中的 DLC 条目仍然存在，请重新扫描后重试卸载');
     return owned;
 }
-async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion, manageOriginalConflicts = false, downloadUrlOverride, selectedRegexEntryKeys, onProgress, regexDownloadUrlOverride, originalConflictSelections = []) {
+async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requestedWorldbookName, expectedVersion, manageOriginalConflicts = false, downloadUrlOverride, selectedRegexEntryKeys, onProgress, regexDownloadUrlOverride) {
     invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, selectedEntryKeys, expectedVersion, downloadUrlOverride, onProgress, regexDownloadUrlOverride);
-    if (manageOriginalConflicts)
-        await assertCreativeWorkshopOriginalConflictsResolved(detail, originalConflictSelections);
     if (prepared.length === 0) {
         await assertCreativeWorkshopSharedRegexUpdate(projectId, detail, null, undefined, selectedRegexEntryKeys);
         const originalEntryStates = manageOriginalConflicts
-            ? await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections)
+            ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
             : [];
         return { ...detail, installRecord: { worldbookName: null, installedVersion: detail.project.version || expectedVersion || null, originalEntryStates, worldbookEntryKeys: [] } };
     }
@@ -3110,7 +3021,7 @@ async function installCreativeWorkshopProject(projectId, selectedEntryKeys, requ
         onProgress?.('conflicts');
     if (manageOriginalConflicts) {
         try {
-            originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections);
+            originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
         }
         catch (error) {
             throw new Error('DLC 已写入，但原版冲突处理失败。请重新扫描安装状态：' +
@@ -3137,7 +3048,7 @@ async function uninstallCreativeWorkshopProject(projectId, legacyProjectName, re
     // Never restore a historical original-entry enabled state.
     return deleted;
 }
-async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName, manageOriginalConflicts = false, downloadUrlOverride, requestedWorldbookName, approvedDuplicates = [], onProgress, regexDownloadUrlOverride, originalConflictSelections = []) {
+async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyProjectName, manageOriginalConflicts = false, downloadUrlOverride, requestedWorldbookName, approvedDuplicates = [], onProgress, regexDownloadUrlOverride) {
     const found = await findCreativeWorkshopInstallLocations(projectId, legacyProjectName);
     if (requestedWorldbookName && !found.includes(requestedWorldbookName))
         throw new Error('所选世界书中找不到此 DLC，请重新扫描安装位置');
@@ -3160,8 +3071,6 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
     const old = worldbookName ? (await getWorldbook(worldbookName)).filter(entry => isCreativeWorkshopProjectEntry(entry, projectId, legacyProjectName)) : undefined;
     invalidateCreativeWorkshopProjectCache(projectId);
     const { detail, prepared } = await prepareCreativeWorkshopProject(projectId, undefined, expectedVersion, downloadUrlOverride, onProgress, regexDownloadUrlOverride);
-    if (manageOriginalConflicts)
-        await assertCreativeWorkshopOriginalConflictsResolved(detail, originalConflictSelections);
     const targetVersion = String(detail.project.version || expectedVersion || '');
     const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
     const manifest = await readCreativeWorkshopRegexManifest();
@@ -3197,7 +3106,7 @@ async function updateCreativeWorkshopProject(projectId, expectedVersion, legacyP
         onProgress?.('conflicts');
     if (manageOriginalConflicts) {
         try {
-            originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections);
+            originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
         }
         catch (error) {
             throw new Error('部分完成：原版冲突处理未通过验收，请重新扫描：' + (error instanceof Error ? error.message : String(error)));
@@ -4023,46 +3932,6 @@ function createBridgeMessage(type, payload, requestId) {
 
 
 
-function captureCharacterBindings() {
-    const current = () => {
-        const context = SillyTavern.getContext();
-        const avatar = context.characters?.[context.characterId]?.avatar;
-        if (!avatar)
-            throw new Error('请先选择角色，再操作世界书');
-        return JSON.stringify([avatar, getCharWorldbookNames('current')]);
-    };
-    const expected = current();
-    return () => {
-        if (current() !== expected)
-            throw new Error('当前角色或绑定世界书已变化，操作已停止。请重新扫描');
-    };
-}
-/** Create a new book and bind it to this character without overwriting existing books. */
-async function createCreativeWorkshopAdditionalWorldbook(rawName) {
-    const name = rawName.trim();
-    if (!name || name.length > 120 || /[\r\n]/.test(name))
-        throw new Error('请输入 1–120 字的世界书名称（不能包含换行）');
-    if (getWorldbookNames().some(existing => existing.toLowerCase() === name.toLowerCase()))
-        throw new Error('已有同名世界书，请直接选择现有世界书');
-    const assertCharacter = captureCharacterBindings();
-    const bindings = getCharWorldbookNames('current');
-    await createWorldbook(name, []);
-    assertCharacter();
-    if (!getWorldbookNames().includes(name))
-        throw new Error('世界书创建后未能读取，请到 SillyTavern 检查，不要直接重试');
-    try {
-        await rebindCharWorldbooks('current', {
-            primary: bindings.primary,
-            additional: [...new Set([...(bindings.additional || []), name])],
-        });
-    }
-    catch {
-        throw new Error('世界书已创建，但绑定失败。请到 SillyTavern 手动绑定，勿重复创建');
-    }
-    if (!(getCharWorldbookNames('current').additional || []).includes(name))
-        throw new Error('世界书已创建，但绑定未通过验证。请到 SillyTavern 检查');
-    return name;
-}
 function entryUid(entry) {
     return String(entry.uid ?? '');
 }
@@ -4088,26 +3957,24 @@ function verifyCopy(rows, projectId, expected, staged) {
     }
 }
 /**
- * Source must be bound to the current character; destination may be any existing
- * worldbook without auto-binding it. Character Regex is left unchanged.
+ * Only migrate a DLC's own worldbook entries between currently bound character
+ * worldbooks. Character Regex remains character-scoped, never copied/deleted.
  * The source is removed only after the destination has been saved and reread.
  */
 async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName) {
     if (!projectId || !sourceName || !targetName || sourceName === targetName)
         throw new Error('请选择不同的来源与目标世界书');
-    const assertCharacter = captureCharacterBindings();
     const bindings = getCharWorldbookNames('current');
     const allowed = new Set([bindings.primary, ...(bindings.additional || [])].filter(Boolean));
     const scanned = new Set(getCreativeWorkshopBoundWorldbookNames());
-    if (!allowed.has(sourceName) ||
-        !scanned.has(sourceName))
-        throw new Error('来源必须是当前角色已绑定、可扫描的主／附加世界书');
+    if (!allowed.has(sourceName) || !allowed.has(targetName) ||
+        !scanned.has(sourceName) || !scanned.has(targetName))
+        throw new Error('仅允许在当前角色已绑定、可扫描的主／附加世界书之间迁移');
     if (!getWorldbookNames().includes(sourceName) || !getWorldbookNames().includes(targetName))
         throw new Error('来源或目标世界书不存在；未作任何修改');
     const [sourceBefore, targetBefore] = await Promise.all([
         getWorldbook(sourceName), getWorldbook(targetName),
     ]);
-    assertCharacter();
     checkUnique(sourceBefore, '来源世界书');
     checkUnique(targetBefore, '目标世界书');
     const original = belonging(sourceBefore, projectId);
@@ -4132,12 +3999,10 @@ async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName,
     }));
     // Stage a disabled copy before touching any source entry.
     await updateWorldbookWith(targetName, rows => {
-        assertCharacter();
         checkUnchanged(rows, targetBefore, '目标世界书');
         return [...rows, ...stageEntries];
     });
     const staged = await getWorldbook(targetName);
-    assertCharacter();
     checkUnique(staged, '目标世界书暂存');
     verifyCopy(staged, projectId, stageEntries, true);
     // Fail closed if the source was edited while the disabled copy was staged.
@@ -4149,7 +4014,6 @@ async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName,
             .filter(([key]) => key !== 'cw_transfer_stage')),
     }));
     await updateWorldbookWith(targetName, rows => {
-        assertCharacter();
         checkUnchanged(rows, staged, '目标世界书暂存');
         return rows.map(entry => {
             const index = stageEntries.findIndex(item => entryUid(item) === entryUid(entry));
@@ -4157,27 +4021,24 @@ async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName,
         });
     });
     const activated = await getWorldbook(targetName);
-    assertCharacter();
     verifyCopy(activated, projectId, finalEntries, false);
     checkUnchanged(await getWorldbook(sourceName), sourceBefore, '来源世界书');
     // Destination is now readable and active; only then remove exact source UIDs.
     checkUnchanged(await getWorldbook(targetName), activated, '目标世界书');
     const originalUids = new Set(original.map(entryUid));
     await updateWorldbookWith(sourceName, rows => {
-        assertCharacter();
         checkUnchanged(rows, sourceBefore, '来源世界书');
         return rows.filter(entry => !originalUids.has(entryUid(entry)));
     });
     const [sourceAfter, targetAfter] = await Promise.all([
         getWorldbook(sourceName), getWorldbook(targetName),
     ]);
-    assertCharacter();
     if (belonging(sourceAfter, projectId).length)
         throw new Error('部分完成：来源世界书仍残留 DLC 条目，请重新扫描，禁止直接重试');
     verifyCopy(targetAfter, projectId, finalEntries, false);
     // Installation metadata is advisory; live worldbook entries are authoritative.
     const record = getCreativeWorkshopInstallRecord(projectId);
-    if (!record || record.worldbookName === sourceName) {
+    if (record && record.worldbookName === sourceName) {
         setCreativeWorkshopInstallRecord(projectId, { worldbookName: targetName });
         if (getCreativeWorkshopInstallRecord(projectId)?.worldbookName !== targetName)
             throw new Error('世界书迁移成功，但本地记录未更新，请重新扫描');
@@ -4185,8 +4046,6 @@ async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName,
 }
 
 ;// ./src/CreativeWorkshop/bridge/host.ts
-
-
 
 
 
@@ -4455,12 +4314,6 @@ function createCreativeWorkshopBridgeHost(option) {
         const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
             ? String(event.data.payload?.projectId)
             : undefined;
-        const originalConflictSelections = Array.isArray(event.data.payload?.originalConflictSelections)
-            ? event.data.payload.originalConflictSelections.map(item => ({
-                referenceItemId: String(item?.referenceItemId || ''),
-                regexId: String(item?.regexId || ''),
-            }))
-            : [];
         const isTransferMutation = actionType === 'bridge:install-project' || actionType === 'bridge:confirm-project-update';
         let currentPhase = isTransferMutation ? 'queued' : '';
         const emitProgress = (phase, details) => {
@@ -4479,11 +4332,10 @@ function createCreativeWorkshopBridgeHost(option) {
             actionType === 'bridge:transfer-installed-worldbook' ||
             actionType === 'bridge:confirm-project-update' ||
             actionType === 'bridge:repair:project';
-        const isWorldbookCreation = actionType === 'bridge:create-additional-worldbook';
         if (isTransferMutation)
             emitProgress('queued');
         let finishMutation = null;
-        if (isProjectMutation || isWorldbookCreation || actionType === 'bridge:list-installed-projects') {
+        if (isProjectMutation || actionType === 'bridge:list-installed-projects') {
             const prior = mutationQueue;
             mutationQueue = new Promise(resolve => { finishMutation = resolve; });
             await prior;
@@ -4499,7 +4351,7 @@ function createCreativeWorkshopBridgeHost(option) {
             switch (event.data.type) {
                 case 'bridge:handshake':
                     onReady?.();
-                    await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true, originalConflictDisambiguation: true } }, event.data.requestId);
+                    await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true } }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     // Installed-project discovery can require reading several active worldbooks.
                     // Keep handshake responsive; the explicit bridge:list-installed-projects request loads it in the background.
@@ -4522,22 +4374,11 @@ function createCreativeWorkshopBridgeHost(option) {
                 case 'bridge:list-script-dependencies':
                     await post('bridge:script-dependencies', listCreativeWorkshopScriptDependencies(), event.data.requestId);
                     break;
-                case 'bridge:inspect-original-conflicts': {
-                    if (!_.isString(_.get(event.data, 'payload.projectId')))
-                        throw new Error('缺少 projectId');
-                    // Preflight must use the current approved baseline, not a possibly
-                    // stale detail cached before the new reference targets were published.
-                    invalidateCreativeWorkshopProjectCache(String(event.data.payload?.projectId));
-                    const detail = await project_fetch_fetchCreativeWorkshopProjectDetail(String(event.data.payload?.projectId), _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined);
-                    const result = await inspectCreativeWorkshopOriginalConflicts(detail);
-                    await post('bridge:original-conflict-preview', { projectId: String(event.data.payload?.projectId), ...result }, event.data.requestId);
-                    break;
-                }
                 case 'bridge:install-project':
                     if (!_.isString(_.get(event.data, 'payload.projectId'))) {
                         throw new Error('缺少 projectId');
                     }
-                    const installedDetail = await installCreativeWorkshopProject(String(event.data.payload?.projectId), Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined, event.data.payload?.manageOriginalConflicts === true, _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined, Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined, emitProgress, _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined, originalConflictSelections);
+                    const installedDetail = await installCreativeWorkshopProject(String(event.data.payload?.projectId), Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined, event.data.payload?.manageOriginalConflicts === true, _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined, Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined, emitProgress, _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined);
                     emitProgress('regex');
                     try {
                         await applyPreparedCreativeWorkshopRegex(String(event.data.payload?.projectId), installedDetail, prepareCreativeWorkshopRegexEntries(installedDetail, Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined));
@@ -4568,19 +4409,10 @@ function createCreativeWorkshopBridgeHost(option) {
                         ? String(event.data.payload.targetWorldbookName) : '';
                     await transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName);
                     const scan = await scanInstalledCreativeWorkshopProjects();
-                    const targetScanned = scan.scannedWorldbookNames.includes(targetName);
-                    const targetVisible = scan.projects.some(project => project.projectId === projectId && project.worldbookName === targetName);
                     if (!scan.complete || scan.projects.some(project => project.projectId === projectId && project.worldbookName === sourceName) ||
-                        targetVisible !== targetScanned)
+                        !scan.projects.some(project => project.projectId === projectId && project.worldbookName === targetName))
                         throw new Error('迁移写入完成但最终扫描未通过，请检查来源与目标，勿重复操作');
-                    await post('bridge:transfer-installed-result', { success: true, projectId, movedOutsideScan: !targetScanned, ...scan }, event.data.requestId);
-                    await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
-                    break;
-                }
-                case 'bridge:create-additional-worldbook': {
-                    const name = _.isString(event.data.payload?.worldbookName) ? String(event.data.payload.worldbookName) : '';
-                    const createdName = await createCreativeWorkshopAdditionalWorldbook(name);
-                    await post('bridge:create-additional-worldbook-result', { worldbookName: createdName }, event.data.requestId);
+                    await post('bridge:transfer-installed-result', { success: true, projectId, ...scan }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     break;
                 }
@@ -4624,7 +4456,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     const expectedVersion = _.isString(event.data.payload?.projectVersion)
                         ? String(event.data.payload?.projectVersion)
                         : undefined;
-                    const updatedDetail = await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName, event.data.payload?.manageOriginalConflicts === true, _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, Array.isArray(event.data.payload?.approvedDuplicates) ? event.data.payload.approvedDuplicates : [], emitProgress, _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined, originalConflictSelections);
+                    const updatedDetail = await updateCreativeWorkshopProject(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName, event.data.payload?.manageOriginalConflicts === true, _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined, _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined, Array.isArray(event.data.payload?.approvedDuplicates) ? event.data.payload.approvedDuplicates : [], emitProgress, _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined);
                     emitProgress('worldbook_verify');
                     try {
                         await verifyCreativeWorkshopApprovedDuplicateState(String(event.data.payload?.projectId), updatedDetail.worldbookVerification?.worldbookName || null, updatedDetail.duplicateSnapshots, actionLegacyProjectName);
@@ -5203,6 +5035,9 @@ $(() => {
         console.warn('[CreativeWorkshop] script-pagehide');
     });
 });
+
+;// ./src/CreativeWorkshop/staging.ts
+
 
 /******/ })()
 ;

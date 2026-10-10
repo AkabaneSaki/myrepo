@@ -10,6 +10,7 @@
     "check:inspection-summary-migration": "node tests/project-inspection-summary-migration-smoke.mjs",
     "check:taxonomy-migration": "node tests/project-taxonomy-migration-smoke.mjs",
     "check:home-js-smoke": "node tests/home-js-smoke.mjs",
+    "check:review-checker-bundle": "node tests/review-checker-bundle-smoke.mjs",
     "check:ejs-gate": "node tests/ejs-preflight-gate.mjs",
     "check:ejs-v2": "node scripts/check-ejs-v2.mjs",
     "build:ejs-offline": "node scripts/build-ejs-offline.mjs",
@@ -32,6 +33,7 @@
     "check:project-ranking-snapshot": "node tests/project-ranking-snapshot-smoke.mjs",
     "check:character-reference": "node tests/character-reference-fingerprint.mjs",
     "check:character-reference-registry": "node tests/character-reference-registry-smoke.mjs",
+    "check:publish-original-regex-picker": "node tests/publish-original-regex-picker-smoke.mjs",
     "check:creative-workshop-syntax": "node scripts/check-creative-workshop-syntax.mjs",
     "check:creative-workshop-regex-identity": "node tests/creative-workshop-regex-identity-smoke.mjs",
     "check:creative-workshop-install-identity": "node tests/creative-workshop-install-identity-smoke.mjs",
@@ -40,6 +42,7 @@
     "check:creative-workshop-transfer-progress": "node tests/creative-workshop-transfer-progress-smoke.mjs",
     "check:creative-workshop-regex-download-count": "node tests/creative-workshop-regex-download-count-smoke.mjs",
     "check:creative-workshop-progress-ui": "node tests/creative-workshop-progress-ui-smoke.mjs",
+    "check:installed-manager": "node tests/installed-manager-smoke.mjs",
     "check:creative-workshop-install-safety": "node tests/creative-workshop-install-safety-smoke.mjs",
     "check:creative-workshop-install-ui": "node tests/creative-workshop-install-ui-smoke.mjs",
     "check:creative-workshop-repair": "node tests/creative-workshop-repair-smoke.mjs",
@@ -83,7 +86,7 @@
     "check:creative-workshop-original-conflicts": "node tests/creative-workshop-original-conflicts-smoke.mjs",
     "check:creative-workshop-repair-d1-guard": "node tests/creative-workshop-repair-d1-guard-smoke.mjs",
     "check:oauth-external-browser": "node tests/oauth-external-browser-smoke.mjs",
-    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:editor-picks && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery && npm run check:admin-review-pending-queue",
+    "check:home": "npm run check:workshop-config && npm run check:home-js-smoke && npm run check:review-checker-bundle && npm run check:editor-picks && npm run check:oauth-external-browser && npm run check:creative-workshop-conflict-consent && npm run check:project-precautions && npm run check:admin-review-recovery && npm run check:admin-review-pending-queue",
     "check:workshop-config": "node ../scripts/check-workshop-config.mjs"
   },
   "dependencies": {

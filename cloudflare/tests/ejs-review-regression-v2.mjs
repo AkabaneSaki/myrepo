@@ -11,7 +11,8 @@ for (const [content,rule] of [
   ['<% { window.top.eval("1"); } %>','M1'],
 ]) {
   const report=scan(content);
-  assert.equal(report.gate,'reject',content);
+  assert.equal(report.gate,'accept',content);
+  assert.equal(report.audit,'yellow',content);
   assert.ok(report.findings.some(item=>item.ruleId===rule),content);
 }
 assert.ok(scan('<script>const {Function:make}=window;make("return 1")()</script>','regex').findings.some(item=>item.ruleId==='M2'));

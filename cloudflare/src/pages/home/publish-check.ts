@@ -10,8 +10,17 @@ function getCurrentWorkshopReference(references) {
 }
 
 function parseOriginalBaselineItem(item) {
-  if (!item || item.kind !== 'worldbook') return null;
+  if (!item || (item.kind !== 'worldbook' && item.kind !== 'regex')) return null;
   const raw = String(item.displayName || '').trim();
+  if (!raw) return null;
+  if (item.kind === 'regex') {
+    // Every Regex recorded in this trusted character-version baseline is
+    // original content, even without worldbook-style [本体] classification.
+    const labelled = /^\[本体\]((?:\[[^\]]+\])*)(.*)$/.exec(raw);
+    const groups = labelled ? Array.from(labelled[1].matchAll(/\[([^\]]+)\]/g), part => String(part[1] || '').trim()).filter(Boolean) : [];
+    return { id: String(item.id), kind: 'regex', sourceKey: item.sourceKey || null,
+      path: ['原版正则', ...groups], title: (labelled ? labelled[2].trim() : raw) || raw, system: false };
+  }
   const match = /^((?:\[[^\]]+\])+)(.*)$/.exec(raw);
   if (!match) return null;
   const tags = Array.from(match[1].matchAll(/\[([^\]]+)\]/g), part => String(part[1] || '').trim()).filter(Boolean);
@@ -20,7 +29,8 @@ function parseOriginalBaselineItem(item) {
   const title = String(match[2] || '').trim() || path[path.length - 1] || raw;
   const systemTags = new Set(['变量', '控制', 'COT', '快捷功能', '分割线']);
   const system = path.some(tag => systemTags.has(tag)) || title.startsWith('➡️');
-  return { id: String(item.id), sourceKey: item.sourceKey || null, path: path.filter(tag => tag !== '分割线'), title, system };
+  return { id: String(item.id), kind: 'worldbook', sourceKey: item.sourceKey || null,
+    path: path.filter(tag => tag !== '分割线'), title, system };
 }
 
 function countOriginalTreeEntries(node) {
@@ -38,7 +48,7 @@ function buildOriginalBaselineTree(items, selectedIds, options = {}) {
   });
   for (const entry of parsed) {
     let node = root;
-    const path = entry.path.length ? entry.path : ['其他'];
+    const path = entry.kind === 'worldbook' ? ['原版世界书', ...(entry.path.length ? entry.path : ['其他'])] : entry.path;
     for (const label of path) {
       if (!node.groups.has(label)) node.groups.set(label, { groups: new Map(), entries: [] });
       node = node.groups.get(label);
@@ -74,8 +84,8 @@ async function openCreatorPublishCheck(references, project = null) {
 
   const html = '<div class="publish-check">'
     + '<section class="publish-check-question"><span class="publish-check-step">1</span><div><h3>你的 DLC 在 ' + escapeHtml(versionLabel) + ' 可以正常使用吗？</h3><p>当前工坊使用的角色卡版本是 ' + escapeHtml(versionLabel) + '。</p><div class="publish-check-options"><button type="button" data-compatibility-choice="yes">可以，我确认过</button><button type="button" data-compatibility-choice="unsure">不确定</button></div></div></section>'
-    + '<section class="publish-check-question"><span class="publish-check-step">2</span><div><h3>需要暂时关掉一些原版内容吗？</h3><p>例如你的 DLC 会替换原版设定、规则或地点。</p><div class="publish-check-options"><button type="button" data-conflict-choice="no">不需要</button><button type="button" data-conflict-choice="yes">需要关掉一些</button></div>'
-    + '<div class="original-picker" data-original-picker hidden><div class="original-picker-head"><strong>要关掉哪些原版内容？</strong><span data-original-selected-count>已选 0 项</span></div><input class="original-picker-search" data-original-search type="search" placeholder="搜索名称，例如：白曜城"><label class="original-picker-system-toggle"><input type="checkbox" data-original-show-system> 显示系统内容</label><div class="original-picker-tree" data-original-tree><div class="empty-state">正在读取原版内容…</div></div></div></div></section>'
+    + '<section class="publish-check-question"><span class="publish-check-step">2</span><div><h3>需要暂时关掉一些原版内容吗？</h3><p>例如你的 DLC 会替换原版世界书设定或角色正则。</p><div class="publish-check-options"><button type="button" data-conflict-choice="no">不需要</button><button type="button" data-conflict-choice="yes">需要关掉一些</button></div>'
+    + '<div class="original-picker" data-original-picker hidden><div class="original-picker-head"><strong>要关掉哪些原版世界书／正则？</strong><span data-original-selected-count>已选 0 项</span></div><input class="original-picker-search" data-original-search type="search" placeholder="搜索名称，例如：白曜城"><label class="original-picker-system-toggle"><input type="checkbox" data-original-show-system> 显示系统内容</label><div class="original-picker-tree" data-original-tree><div class="empty-state">正在读取原版内容…</div></div></div></div></section>'
     + '<div class="publish-check-footer"><button type="button" class="btn btn-outline" data-publish-check-cancel>返回修改</button><button type="button" class="btn btn-primary" data-publish-check-confirm>确认发布</button></div></div>';
   const overlay = openModal(html, '<i class="fas fa-clipboard-check"></i> 发布前检查');
   overlay.classList.add('publish-check-modal');

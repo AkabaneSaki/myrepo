@@ -37,7 +37,8 @@ const syntax = analyzeProjectCode([{
   type: 'worldbook',
   text: worldbook([{ comment: 'broken', content: '<% const broken = ; %>' }]),
 }]);
-assert.equal(syntax.gate, 'reject');
+assert.equal(syntax.gate, 'accept');
+assert.equal(syntax.audit, 'yellow');
 assert.ok(rules(syntax).includes('EJS-PARSE'));
 
 const multilineAssignment = analyzeProjectCode([{
@@ -101,7 +102,8 @@ const evalReport = analyzeProjectCode([{
   type: 'worldbook',
   text: worldbook([{ comment: 'eval', content: '<% { const x = eval("1+1"); void x; } %>' }]),
 }]);
-assert.equal(evalReport.gate, 'reject');
+assert.equal(evalReport.gate, 'accept');
+assert.equal(evalReport.audit, 'yellow');
 assert.ok(rules(evalReport).includes('M1'));
 const uploaderEval = toUploaderCodeCheck(evalReport);
 assert.ok(uploaderEval.findings.some(item => item.ruleId === 'SCRIPT-RISK'));
@@ -122,7 +124,8 @@ const regexEval = analyzeProjectCode([{
   type: 'regex',
   text: regexFile([{ id: 'r1', scriptName: 'bad regex', findRegex: 'x', replaceString: '<script>eval("1+1")</script>' }]),
 }]);
-assert.equal(regexEval.gate, 'reject');
+assert.equal(regexEval.gate, 'accept');
+assert.equal(regexEval.audit, 'yellow');
 assert.ok(rules(regexEval).includes('M1'));
 assert.ok(!rules(regexEval).some(rule => /^L[1-7]$/.test(rule)));
 

@@ -261,7 +261,7 @@ function buildUploadLlmFixPrompt(findings, prepared, kind) {
 
 function buildUploadCheckReport(codeCheck, prepared, kind) {
   const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
-  const blockers = findings.filter(item => item?.severity === 'high').length;
+  const blockers = findings.filter(item => item?.severity === 'high' && /^L[1-7]$/.test(item?.ruleId || '')).length;
   const groups = groupUploadPreflightFindings(findings);
   return '# 命定创意工坊上传检查报告\n\n'
     + '- 状态：' + (codeCheck?.gate === 'reject' ? '未通过' : '通过自动门禁') + '\n'
@@ -293,7 +293,7 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
   const normalized = ['checking', 'ok', 'error'].includes(status) ? status : 'checking';
   const icon = normalized === 'ok' ? 'fa-circle-check' : (normalized === 'error' ? 'fa-circle-xmark' : 'fa-spinner fa-spin');
   const findings = Array.isArray(codeCheck?.findings) ? codeCheck.findings : [];
-  const blockerCount = findings.filter(item => item?.severity === 'high').length;
+  const blockerCount = findings.filter(item => item?.severity === 'high' && /^L[1-7]$/.test(item?.ruleId || '')).length;
   const groups = groupUploadPreflightFindings(findings);
   const headline = normalized === 'error' && blockerCount
     ? '自动检查未通过：发现 ' + blockerCount + ' 个阻断项，涉及 ' + groups.length + ' 个内容。'
@@ -306,7 +306,7 @@ function renderUploadPreflightStatus(container, status, message, codeCheck = nul
     : '';
   const findingsHtml = groups.length
     ? '<div class="upload-preflight-groups">' + groups.map((group, groupIndex) => {
-      const groupBlockers = group.findings.filter(item => item?.severity === 'high').length;
+      const groupBlockers = group.findings.filter(item => item?.severity === 'high' && /^L[1-7]$/.test(item?.ruleId || '')).length;
       const groupLabel = group.entry ? (group.entry.includes('↔') ? '跨条目：' + group.entry : group.entry) : (group.book || '文件检查');
       const itemsHtml = group.findings.map(item => {
         const ruleId = escapeHtml(item?.ruleId || 'CHECK');

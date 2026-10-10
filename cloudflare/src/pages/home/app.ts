@@ -8,6 +8,7 @@ import { homeDetailModalRenderScript } from './render/detail-modal';
 import { homeExternalLinksScript } from './external-links';
 import { homeReviewDiffRenderScript } from './render/review-diff';
 import { homeLayoutRenderScript } from './render/layout';
+import { homeInstalledManagerScript } from './installed-manager';
 import { homeRepairScript } from './repair-ui';
 import { homeStateScript } from './state';
 import { homeTavernBridgeScript } from './tavern-bridge';
@@ -51,6 +52,7 @@ export const homeScript = String.raw`
   ${homeExternalLinksScript}
   ${homeUploadPreviewScript}
   ${homeReviewDiffRenderScript}
+  ${homeInstalledManagerScript}
   ${homeLayoutRenderScript}
   ${homePublishCheckScript}
   ${homeModalsScript}

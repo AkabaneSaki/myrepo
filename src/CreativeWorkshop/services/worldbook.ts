@@ -13,6 +13,7 @@ import { createCreativeWorkshopRegexIdentityResolver } from './install-registry'
 import { readCreativeWorkshopRegexManifest } from './regex-record';
 import {
   syncCreativeWorkshopOriginalConflicts,
+  assertCreativeWorkshopOriginalConflictsResolved,
 } from './original-conflicts';
 import {
   reconcileCreativeWorkshopWorldbookEntries,
@@ -305,6 +306,7 @@ export async function installCreativeWorkshopProject(
   selectedRegexEntryKeys?: string[],
   onProgress?: CreativeWorkshopTransferProgress,
   regexDownloadUrlOverride?: string,
+  originalConflictSelections: Array<{ referenceItemId: string; regexId: string }> = [],
 ) {
   invalidateCreativeWorkshopProjectCache(projectId);
   const { detail, prepared } = await prepareCreativeWorkshopProject(
@@ -315,10 +317,12 @@ export async function installCreativeWorkshopProject(
     onProgress,
     regexDownloadUrlOverride,
   );
+  if (manageOriginalConflicts)
+    await assertCreativeWorkshopOriginalConflictsResolved(detail, originalConflictSelections);
   if (prepared.length === 0) {
     await assertCreativeWorkshopSharedRegexUpdate(projectId, detail, null, undefined, selectedRegexEntryKeys);
     const originalEntryStates = manageOriginalConflicts
-      ? await syncCreativeWorkshopOriginalConflicts(projectId, detail)
+      ? await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections)
       : [];
     return { ...detail, installRecord: { worldbookName: null, installedVersion: detail.project.version || expectedVersion || null, originalEntryStates, worldbookEntryKeys: [] as string[] } };
   }
@@ -340,7 +344,7 @@ export async function installCreativeWorkshopProject(
   if (manageOriginalConflicts) onProgress?.('conflicts');
   if (manageOriginalConflicts) {
     try {
-      originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail);
+      originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections);
     } catch (error) {
       throw new Error('DLC 已写入，但原版冲突处理失败。请重新扫描安装状态：' +
         (error instanceof Error ? error.message : String(error)));
@@ -383,6 +387,7 @@ export async function updateCreativeWorkshopProject(
   approvedDuplicates: Array<{ worldbookName: string; localVersion: string | null; entryCount: number }> = [],
   onProgress?: CreativeWorkshopTransferProgress,
   regexDownloadUrlOverride?: string,
+  originalConflictSelections: Array<{ referenceItemId: string; regexId: string }> = [],
 ) {
   const found = await findCreativeWorkshopInstallLocations(
     projectId, legacyProjectName);
@@ -414,6 +419,8 @@ export async function updateCreativeWorkshopProject(
     onProgress,
     regexDownloadUrlOverride,
   );
+  if (manageOriginalConflicts)
+    await assertCreativeWorkshopOriginalConflictsResolved(detail, originalConflictSelections);
   const targetVersion = String(detail.project.version || expectedVersion || '');
   const regexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
   const manifest = await readCreativeWorkshopRegexManifest();
@@ -446,7 +453,7 @@ export async function updateCreativeWorkshopProject(
   let originalEntryStates = [];
   if (manageOriginalConflicts) onProgress?.('conflicts');
   if (manageOriginalConflicts) {
-    try { originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail); }
+    try { originalEntryStates = await syncCreativeWorkshopOriginalConflicts(projectId, detail, originalConflictSelections); }
     catch (error) { throw new Error('部分完成：原版冲突处理未通过验收，请重新扫描：' + (error instanceof Error ? error.message : String(error))); }
   }
   return { ...detail, duplicateSnapshots,

@@ -1,3 +1,4 @@
+// Creative Workshop original Regex ID conflict choice / STAGING ONLY. Source bf0e686f225b42db5941fb831e1bf79ee25c602a. Not a production release.
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
 
@@ -23,7 +24,7 @@ function createScriptIdIframe() {
 }
 
 ;// ./src/CreativeWorkshop/services/config.ts
-const DEFAULT_CREATIVE_WORKSHOP_URL = "https://poemofdestinycreativeworkshop.1528779666.workers.dev";
+const DEFAULT_CREATIVE_WORKSHOP_URL = "https://workshop-test.uika.cc.cd";
 const CREATIVE_WORKSHOP_URL_VARIABLE_KEY = 'creative_workshop_worker_url';
 function normalizeCreativeWorkshopUrl(url) {
     return url.trim().replace(/\/+$/, '');
@@ -44,11 +45,6 @@ function getCreativeWorkshopOrigin() {
 ;// ./src/CreativeWorkshop/services/context.ts
 function getCurrentCreativeWorkshopContext() {
     const charWorldbooks = getCharWorldbookNames('current');
-    let chatWorldbook = null;
-    try {
-        chatWorldbook = getChatWorldbookName('current');
-    }
-    catch { }
     return {
         connected: true,
         characterName: getCurrentCharacterName(),
@@ -56,8 +52,6 @@ function getCurrentCreativeWorkshopContext() {
             primary: charWorldbooks.primary,
             additional: charWorldbooks.additional || [],
             available: getWorldbookNames(),
-            global: getGlobalWorldbookNames(),
-            chat: chatWorldbook,
         },
         regexEnabled: isCharacterTavernRegexesEnabled(),
         chatId: SillyTavern.getCurrentChatId(),
@@ -65,7 +59,7 @@ function getCurrentCreativeWorkshopContext() {
 }
 
 ;// ./src/CreativeWorkshop/version.ts
-const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.3.0";
+const CREATIVE_WORKSHOP_CLIENT_VERSION = "2.3.0-dev1";
 
 ;// ./src/CreativeWorkshop/services/install-identity.ts
 const CREATIVE_WORKSHOP_WORLD_BOOK_META_START = '<%# poem-workshop-meta:v1-start\n';
@@ -2001,7 +1995,6 @@ async function scanInstalledCreativeWorkshopProjects() {
     const unreadableWorldbookNames = worldbookRows.filter(row => !row.readable).map(row => row.worldbookName);
     const worldbooks = worldbookRows.filter(row => row.readable);
     const currentlyBound = new Set(getCreativeWorkshopBoundWorldbookNames());
-    const existingWorldbookNames = new Set(getWorldbookNames());
     const entryRows = worldbooks.flatMap(({ worldbookName, entries }) => entries
         .filter(entry => Boolean(install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id')) ||
         Boolean(install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'fate_project_name')))
@@ -2019,12 +2012,6 @@ async function scanInstalledCreativeWorkshopProjects() {
     const projects = [];
     for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes), ...manifest.pending.map(record => record.projectId)]).filter(Boolean)) {
         const projectRows = groupedEntries[projectId] || [];
-        // Exclude DLCs intentionally moved out of this character's scan;
-        // retained character Regex must not resurrect a phantom installed row.
-        const recordedBook = getCreativeWorkshopInstallRecord(projectId)?.worldbookName;
-        if (!projectRows.length && recordedBook && !currentlyBound.has(recordedBook) &&
-            existingWorldbookNames.has(recordedBook))
-            continue;
         const projectRegexRows = groupedRegexes[projectId] || [];
         const projectRegexes = projectRegexRows.map(row => row.regex);
         const regexVersions = _.uniq(projectRegexRows
@@ -2083,7 +2070,6 @@ async function scanInstalledCreativeWorkshopProjects() {
         projects,
         complete: unreadableWorldbookNames.length === 0,
         unreadableWorldbookNames,
-        scannedWorldbookNames: worldbookRows.map(row => row.worldbookName),
     };
 }
 async function install_state_listInstalledCreativeWorkshopProjects() {
@@ -4019,173 +4005,7 @@ function createBridgeMessage(type, payload, requestId) {
     };
 }
 
-;// ./src/CreativeWorkshop/services/installed-transfer.ts
-
-
-
-function captureCharacterBindings() {
-    const current = () => {
-        const context = SillyTavern.getContext();
-        const avatar = context.characters?.[context.characterId]?.avatar;
-        if (!avatar)
-            throw new Error('请先选择角色，再操作世界书');
-        return JSON.stringify([avatar, getCharWorldbookNames('current')]);
-    };
-    const expected = current();
-    return () => {
-        if (current() !== expected)
-            throw new Error('当前角色或绑定世界书已变化，操作已停止。请重新扫描');
-    };
-}
-/** Create a new book and bind it to this character without overwriting existing books. */
-async function createCreativeWorkshopAdditionalWorldbook(rawName) {
-    const name = rawName.trim();
-    if (!name || name.length > 120 || /[\r\n]/.test(name))
-        throw new Error('请输入 1–120 字的世界书名称（不能包含换行）');
-    if (getWorldbookNames().some(existing => existing.toLowerCase() === name.toLowerCase()))
-        throw new Error('已有同名世界书，请直接选择现有世界书');
-    const assertCharacter = captureCharacterBindings();
-    const bindings = getCharWorldbookNames('current');
-    await createWorldbook(name, []);
-    assertCharacter();
-    if (!getWorldbookNames().includes(name))
-        throw new Error('世界书创建后未能读取，请到 SillyTavern 检查，不要直接重试');
-    try {
-        await rebindCharWorldbooks('current', {
-            primary: bindings.primary,
-            additional: [...new Set([...(bindings.additional || []), name])],
-        });
-    }
-    catch {
-        throw new Error('世界书已创建，但绑定失败。请到 SillyTavern 手动绑定，勿重复创建');
-    }
-    if (!(getCharWorldbookNames('current').additional || []).includes(name))
-        throw new Error('世界书已创建，但绑定未通过验证。请到 SillyTavern 检查');
-    return name;
-}
-function entryUid(entry) {
-    return String(entry.uid ?? '');
-}
-function checkUnique(entries, label) {
-    const ids = entries.map(entryUid);
-    if (ids.some(id => !id) || new Set(ids).size !== ids.length)
-        throw new Error(label + '的 UID 缺失或重复；迁移已停止');
-}
-function checkUnchanged(actual, expected, label) {
-    if (!matchesCreativeWorkshopWorldbookSnapshot(actual, expected) ||
-        actual.some((entry, i) => entryUid(entry) !== entryUid(expected[i])))
-        throw new Error(label + '在迁移过程中发生变化。请重新扫描，勿重复迁移');
-}
-function belonging(entries, projectId) {
-    return entries.filter(entry => install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'cw_project_id') === projectId);
-}
-function verifyCopy(rows, projectId, expected, staged) {
-    const actual = belonging(rows, projectId);
-    if (actual.length !== expected.length || actual.some((entry, i) => !matchesCreativeWorkshopWorldbookSnapshot(entry, expected[i]) ||
-        entryUid(entry) !== entryUid(expected[i]) ||
-        Boolean(entry.extra?.cw_transfer_stage) !== staged)) {
-        throw new Error('目标世界书写入或重新读取验收失败。源内容尚未主动删除；请重新扫描');
-    }
-}
-/**
- * Source must be bound to the current character; destination may be any existing
- * worldbook without auto-binding it. Character Regex is left unchanged.
- * The source is removed only after the destination has been saved and reread.
- */
-async function transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName) {
-    if (!projectId || !sourceName || !targetName || sourceName === targetName)
-        throw new Error('请选择不同的来源与目标世界书');
-    const assertCharacter = captureCharacterBindings();
-    const bindings = getCharWorldbookNames('current');
-    const allowed = new Set([bindings.primary, ...(bindings.additional || [])].filter(Boolean));
-    const scanned = new Set(getCreativeWorkshopBoundWorldbookNames());
-    if (!allowed.has(sourceName) ||
-        !scanned.has(sourceName))
-        throw new Error('来源必须是当前角色已绑定、可扫描的主／附加世界书');
-    if (!getWorldbookNames().includes(sourceName) || !getWorldbookNames().includes(targetName))
-        throw new Error('来源或目标世界书不存在；未作任何修改');
-    const [sourceBefore, targetBefore] = await Promise.all([
-        getWorldbook(sourceName), getWorldbook(targetName),
-    ]);
-    assertCharacter();
-    checkUnique(sourceBefore, '来源世界书');
-    checkUnique(targetBefore, '目标世界书');
-    const original = belonging(sourceBefore, projectId);
-    if (!original.length)
-        throw new Error('来源中没有此 DLC 的世界书条目；Regex-only 项目不能执行世界书迁移');
-    const identityKeys = original.map(entry => install_identity_getCreativeWorkshopWorldbookMetadataString(entry, 'cw_entry_key'));
-    if (identityKeys.some(key => !key) || new Set(identityKeys).size !== original.length)
-        throw new Error('来源 DLC 缺少唯一的现代条目身份，请先用 DLC 修复，不自动迁移');
-    if (belonging(targetBefore, projectId).length)
-        throw new Error('目标世界书已包含此 DLC，请先检查重复安装，禁止覆盖');
-    if (original.some(entry => Boolean(entry.extra?.cw_transfer_stage)))
-        throw new Error('来源含未完成的迁移暂存条目，请先人工核对');
-    const maxUid = Math.max(0, ...targetBefore.map(entry => Number(entryUid(entry)))
-        .filter(value => Number.isSafeInteger(value) && value >= 0));
-    if (!Number.isSafeInteger(maxUid + original.length + 1))
-        throw new Error('目标世界书 UID 空间已耗尽');
-    const stageEntries = original.map((entry, i) => ({
-        ...structuredClone(entry),
-        uid: maxUid + 1 + i,
-        enabled: false,
-        extra: { ...structuredClone(entry.extra || {}), cw_transfer_stage: true },
-    }));
-    // Stage a disabled copy before touching any source entry.
-    await updateWorldbookWith(targetName, rows => {
-        assertCharacter();
-        checkUnchanged(rows, targetBefore, '目标世界书');
-        return [...rows, ...stageEntries];
-    });
-    const staged = await getWorldbook(targetName);
-    assertCharacter();
-    checkUnique(staged, '目标世界书暂存');
-    verifyCopy(staged, projectId, stageEntries, true);
-    // Fail closed if the source was edited while the disabled copy was staged.
-    checkUnchanged(await getWorldbook(sourceName), sourceBefore, '来源世界书');
-    const finalEntries = stageEntries.map((entry, i) => ({
-        ...entry,
-        enabled: original[i].enabled,
-        extra: Object.fromEntries(Object.entries(entry.extra || {})
-            .filter(([key]) => key !== 'cw_transfer_stage')),
-    }));
-    await updateWorldbookWith(targetName, rows => {
-        assertCharacter();
-        checkUnchanged(rows, staged, '目标世界书暂存');
-        return rows.map(entry => {
-            const index = stageEntries.findIndex(item => entryUid(item) === entryUid(entry));
-            return index === -1 ? entry : finalEntries[index];
-        });
-    });
-    const activated = await getWorldbook(targetName);
-    assertCharacter();
-    verifyCopy(activated, projectId, finalEntries, false);
-    checkUnchanged(await getWorldbook(sourceName), sourceBefore, '来源世界书');
-    // Destination is now readable and active; only then remove exact source UIDs.
-    checkUnchanged(await getWorldbook(targetName), activated, '目标世界书');
-    const originalUids = new Set(original.map(entryUid));
-    await updateWorldbookWith(sourceName, rows => {
-        assertCharacter();
-        checkUnchanged(rows, sourceBefore, '来源世界书');
-        return rows.filter(entry => !originalUids.has(entryUid(entry)));
-    });
-    const [sourceAfter, targetAfter] = await Promise.all([
-        getWorldbook(sourceName), getWorldbook(targetName),
-    ]);
-    assertCharacter();
-    if (belonging(sourceAfter, projectId).length)
-        throw new Error('部分完成：来源世界书仍残留 DLC 条目，请重新扫描，禁止直接重试');
-    verifyCopy(targetAfter, projectId, finalEntries, false);
-    // Installation metadata is advisory; live worldbook entries are authoritative.
-    const record = getCreativeWorkshopInstallRecord(projectId);
-    if (!record || record.worldbookName === sourceName) {
-        setCreativeWorkshopInstallRecord(projectId, { worldbookName: targetName });
-        if (getCreativeWorkshopInstallRecord(projectId)?.worldbookName !== targetName)
-            throw new Error('世界书迁移成功，但本地记录未更新，请重新扫描');
-    }
-}
-
 ;// ./src/CreativeWorkshop/bridge/host.ts
-
 
 
 
@@ -4476,14 +4296,12 @@ function createCreativeWorkshopBridgeHost(option) {
         };
         const isProjectMutation = actionType === 'bridge:install-project' ||
             actionType === 'bridge:uninstall-project' ||
-            actionType === 'bridge:transfer-installed-worldbook' ||
             actionType === 'bridge:confirm-project-update' ||
             actionType === 'bridge:repair:project';
-        const isWorldbookCreation = actionType === 'bridge:create-additional-worldbook';
         if (isTransferMutation)
             emitProgress('queued');
         let finishMutation = null;
-        if (isProjectMutation || isWorldbookCreation || actionType === 'bridge:list-installed-projects') {
+        if (isProjectMutation || actionType === 'bridge:list-installed-projects') {
             const prior = mutationQueue;
             mutationQueue = new Promise(resolve => { finishMutation = resolve; });
             await prior;
@@ -4493,13 +4311,12 @@ function createCreativeWorkshopBridgeHost(option) {
         try {
             if (isTransferMutation)
                 emitProgress('preflight');
-            if ((isProjectMutation || actionType === 'bridge:list-installed-projects') &&
-                actionType !== 'bridge:transfer-installed-worldbook')
+            if (isProjectMutation || actionType === 'bridge:list-installed-projects')
                 await migrateCreativeWorkshopLegacyRegexRecords();
             switch (event.data.type) {
                 case 'bridge:handshake':
                     onReady?.();
-                    await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true, originalConflictDisambiguation: true } }, event.data.requestId);
+                    await post('bridge:handshake:ok', { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, originalConflictDisambiguation: true } }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     // Installed-project discovery can require reading several active worldbooks.
                     // Keep handshake responsive; the explicit bridge:list-installed-projects request loads it in the background.
@@ -4514,7 +4331,7 @@ function createCreativeWorkshopBridgeHost(option) {
                     }
                     catch (error) {
                         console.warn('[CreativeWorkshopBridgeHost] initial installed-project scan failed', error);
-                        scan = { projects: [], complete: false, unreadableWorldbookNames: [], scannedWorldbookNames: [] };
+                        scan = { projects: [], complete: false, unreadableWorldbookNames: [] };
                     }
                     await post('bridge:installed-projects', scan, event.data.requestId);
                     break;
@@ -4560,30 +4377,6 @@ function createCreativeWorkshopBridgeHost(option) {
                     }, event.data.requestId);
                     await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
                     break;
-                case 'bridge:transfer-installed-worldbook': {
-                    const projectId = actionProjectId || '';
-                    const sourceName = _.isString(event.data.payload?.sourceWorldbookName)
-                        ? String(event.data.payload.sourceWorldbookName) : '';
-                    const targetName = _.isString(event.data.payload?.targetWorldbookName)
-                        ? String(event.data.payload.targetWorldbookName) : '';
-                    await transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName);
-                    const scan = await scanInstalledCreativeWorkshopProjects();
-                    const targetScanned = scan.scannedWorldbookNames.includes(targetName);
-                    const targetVisible = scan.projects.some(project => project.projectId === projectId && project.worldbookName === targetName);
-                    if (!scan.complete || scan.projects.some(project => project.projectId === projectId && project.worldbookName === sourceName) ||
-                        targetVisible !== targetScanned)
-                        throw new Error('迁移写入完成但最终扫描未通过，请检查来源与目标，勿重复操作');
-                    await post('bridge:transfer-installed-result', { success: true, projectId, movedOutsideScan: !targetScanned, ...scan }, event.data.requestId);
-                    await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
-                    break;
-                }
-                case 'bridge:create-additional-worldbook': {
-                    const name = _.isString(event.data.payload?.worldbookName) ? String(event.data.payload.worldbookName) : '';
-                    const createdName = await createCreativeWorkshopAdditionalWorldbook(name);
-                    await post('bridge:create-additional-worldbook-result', { worldbookName: createdName }, event.data.requestId);
-                    await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
-                    break;
-                }
                 case 'bridge:uninstall-project':
                     if (!_.isString(_.get(event.data, 'payload.projectId'))) {
                         throw new Error('缺少 projectId');
@@ -5203,6 +4996,9 @@ $(() => {
         console.warn('[CreativeWorkshop] script-pagehide');
     });
 });
+
+;// ./src/CreativeWorkshop/staging.ts
+
 
 /******/ })()
 ;

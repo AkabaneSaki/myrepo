@@ -8,6 +8,7 @@ on:
       - 'config/**'
       - 'scripts/check-workshop-config.mjs'
       - 'scripts/check-workshop-bundles.mjs'
+      - 'tests/auto-dialogue-beautifier-smoke.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'webpack.config.cjs'
@@ -49,6 +50,9 @@ jobs:
 
       - name: Verify built Workshop bundles
         run: pnpm check:workshop-bundles
+
+      - name: Verify adaptive regex initialization
+        run: node tests/auto-dialogue-beautifier-smoke.mjs --bundle
 
       - name: Commit refreshed staging bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/staging'

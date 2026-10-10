@@ -178,21 +178,28 @@ export async function listCharacterReferenceVersionItems(
   }));
 }
 
+export type OriginalConflictTarget = {
+  referenceItemId: string;
+  kind: 'worldbook' | 'regex';
+  displayName: string;
+  sourceKey: string | null;
+};
+
 export async function validateOriginalConflictReferenceItems(
   c: AppContext,
   referenceVersionId: string | null | undefined,
   itemIds: string[] | null | undefined,
-): Promise<{ ids: string[]; entryNames: string[] }> {
+): Promise<{ ids: string[]; entryNames: string[]; targets: OriginalConflictTarget[] }> {
   const uniqueIds = Array.from(new Set((itemIds || []).map(value => String(value).trim()).filter(Boolean)));
-  if (uniqueIds.length === 0) return { ids: [], entryNames: [] };
+  if (uniqueIds.length === 0) return { ids: [], entryNames: [], targets: [] };
   if (!referenceVersionId) throw new Error('请先确认当前角色卡版本');
   if (uniqueIds.length > 500) throw new Error('选择的原版内容太多，请重新选择');
 
   const result = await c.env.DB.prepare(
-    `SELECT id, display_name
+    `SELECT id, kind, source_key, display_name
      FROM character_reference_items
      WHERE reference_version_id = ?
-       AND kind = 'worldbook'
+       AND kind IN ('worldbook', 'regex')
        AND id IN (SELECT value FROM json_each(?))`,
   )
     .bind(referenceVersionId, JSON.stringify(uniqueIds))
@@ -200,14 +207,21 @@ export async function validateOriginalConflictReferenceItems(
 
   const rows = result.results || [];
   if (rows.length !== uniqueIds.length) throw new Error('有些原版内容已经找不到，请重新选择');
-  if (rows.some(row => !String(row.display_name || '').startsWith('[本体]'))) {
-    throw new Error('只能选择原版内容');
+  // Worldbook entries still require the verified [本体] classification.
+  // Regex entries are independently recorded as originals in this version
+  // registry; their script names do not use worldbook classification tags.
+  if (rows.some(row => !String(row.display_name || '').trim() ||
+      (String(row.kind) === 'worldbook' && !String(row.display_name || '').startsWith('[本体]')))) {
+    throw new Error('只能选择原版世界书或当前角色版本中的正则');
   }
-  const namesById = new Map(rows.map(row => [String(row.id), String(row.display_name || '')]));
-  return {
-    ids: uniqueIds,
-    entryNames: uniqueIds.map(id => namesById.get(id) || ''),
-  };
+  const targetsById = new Map(rows.map(row => [String(row.id), {
+    referenceItemId: String(row.id),
+    kind: String(row.kind) === 'regex' ? 'regex' as const : 'worldbook' as const,
+    displayName: String(row.display_name || ''),
+    sourceKey: row.source_key == null ? null : String(row.source_key),
+  }]));
+  const targets = uniqueIds.map(id => targetsById.get(id)!);
+  return { ids: uniqueIds, entryNames: targets.map(target => target.displayName), targets };
 }
 
 export async function listCharacterReferences(c: AppContext): Promise<CharacterReferenceSummary[]> {
