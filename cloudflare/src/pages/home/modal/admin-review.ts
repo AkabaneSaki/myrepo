@@ -464,7 +464,7 @@ export const homeAdminReviewModalScript = [
   '      `<div class="admin-review-detail-scroll">`,',
   '      `<main class="admin-review-detail-main">`,',
   '      `<details class="admin-review-description"><summary><span><i class="fas fa-align-left"></i> 项目简介</span><span class="admin-review-description-hint">点击展开 / 收起</span></summary><div class="admin-review-description-body">${escapeHtml(description)}</div></details>`,',
-  '      precautions ? `<details class="admin-review-description" open><summary><span><i class="fas fa-triangle-exclamation"></i> 安装注意事项</span><span class="admin-review-description-hint">Creator 提供 · 纯文本</span></summary><div class="admin-review-description-body" style="white-space:pre-line">${escapeHtml(precautions)}</div></details>` : "",',
+  '      precautions ? `<details class="admin-review-description" open><summary><span><i class="fas fa-triangle-exclamation"></i> 安装注意事项</span><span class="admin-review-description-hint">Creator 提供 · 纯文本</span></summary><div class="admin-review-description-body admin-review-description-body--plain">${escapeHtml(precautions)}</div></details>` : "",',
   '      originalConflictReviewHtml,',
   '      renderExternalLinksPanel(entries, regexEntries, { project: reviewProjectData, reviewOnly: true, title: "需要确认的链接", notice: "请确认这些链接的用途和来源；自动检查没有访问链接中的内容。" }),',
   '      renderAdminCodeCheck(codeCheck, checkDetail),',

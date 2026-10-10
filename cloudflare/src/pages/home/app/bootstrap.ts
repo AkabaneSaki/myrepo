@@ -3,6 +3,7 @@ export const homeAppBootstrapScript = String.raw`
     applyContentFont(state.contentFont);
     const filteredProjects = getFilteredProjects();
     app.innerHTML = renderLayout(filteredProjects);
+    document.body.classList.toggle('mobile-tool-open', Boolean(state.mobileToolMode));
     bindStaticActions(filteredProjects);
     bindCoverImageFallbacks();
     void ensureDailyRandomDrawState();
