@@ -188,6 +188,7 @@ function syncInstalledProjectsFromBridge(payload, options) {
     removeProjectId: options && options.removeProjectId ? options.removeProjectId : null,
     complete: payload?.complete !== false,
     unreadableWorldbookNames: Array.isArray(payload?.unreadableWorldbookNames) ? payload.unreadableWorldbookNames : [],
+    scannedWorldbookNames: Array.isArray(payload?.scannedWorldbookNames) ? payload.scannedWorldbookNames : [],
   });
   if (payload?.complete === false) {
     showToast(
@@ -294,6 +295,8 @@ function syncContextFromBridge(payload) {
     primary: payload?.worldbooks?.primary || null,
     additional: Array.isArray(payload?.worldbooks?.additional) ? payload.worldbooks.additional : [],
     available: Array.isArray(payload?.worldbooks?.available) ? payload.worldbooks.available : [],
+    global: Array.isArray(payload?.worldbooks?.global) ? payload.worldbooks.global : [],
+    chat: typeof payload?.worldbooks?.chat === 'string' ? payload.worldbooks.chat : null,
   };
   renderApp();
 }
@@ -364,6 +367,7 @@ function handleBridgeMessage(event) {
       setTavernClientVersion(data.payload?.clientVersion);
       state.tavern.verifiedDlcInstall = data.payload?.capabilities?.verifiedDlcInstall === true;
       state.tavern.duplicateDlcConsolidation = data.payload?.capabilities?.duplicateDlcConsolidation === true;
+      state.tavern.installedManagerTransferSupported = data.payload?.capabilities?.installedManagerTransfer === true;
       renderApp();
       if (shouldShowWorkshopReleaseNotice()) {
         openReleaseNoticeModal();
@@ -384,6 +388,7 @@ function handleBridgeMessage(event) {
       break;
     case 'bridge:installed-projects':
     case 'bridge:install-result':
+    case 'bridge:transfer-installed-result':
     case 'bridge:uninstall-result':
     case 'bridge:update-result':
       if (data.type === 'bridge:install-result' || data.type === 'bridge:update-result')
@@ -393,6 +398,11 @@ function handleBridgeMessage(event) {
       }
       if (data.type === 'bridge:install-result') {
         handleInstallResult(data.payload || {});
+      } else if (data.type === 'bridge:transfer-installed-result') {
+        syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'replace' });
+        showToast(data.payload?.movedOutsideScan
+          ? '迁移完成；目标未绑定，DLC 已退出安装列表，角色 Regex 仍保留'
+          : 'DLC 迁移完成，已重新扫描安装位置');
       } else if (data.type === 'bridge:uninstall-result') {
         handleUninstallResult(data.payload || {});
       } else if (data.type === 'bridge:update-result') {
@@ -400,6 +410,10 @@ function handleBridgeMessage(event) {
       } else {
         syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'replace' });
       }
+      break;
+    case 'bridge:create-additional-worldbook-result':
+      showToast('已创建并绑定世界书：' + (data.payload?.worldbookName || ''), 'success');
+      postBridgeMessage('bridge:list-installed-projects');
       break;
     case 'bridge:project-diff':
       settleProjectDiffRequest(data.requestId, null, syncDiffFromBridge(data.payload || {}));
@@ -418,6 +432,9 @@ function handleBridgeMessage(event) {
       dispatchOAuthResult(data.payload || {});
       break;
     case 'bridge:error':
+      const failedTransfer = data.payload?.action === 'bridge:transfer-installed-worldbook';
+      if (failedTransfer) showToast('DLC 迁移未完成：请检查安装位置并重新扫描，不要直接重试', 'error');
+      if (failedTransfer) postBridgeMessage('bridge:list-installed-projects');
       const handledDlcError = completeDlcProgress(data.requestId, data.payload || {}, true);
       const handledProjectDiffError = settleProjectDiffRequest(
         data.requestId,
@@ -486,10 +503,28 @@ async function requestInstallProject(projectId, selection = {}) {
   } catch (error) { failLocalDlcProgress(task, error); throw error; }
 }
 
+function requestInstalledWorldbookTransfer(projectId, sourceWorldbookName, targetWorldbookName) {
+  if (!state.tavern.connected || !state.tavern.installedManagerTransferSupported ||
+      !state.tavern.installedProjectsComplete)
+    throw new Error('ST Client 未连接、不支持安全迁移，或扫描不完整');
+  const rows = getLocalProjectInstallations(projectId);
+  if (!rows.some(item => item.worldbookName === sourceWorldbookName && item.entryCount > 0))
+    throw new Error('来源安装位置已变化，请重新扫描');
+  const books = state.tavern.worldbooks || {};
+  if (!(books.available || []).includes(targetWorldbookName) ||
+      targetWorldbookName === sourceWorldbookName)
+    throw new Error('目标必须是存在的其他世界书');
+  postBridgeMessage('bridge:transfer-installed-worldbook', {
+    projectId, sourceWorldbookName, targetWorldbookName
+  });
+  setProjectPendingAction(projectId, 'transfer');
+  renderApp();
+}
+
 function requestUninstallProject(projectId, worldbookName = null) {
   const legacyProjectName = getLegacyProjectNameForBridge(projectId);
   if (!worldbookName && getLocalProjectInstallations(projectId).filter(item => item.worldbookName).length > 1) {
-    showToast('此 DLC 安装在多本世界书，请到「订阅 / 已安装」选择具体位置卸载', 'warning');
+    showToast('此 DLC 安装在多本世界书，请到「我的工坊」选择具体位置卸载', 'warning');
     return;
   }
   try { postBridgeMessage('bridge:uninstall-project', {

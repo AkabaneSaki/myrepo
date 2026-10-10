@@ -1,6 +1,7 @@
 import {
   createCreativeWorkshopRegexIdentityResolver,
   getCreativeWorkshopBoundWorldbookNames,
+  getCreativeWorkshopInstallRecord,
 } from './install-registry';
 import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 import { readCreativeWorkshopRegexManifest } from './regex-record';
@@ -32,6 +33,7 @@ export type CreativeWorkshopInstalledProjectScan = {
   projects: CreativeWorkshopInstalledProject[];
   complete: boolean;
   unreadableWorldbookNames: string[];
+  scannedWorldbookNames: string[];
 };
 
 type WorldbookScanRow = {
@@ -112,6 +114,7 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
   const unreadableWorldbookNames = worldbookRows.filter(row => !row.readable).map(row => row.worldbookName);
   const worldbooks = worldbookRows.filter(row => row.readable);
   const currentlyBound = new Set(getCreativeWorkshopBoundWorldbookNames());
+  const existingWorldbookNames = new Set(getWorldbookNames());
 
   const entryRows = worldbooks.flatMap(({ worldbookName, entries }) =>
     entries
@@ -144,6 +147,11 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
   const projects: CreativeWorkshopInstalledProject[] = [];
   for (const projectId of _.uniq([...Object.keys(groupedEntries), ...Object.keys(groupedRegexes), ...manifest.pending.map(record => record.projectId)]).filter(Boolean)) {
     const projectRows = groupedEntries[projectId] || [];
+    // Exclude DLCs intentionally moved out of this character's scan;
+    // retained character Regex must not resurrect a phantom installed row.
+    const recordedBook = getCreativeWorkshopInstallRecord(projectId)?.worldbookName;
+    if (!projectRows.length && recordedBook && !currentlyBound.has(recordedBook) &&
+        existingWorldbookNames.has(recordedBook)) continue;
     const projectRegexRows = groupedRegexes[projectId] || [];
     const projectRegexes = projectRegexRows.map(row => row.regex);
     const regexVersions = _.uniq(
@@ -207,6 +215,7 @@ export async function scanInstalledCreativeWorkshopProjects(): Promise<CreativeW
     projects,
     complete: unreadableWorldbookNames.length === 0,
     unreadableWorldbookNames,
+    scannedWorldbookNames: worldbookRows.map(row => row.worldbookName),
   };
 }
 

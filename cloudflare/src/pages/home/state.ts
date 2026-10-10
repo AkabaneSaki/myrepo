@@ -80,6 +80,8 @@ function createDefaultTavernState() {
     dlcUpdateSignature: '',
     dlcUpdateCheckPending: false,
     worldbooks: { primary: null, additional: [], available: [] },
+    scannedWorldbookNames: [],
+    installedManagerTransferSupported: false,
   };
 }
 
@@ -143,6 +145,7 @@ const state = {
   catalogLayout: readSavedCatalogLayout(),
   showOnlyMyProjects: false,
   showSubscribedAndInstalledProjects: false,
+  installedManagerTab: 'installed',
   sortMode: DEFAULT_SORT_MODE,
   periodPopularityReady: { days7: false, days30: false },
   activeBaseTag: 'all',
@@ -534,6 +537,8 @@ function setInstalledProjects(projects, options) {
   const list = Array.isArray(projects) ? projects : [];
   state.tavern.installedProjectsLoaded = true;
   state.tavern.installedProjectsComplete = options?.complete !== false;
+  state.tavern.scannedWorldbookNames = Array.isArray(options?.scannedWorldbookNames)
+    ? options.scannedWorldbookNames.map(String).filter(Boolean) : [];
   state.tavern.unreadableWorldbookNames = Array.isArray(options?.unreadableWorldbookNames)
     ? options.unreadableWorldbookNames.map(String).filter(Boolean)
     : [];
@@ -625,6 +630,7 @@ function mergeProjectsForInstalledView(source) {
 }
 
 function getFilteredProjects() {
+  if (state.showSubscribedAndInstalledProjects) return []; // Manager uses local authoritative instance rows.
   const source = state.showOnlyMyProjects && state.currentUser
     ? (state.myProjects.length ? state.myProjects : state.projects.filter(project => project.authorId === state.currentUser.id))
     : state.projects;

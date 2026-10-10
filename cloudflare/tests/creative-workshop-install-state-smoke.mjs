@@ -70,6 +70,7 @@ function loadInstallStateHarness({
         return {
           createCreativeWorkshopRegexIdentityResolver: () => regex => identityApi.parseCreativeWorkshopRegexId(String(regex?.id || '')),
           getCreativeWorkshopInstallRecords: () => structuredClone(installRecords),
+          getCreativeWorkshopInstallRecord: id => structuredClone(installRecords[id] || null),
           getCreativeWorkshopRelevantWorldbookNames: () => [...relevantNames],
           getCreativeWorkshopBoundWorldbookNames: () => [...boundNames],
         };

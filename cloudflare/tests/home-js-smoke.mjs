@@ -42,6 +42,7 @@ const fragments = {
   homeExternalLinksScript: await evaluateStandalone('src/pages/home/external-links.ts', 'homeExternalLinksScript'),
   homeUploadPreviewScript: await evaluateStandalone('src/pages/home/upload-preview.ts', 'homeUploadPreviewScript'),
   homeReviewDiffRenderScript: await evaluateStandalone('src/pages/home/render/review-diff.ts', 'homeReviewDiffRenderScript'),
+  homeInstalledManagerScript: await evaluateStandalone('src/pages/home/installed-manager.ts', 'homeInstalledManagerScript'),
   homeLayoutRenderScript: await evaluateStandalone('src/pages/home/render/layout.ts', 'homeLayoutRenderScript'),
   homePublishCheckScript: await evaluateStandalone('src/pages/home/publish-check.ts', 'homePublishCheckScript'),
   homeAppAuthFlowScript: await evaluateStandalone('src/pages/home/app/auth-flow.ts', 'homeAppAuthFlowScript'),
