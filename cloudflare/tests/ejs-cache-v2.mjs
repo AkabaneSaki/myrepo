@@ -3,7 +3,8 @@ import { analyzeProjectCodeCached } from '../src/utils/ejs-checker/cache.mjs';
 
 const inputs = [{ fileName: 'repeat.json', type: 'worldbook', text: JSON.stringify({ entries: [{ uid: 1, comment: '缓存', content: '<% eval("1") %>' }] }) }];
 const initial = await analyzeProjectCodeCached(inputs);
-assert.equal(initial.gate, 'reject');
+assert.equal(initial.gate, 'accept');
+assert.equal(initial.audit, 'yellow');
 const repeat = await analyzeProjectCodeCached(inputs);
 assert.equal(repeat.generatedAt, initial.generatedAt);
 assert.deepEqual(repeat, initial);

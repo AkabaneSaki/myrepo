@@ -32,7 +32,8 @@ assert.equal(typeof self.onmessage, 'function');
 await self.onmessage({ data: { files, baseline: null, projectId: 'test-large',
   draftRevision: 2 } });
 assert.equal(received?.success, true);
-assert.equal(received?.gate, 'reject');
+assert.equal(received?.gate, 'accept');
+assert.equal(received?.report?.audit, 'yellow');
 assert.ok(received.report.findings.some(item => item.ruleId === 'CHECKER-LIMIT'));
 assert.match(received?.filesHash || '', /^[a-f0-9]{64}$/);
 assert.equal(received?.filesHash, await contentFilesHash(files));

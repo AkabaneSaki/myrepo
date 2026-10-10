@@ -96,7 +96,7 @@ function entryMeaning(entry) {
 }
 
 function reviewerRisk(finding) {
-  return finding.visibility === 'reviewer_only' && ['warn','hint'].includes(finding.severity)
+  return finding.severity === 'high' || finding.visibility === 'reviewer_only' && ['warn','hint'].includes(finding.severity)
     && /^(?:M[34]|U[2-5]|AH[1-4])$/.test(finding.ruleId);
 }
 function normalizedEvidence(evidence) {
@@ -178,7 +178,7 @@ export function applyAuditBaseline(report, snapshot, acceptedEnvelope) {
   const summary = {new:0,changed:0,accepted:0,removed:removed.length,pending:0};
   for (const state of statusByKey.values()) summary[state]++;
   const pendingFindings = findings.filter(item => item.reviewState !== 'accepted');
-  summary.pending = pendingFindings.filter(item => ['warn','hint'].includes(item.severity)).length;
+  summary.pending = pendingFindings.filter(item => ['high','warn','hint'].includes(item.severity)).length;
   const gate = report.gate === 'reject' ? 'reject' : gateStatus(findings);
   return {...report,findings,gate,certification:gate === 'reject' ? 'fail' : certificationStatus(pendingFindings),audit:gate === 'reject' ? 'not_applicable' : summary.pending ? 'yellow' : 'green',
     auditSummary:summary,removedFindings:removed};

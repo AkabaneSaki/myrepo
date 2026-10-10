@@ -49,11 +49,15 @@ const removed=await scan([code('void 0;')]);
 assert.equal(applyAuditBaseline(removed.report,removed.snapshot,accepted).auditSummary.removed,previous.snapshot.findings.length);
 
 const rejected=await scan([code(request+'eval("1");')]);
-const falseApproval={...rejected.snapshot,reviewerId:'reviewer',reviewedAt:'today',revision:1};
-const stillRejected=applyAuditBaseline(rejected.report,rejected.snapshot,falseApproval);
-assert.equal(stillRejected.gate,'reject');
-assert.equal(stillRejected.audit,'not_applicable');
-assert.ok(!stillRejected.findings.find(item=>item.ruleId==='M1').reviewState);
+assert.equal(rejected.report.gate,'accept');
+assert.equal(rejected.report.audit,'yellow');
+const humanApproval={...rejected.snapshot,reviewerId:'reviewer',reviewedAt:'today',revision:1};
+const approved=applyAuditBaseline(rejected.report,rejected.snapshot,humanApproval);
+assert.equal(approved.gate,'accept');
+assert.equal(approved.audit,'green');
+assert.equal(approved.findings.find(item=>item.ruleId==='M1').reviewState,'accepted');
+const changedRisk=await scan([code(request+'eval("2");')]);
+assert.equal(applyAuditBaseline(changedRisk.report,changedRisk.snapshot,humanApproval).audit,'yellow');
 assert.equal(applyAuditBaseline({...previous.report,gate:'reject'},previous.snapshot,accepted).gate,'reject');
 
 // Every occurrence has a separate key even if the same rule repeats in one entry.

@@ -52,7 +52,7 @@ export const homeModalCoreScript = [
   '      if (!closeButton?.isConnected) return;',
   '      event.preventDefault();',
   '      event.stopPropagation();',
-  '      requestClose();',
+  '      closeButton.click();',
   '      return;',
   '    }',
   '    if (event.key !== "Tab") return;',

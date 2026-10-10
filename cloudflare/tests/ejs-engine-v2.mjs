@@ -7,10 +7,10 @@ for(const [name,content,expected] of contractCases){
   assert.deepEqual(report.findings.map(f=>f.ruleId).sort(),expected.toSorted(),name);
   assert.equal(report.engine,'v2');
   assert.match(report.parserCompatibility,/Acorn 8\.18\.0/);
-  assert.equal(report.gate,report.findings.some(f=>f.severity==='high')?'reject':'accept');
+  assert.equal(report.gate,report.findings.some(f=>f.severity==='high'&&/^L[1-7]$/.test(f.ruleId))?'reject':'accept');
 }
 const bad=analyzeProjectCodeV2(inputFor('invalid-real','<% { const x=1 2; } %>'));
-assert.equal(bad.gate,'reject');assert.equal(bad.findings[0].ruleId,'EJS-PARSE');
+assert.equal(bad.gate,'accept');assert.equal(bad.audit,'yellow');assert.equal(bad.findings[0].ruleId,'EJS-PARSE');
 const syntax=analyzeProjectCodeV2(inputFor('bad','<% for (;;) { %>'));
 assert.ok(syntax.findings.some(f=>f.ruleId==='EJS-PARSE'));
 assert.ok(syntax.findings.some(f=>f.ruleId==='M5'));
@@ -24,7 +24,7 @@ const uploader=toUploaderCodeCheck(html);
 assert.deepEqual(uploader.findings.map(f=>f.ruleId),['SCRIPT-RISK']);
 assert.equal(uploader.engine,'v2');
 const malformed=analyzeProjectCodeV2([{fileName:'bad.json',text:'{'}]);
-assert.equal(malformed.gate,'reject');assert.equal(malformed.findings[0].ruleId,'FILE');
+assert.equal(malformed.gate,'accept');assert.equal(malformed.audit,'yellow');assert.equal(malformed.findings[0].ruleId,'FILE');
 const collision=analyzeProjectCodeV2([{fileName:'a.json',type:'worldbook',text:JSON.stringify({entries:[{uid:1,comment:'A',content:'<% const same=1; %>'},{uid:2,comment:'B',content:'<% const same=2; %>'}]})}]);
 assert.equal(collision.findings.find(f=>f.ruleId==='L6').relatedEntryIds.length,2);
 assert.match(collision.findings.find(f=>f.ruleId==='L6').entry,/A ↔ B/);

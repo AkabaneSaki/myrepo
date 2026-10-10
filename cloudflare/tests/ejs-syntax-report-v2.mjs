@@ -12,7 +12,7 @@ assert.equal(f.ruleId,'EJS-PARSE');
 assert.equal(f.line,5);
 assert.equal(f.column,rawContent.split('\r\n')[4].indexOf(';')+1);
 assert.equal(f.visibility,'uploader_detailed');
-assert.equal(gateStatus([f]),'reject');
+assert.equal(gateStatus([f]),'accept');
 const internal=syntaxFindings(entry,{errors:[],internalErrors:[{cause:'not public'}]});
 assert.equal(internal[0].ruleId,'CHECKER-INTERNAL');
 assert.doesNotMatch(JSON.stringify(internal),/not public/);

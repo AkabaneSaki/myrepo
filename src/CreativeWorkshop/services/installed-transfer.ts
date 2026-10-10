@@ -2,6 +2,19 @@ import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 import { getCreativeWorkshopBoundWorldbookNames, getCreativeWorkshopInstallRecord, setCreativeWorkshopInstallRecord } from './install-registry';
 import { matchesCreativeWorkshopWorldbookSnapshot } from './worldbook-stage';
 
+function captureCharacterBindings(): () => void {
+  const current = () => {
+    const context = SillyTavern.getContext();
+    const avatar = context.characters?.[context.characterId]?.avatar;
+    if (!avatar) throw new Error('请先选择角色，再操作世界书');
+    return JSON.stringify([avatar, getCharWorldbookNames('current')]);
+  };
+  const expected = current();
+  return () => {
+    if (current() !== expected) throw new Error('当前角色或绑定世界书已变化，操作已停止。请重新扫描');
+  };
+}
+
 /** Create a new book and bind it to this character without overwriting existing books. */
 export async function createCreativeWorkshopAdditionalWorldbook(rawName: string): Promise<string> {
   const name = rawName.trim();
@@ -9,10 +22,12 @@ export async function createCreativeWorkshopAdditionalWorldbook(rawName: string)
     throw new Error('请输入 1–120 字的世界书名称（不能包含换行）');
   if (getWorldbookNames().some(existing => existing.toLowerCase() === name.toLowerCase()))
     throw new Error('已有同名世界书，请直接选择现有世界书');
+  const assertCharacter = captureCharacterBindings();
+  const bindings = getCharWorldbookNames('current');
   await createWorldbook(name, []);
+  assertCharacter();
   if (!getWorldbookNames().includes(name))
     throw new Error('世界书创建后未能读取，请到 SillyTavern 检查，不要直接重试');
-  const bindings = getCharWorldbookNames('current');
   try {
     await rebindCharWorldbooks('current', {
       primary: bindings.primary,
@@ -71,6 +86,7 @@ export async function transferCreativeWorkshopInstalledWorldbook(
 ): Promise<void> {
   if (!projectId || !sourceName || !targetName || sourceName === targetName)
     throw new Error('请选择不同的来源与目标世界书');
+  const assertCharacter = captureCharacterBindings();
   const bindings = getCharWorldbookNames('current');
   const allowed = new Set([bindings.primary, ...(bindings.additional || [])].filter(Boolean));
   const scanned = new Set(getCreativeWorkshopBoundWorldbookNames());
@@ -83,6 +99,7 @@ export async function transferCreativeWorkshopInstalledWorldbook(
   const [sourceBefore, targetBefore] = await Promise.all([
     getWorldbook(sourceName), getWorldbook(targetName),
   ]);
+  assertCharacter();
   checkUnique(sourceBefore, '来源世界书');
   checkUnique(targetBefore, '目标世界书');
   const original = belonging(sourceBefore, projectId);
@@ -110,10 +127,12 @@ export async function transferCreativeWorkshopInstalledWorldbook(
 
   // Stage a disabled copy before touching any source entry.
   await updateWorldbookWith(targetName, rows => {
+    assertCharacter();
     checkUnchanged(rows, targetBefore, '目标世界书');
     return [...rows, ...stageEntries];
   });
   const staged = await getWorldbook(targetName);
+  assertCharacter();
   checkUnique(staged, '目标世界书暂存');
   verifyCopy(staged, projectId, stageEntries, true);
 
@@ -127,6 +146,7 @@ export async function transferCreativeWorkshopInstalledWorldbook(
   })) as WorldbookEntry[];
 
   await updateWorldbookWith(targetName, rows => {
+    assertCharacter();
     checkUnchanged(rows, staged, '目标世界书暂存');
     return rows.map(entry => {
       const index = stageEntries.findIndex(item => entryUid(item) === entryUid(entry));
@@ -134,6 +154,7 @@ export async function transferCreativeWorkshopInstalledWorldbook(
     });
   });
   const activated = await getWorldbook(targetName);
+  assertCharacter();
   verifyCopy(activated, projectId, finalEntries, false);
   checkUnchanged(await getWorldbook(sourceName), sourceBefore, '来源世界书');
 
@@ -141,12 +162,14 @@ export async function transferCreativeWorkshopInstalledWorldbook(
   checkUnchanged(await getWorldbook(targetName), activated, '目标世界书');
   const originalUids = new Set(original.map(entryUid));
   await updateWorldbookWith(sourceName, rows => {
+    assertCharacter();
     checkUnchanged(rows, sourceBefore, '来源世界书');
     return rows.filter(entry => !originalUids.has(entryUid(entry)));
   });
   const [sourceAfter, targetAfter] = await Promise.all([
     getWorldbook(sourceName), getWorldbook(targetName),
   ]);
+  assertCharacter();
   if (belonging(sourceAfter, projectId).length)
     throw new Error('部分完成：来源世界书仍残留 DLC 条目，请重新扫描，禁止直接重试');
   verifyCopy(targetAfter, projectId, finalEntries, false);

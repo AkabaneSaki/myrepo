@@ -119,13 +119,13 @@ const conflictNamesMigration = await readFile(new URL('../migrations/0031_origin
 
 
   const insertBaseline = db.prepare(
-    'INSERT INTO character_reference_items (id, reference_version_id, kind, display_name, exact_hash, normalized_content_hash, name_hash, structure_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO character_reference_items (id, reference_version_id, kind, display_name, source_key, exact_hash, normalized_content_hash, name_hash, structure_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
-  const addBaseline = (id, versionId, kind, name) =>
-    insertBaseline.run(id, versionId, kind, name, id, id, id, id);
+  const addBaseline = (id, versionId, kind, name, sourceKey = null) =>
+    insertBaseline.run(id, versionId, kind, name, sourceKey, id, id, id, id);
   addBaseline('wb-real', 'v433', 'worldbook', '[本体][设定]王都');
   addBaseline('wb-other', 'v433', 'worldbook', '[DLC][设定]额外内容');
-  addBaseline('rx-real', 'v433', 'regex', '显示修饰规则');
+  addBaseline('rx-real', 'v433', 'regex', '显示修饰规则', 'original-regex-id');
   addBaseline('rx-alt', 'v433', 'regex', '行为覆盖');
   addBaseline('rx-other-version', 'v440', 'regex', '新版角色正则');
 
@@ -142,6 +142,7 @@ const conflictNamesMigration = await readFile(new URL('../migrations/0031_origin
   );
   assert.deepEqual(mixed.ids, ['wb-real', 'rx-real', 'rx-alt']);
   assert.deepEqual(mixed.entryNames, ['[本体][设定]王都', '显示修饰规则', '行为覆盖']);
+  assert.deepEqual(mixed.targets.map(target => target.sourceKey), [null, 'original-regex-id', null]);
   const regexOnly = await validateOriginalConflictReferenceItems(c, 'v433', ['rx-real']);
   assert.deepEqual(regexOnly.entryNames, ['显示修饰规则']);
   await assert.rejects(validateOriginalConflictReferenceItems(c,'v433',['wb-other']), /只能选择原版/);

@@ -41,7 +41,7 @@ function harness(initial = detail('1.0.0')) {
     details: new Map([[initial.project.id, initial]]), posts: [], reads: [], worldbookWrites: 0, regexWrites: 0,
     regexFailure: false, downloadFailure: false, corruptRegex: false, unreadable: false, failFinalScan: false,
     activeWrites: 0, maxWrites: 0, dlcWorldbookWrites: 0,
-    regexDownloads: 0, regexFileFailure: false, omitRegexUrl: false };
+    regexDownloads: 0, regexFileFailure: false, omitRegexUrl: false, characterAvatar: 'card.png' };
   const clone = value => structuredClone(value);
   const duringWrite = async task => {
     h.activeWrites++; h.maxWrites = Math.max(h.maxWrites, h.activeWrites);
@@ -61,7 +61,7 @@ function harness(initial = detail('1.0.0')) {
         throw new Error('read unavailable');
       return clone(h.books[name]);
     },
-    createWorldbook: async name => { h.books[name] ||= []; },
+    createWorldbook: async name => { h.books[name] ||= []; h.afterWorldbookCreate?.(); },
     rebindCharWorldbooks: async (_, names) => { h.bound = [names.primary, ...names.additional].filter(Boolean); },
     updateWorldbookWith: async (name, updater) => duringWrite(async () => {
       const entries = await updater(clone(h.books[name]));
@@ -80,7 +80,7 @@ function harness(initial = detail('1.0.0')) {
       if (h.corruptRegex) h.regexes[0].destination.display = !h.regexes[0].destination.display;
       return clone(h.regexes);
     }),
-    SillyTavern: { getContext: () => ({ characters: [{ avatar: 'card.png' }], characterId: 0, updateWorldInfoList: async () => {} }) },
+    SillyTavern: { getContext: () => ({ characters: [{ avatar: h.characterAvatar }], characterId: 0, updateWorldInfoList: async () => {} }) },
   };
   globals.createWorldbookEntries = async (name, entries) => {
     const before = h.books[name].length;
@@ -644,6 +644,30 @@ for (const [sourceLabel, raw] of [
   assert.equal(h.books.A.length,0);
   assert.equal(h.books.B.length,1);
   assert.equal(h.regexWrites,0);
+}
+
+// Switching characters during an async operation must never bind or delete for the new character.
+{
+  const h = harness();
+  const bindings = [...h.bound];
+  h.afterWorldbookCreate = () => { h.characterAvatar = 'other.png'; };
+  await assert.rejects(h.load('installed-transfer').createCreativeWorkshopAdditionalWorldbook('New'), /角色或绑定世界书已变化/);
+  assert.deepEqual(h.bound, bindings);
+  assert.deepEqual(h.books.New, []);
+}
+for (const change of ['character', 'bindings']) {
+  const h = harness();
+  h.books.A = [{ uid: 17, enabled: true, content: 'DLC', extra: { cw_project_id: projectId, cw_entry_key: '1' } }];
+  const source = structuredClone(h.books.A);
+  const variables = structuredClone(h.variables);
+  h.afterWorldbookWrite = () => {
+    if (change === 'character') h.characterAvatar = 'other.png';
+    else h.bound = ['Records'];
+  };
+  await assert.rejects(h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId, 'A', 'B'), /角色或绑定世界书已变化/);
+  assert.deepEqual(h.books.A, source);
+  assert.deepEqual(h.variables, variables);
+  assert.equal(h.books.B[0].enabled, false);
 }
 
 console.log('CreativeWorkshop actual-read install/update/uninstall safety and recovery: ok');
