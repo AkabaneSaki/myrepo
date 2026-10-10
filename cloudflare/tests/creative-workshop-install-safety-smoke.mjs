@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 import ts from '../../node_modules/typescript/lib/typescript.js';
 import * as projectVersionApi from '../src/utils/version.js';
+import { parseRegexEntriesPreview } from '../src/utils/project-preview.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/CreativeWorkshop');
 const compiled = new Map();
@@ -465,6 +466,64 @@ for (const cause of ['absentUrl','networkFailure']) {
   assert.equal(result.payload.errorCode, 'CW-I-020');
   assert.equal(h.regexes.length, 0);
   assert.equal(h.dlcWorldbookWrites, 0);
+}
+
+
+// Upload and install must preserve BOTH SillyTavern surface-replacement options.
+// ST's native JSON and TavernHelper's live-character snapshot use different keys.
+for (const [sourceLabel, raw] of [
+  ['native ST export', { markdownOnly: true, promptOnly: true }],
+  ['TavernHelper character snapshot', { destination: { display: true, prompt: true } }],
+  ['native fields take precedence', {
+    markdownOnly: true, promptOnly: false, destination: { display: false, prompt: true },
+  }],
+]) {
+  const source = [{
+    id: 'r', scriptName: '表层替换测试', findRegex: '/foo/g',
+    replaceString: 'regex-1.0.0', disabled: false, placement: [2],
+    ...raw,
+  }];
+  const preview = parseRegexEntriesPreview(JSON.stringify(source));
+  const expectedDisplay = source[0].markdownOnly ?? source[0].destination?.display ?? false;
+  const expectedPrompt = source[0].promptOnly ?? source[0].destination?.prompt ?? false;
+  assert.equal(preview[0].markdownOnly, expectedDisplay, sourceLabel + ' display preview');
+  assert.equal(preview[0].promptOnly, expectedPrompt, sourceLabel + ' prompt preview');
+  const d = detail('1.0.0', true);
+  d.regexEntriesPreview = preview;
+  const h = harness(d);
+  const installed = await install(h);
+  assert.equal(installed.type, 'bridge:install-result', sourceLabel + ' install');
+  assert.equal(h.regexes.length, 1);
+  assert.equal(h.regexes[0].destination.display, expectedDisplay,
+    sourceLabel + ' display must survive ST write');
+  assert.equal(h.regexes[0].destination.prompt, expectedPrompt,
+    sourceLabel + ' prompt must survive ST write');
+  // The fresh-read post-install verifier must not accept silently reset flags.
+  assert.equal((await h.load('regex').verifyCreativeWorkshopRegexInstallation(projectId, d)), undefined);
+}
+
+
+// Updating an existing Regex-only DLC must also update both surface flags,
+// rather than keeping the old (unchecked) values.
+{
+  const makePreview = (version, destination) => parseRegexEntriesPreview(JSON.stringify([{
+    id: 'r', scriptName: '表层替换更新测试',
+    findRegex: '/foo/g', replaceString: 'regex-' + version,
+    placement: [2], destination,
+  }]));
+  const first = detail('1.0.0', true);
+  first.regexEntriesPreview = makePreview('1.0.0', { display: false, prompt: false });
+  const h = harness(first);
+  assert.equal((await install(h)).type, 'bridge:install-result');
+  assert.equal(h.regexes[0].destination.display, false);
+  assert.equal(h.regexes[0].destination.prompt, false);
+  const next = detail('2.0.0', true);
+  next.regexEntriesPreview = makePreview('2.0.0', { display: true, prompt: true });
+  h.details.set(projectId, next);
+  assert.equal((await update(h, null)).type, 'bridge:update-result');
+  assert.equal(h.regexes[0].destination.display, true);
+  assert.equal(h.regexes[0].destination.prompt, true);
+  assert.equal((await h.load('regex').verifyCreativeWorkshopRegexInstallation(projectId, next)), undefined);
 }
 
 console.log('CreativeWorkshop actual-read install/update/uninstall safety and recovery: ok');
