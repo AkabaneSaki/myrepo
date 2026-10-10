@@ -4,6 +4,7 @@ const TAVERN_OAUTH_RESULT_EVENT = 'creative-workshop:oauth-result';
 const PROJECT_DIFF_TIMEOUT_MS = 10000;
 const REPAIR_REQUEST_TIMEOUT_MS = 60000;
 const pendingProjectDiffRequests = new Map();
+const pendingOriginalConflictPreviews = new Map();
 const pendingRepairRequests = new Map();
 
 const pendingDlcTransfers = new Map();
@@ -102,6 +103,7 @@ state.tavern.scriptDependenciesLoaded = false;
 state.tavern.scriptDependencies = [];
 state.tavern.verifiedDlcInstall = false;
 state.tavern.duplicateDlcConsolidation = false;
+state.tavern.originalConflictDisambiguation = false;
 let bridgeHandshakeRequestId = null;
 let bridgeHostSource = null;
 let bridgeHostOrigin = null;
@@ -364,6 +366,7 @@ function handleBridgeMessage(event) {
       setTavernClientVersion(data.payload?.clientVersion);
       state.tavern.verifiedDlcInstall = data.payload?.capabilities?.verifiedDlcInstall === true;
       state.tavern.duplicateDlcConsolidation = data.payload?.capabilities?.duplicateDlcConsolidation === true;
+      state.tavern.originalConflictDisambiguation = data.payload?.capabilities?.originalConflictDisambiguation === true;
       renderApp();
       if (shouldShowWorkshopReleaseNotice()) {
         openReleaseNoticeModal();
@@ -401,6 +404,17 @@ function handleBridgeMessage(event) {
         syncInstalledProjectsFromBridge(data.payload || {}, { mode: 'replace' });
       }
       break;
+    case 'bridge:original-conflict-preview': {
+      const pending = pendingOriginalConflictPreviews.get(data.requestId);
+      if (pending) {
+        pendingOriginalConflictPreviews.delete(data.requestId);
+        clearTimeout(pending.timeoutId);
+        if (data.payload?.projectId !== pending.projectId)
+          pending.reject(new Error('原版冲突核对的项目身份不一致'));
+        else pending.resolve(data.payload);
+      }
+      break;
+    }
     case 'bridge:project-diff':
       settleProjectDiffRequest(data.requestId, null, syncDiffFromBridge(data.payload || {}));
       renderApp();
@@ -418,6 +432,12 @@ function handleBridgeMessage(event) {
       dispatchOAuthResult(data.payload || {});
       break;
     case 'bridge:error':
+      const conflictPreview = pendingOriginalConflictPreviews.get(data.requestId);
+      if (conflictPreview) {
+        pendingOriginalConflictPreviews.delete(data.requestId);
+        clearTimeout(conflictPreview.timeoutId);
+        conflictPreview.reject(new Error(data.payload?.message || '读取角色正则失败'));
+      }
       const handledDlcError = completeDlcProgress(data.requestId, data.payload || {}, true);
       const handledProjectDiffError = settleProjectDiffRequest(
         data.requestId,
@@ -435,7 +455,7 @@ function handleBridgeMessage(event) {
         setProjectPendingAction(projectId, null);
         renderApp();
       }
-      if (!handledDlcError && !handledProjectDiffError && !handledRepairError && !isProjectDiffError) {
+      if (!handledDlcError && !handledProjectDiffError && !handledRepairError && !conflictPreview && !isProjectDiffError) {
         showToast((data.payload?.errorCode ? '[' + data.payload.errorCode + '] ' : '') +
           (data.payload?.message || '酒馆桥接错误'), 'error');
       }
@@ -478,6 +498,10 @@ async function requestInstallProject(projectId, selection = {}) {
       ...(installInfo?.version ? { projectVersion: installInfo.version } : {}),
       ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
       ...(installInfo?.regexDownloadUrl ? { regexDownloadUrl: installInfo.regexDownloadUrl } : {}),
+      ...(selection.manageOriginalConflicts && typeof selection.manageOriginalConflicts === 'object'
+        ? { manageOriginalConflicts: true,
+            originalConflictSelections: selection.manageOriginalConflicts.originalConflictSelections }
+        : {}),
     });
     bindDlcProgress(task, requestId);
     setProjectPendingAction(projectId, 'install');
@@ -528,6 +552,21 @@ function requestProjectDiff(projectId, projectVersion = null, worldbookName = nu
   });
 }
 
+async function inspectOriginalConflictChoices(projectId, projectVersion = null) {
+  if (!state.tavern.originalConflictDisambiguation)
+    return { ambiguities: [] }; // Older clients still fail closed on duplicates.
+  const requestId = postBridgeMessage('bridge:inspect-original-conflicts', {
+    projectId, ...(projectVersion ? { projectVersion } : {})
+  });
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      pendingOriginalConflictPreviews.delete(requestId);
+      reject(new Error('读取角色原版正则超时，请重试'));
+    }, 15000);
+    pendingOriginalConflictPreviews.set(requestId, { projectId, resolve, reject, timeoutId });
+  });
+}
+
 async function confirmProjectUpdate(projectId, projectVersion = null, manageOriginalConflicts = false, worldbookName = null, approvedDuplicates = []) {
   if (!state.tavern.duplicateDlcConsolidation) throw new Error('请先更新工坊脚本，才能核验重复安装位置并安全更新');
   const local = worldbookName ? getLocalProjectInstallations(projectId).find(item => item.worldbookName === worldbookName) : getLocalProjectMeta(projectId);
@@ -549,7 +588,10 @@ async function confirmProjectUpdate(projectId, projectVersion = null, manageOrig
       ...(installInfo?.version ? { projectVersion: installInfo.version } : projectVersion ? { projectVersion } : {}),
       ...(installInfo?.downloadUrl ? { downloadUrl: installInfo.downloadUrl } : {}),
       ...(installInfo?.regexDownloadUrl ? { regexDownloadUrl: installInfo.regexDownloadUrl } : {}),
-      manageOriginalConflicts: manageOriginalConflicts === true,
+      manageOriginalConflicts: manageOriginalConflicts === true ||
+        (manageOriginalConflicts && typeof manageOriginalConflicts === 'object'),
+      ...(manageOriginalConflicts && typeof manageOriginalConflicts === 'object'
+        ? { originalConflictSelections: manageOriginalConflicts.originalConflictSelections } : {}),
       approvedDuplicates,
       ...(worldbookName ? { worldbookName } : {}),
       ...(legacyProjectName ? { legacyProjectName } : {}),

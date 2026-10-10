@@ -29,4 +29,21 @@ assert.match(modals, /角色 Regex/);
 assert.match(admin, /originalConflictReferenceItemIds: project\.originalConflictReferenceItemIds/);
 assert.match(admin, /originalConflictEntryNames: project\.originalConflictEntryNames/);
 
+const publishCheck = await readFile(new URL('../src/pages/home/publish-check.ts', import.meta.url), 'utf8');
+const webBridge = await readFile(new URL('../src/pages/home/tavern-bridge.ts', import.meta.url), 'utf8');
+const readEndpoint = await readFile(new URL('../src/endpoints/projects/read.ts', import.meta.url), 'utf8');
+assert.match(publishCheck,/原版正则/);
+assert.match(publishCheck,/item.kind === 'regex'/);
+assert.match(modals,/chooseAmbiguousOriginalRegexes/);
+assert.match(modals,/请选择|请为每条同名正则选择/);
+assert.match(modals,/inspectOriginalConflictChoices/);
+assert.match(webBridge,/pendingOriginalConflictPreviews/);
+assert.match(webBridge,/bridge:inspect-original-conflicts/);
+assert.match(webBridge,/originalConflictSelections/);
+assert.match(host,/bridge:inspect-original-conflicts/);
+assert.match(host,/originalConflictDisambiguation: true/);
+assert.match(host,/originalConflictSelections/);
+assert.match(readEndpoint,/originalConflictTargets/);
+assert.match(worldbook,/assertCreativeWorkshopOriginalConflictsResolved/);
+
 console.log('CreativeWorkshop conflict consent smoke: ok');

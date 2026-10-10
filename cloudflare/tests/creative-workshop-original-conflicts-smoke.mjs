@@ -197,4 +197,87 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   assert.equal(harness.worldbooks.Original[0].enabled, true);
 }
 
+
+// The reference version provides its original Regex ID AND name.
+// ID wins even if another installed Regex has the same name.
+function typedRegexDetail(sourceKey, displayName = '原版正则') {
+  const d = conflictDetail(true, [displayName]);
+  d.project.originalConflictReferenceItemIds = ['ref-regex'];
+  d.project.originalConflictTargets = [
+    { referenceItemId: 'ref-regex', kind: 'regex', sourceKey, displayName },
+  ];
+  return d;
+}
+{
+  const h = loadHarness({
+    entryName: '世界书完全无关',
+    regexEntries: [
+      {id:'regex-original',script_name:'原版正则',enabled:true},
+      {id:'regex-imitation',script_name:'原版正则',enabled:true},
+    ],
+  });
+  const detail = typedRegexDetail('id:regex-original');
+  const preview = await h.api.inspectCreativeWorkshopOriginalConflicts(detail);
+  assert.equal(preview.ambiguities.length, 0, 'original ID resolves duplicate names without prompting');
+  await h.api.syncCreativeWorkshopOriginalConflicts('DLC', detail);
+  assert.equal(h.regexes[0].enabled,false,'original ID disabled');
+  assert.equal(h.regexes[1].enabled,true,'same-name unrelated regex untouched');
+}
+{
+  const h = loadHarness({
+    entryName: '世界书完全无关',
+    regexEntries: [{id:'new-local-uuid',script_name:'原版正则',enabled:true}],
+  });
+  const detail = typedRegexDetail('id:old-import-id');
+  assert.equal((await h.api.inspectCreativeWorkshopOriginalConflicts(detail)).ambiguities.length,0);
+  await h.api.syncCreativeWorkshopOriginalConflicts('DLC',detail);
+  assert.equal(h.regexes[0].enabled,false,'missing original ID falls back to unique name');
+}
+{
+  const h = loadHarness({
+    entryName: '世界书完全无关',
+    regexEntries: [
+      {id:'candidate-A',script_name:'原版正则',enabled:true},
+      {id:'candidate-B',script_name:'[本体]原版正则',enabled:true},
+    ],
+  });
+  const detail = typedRegexDetail('id:missing', '[本体]原版正则');
+  const preview = await h.api.inspectCreativeWorkshopOriginalConflicts(detail);
+  assert.equal(preview.ambiguities.length,1,'two normalized same names require explicit user choice');
+  assert.equal(preview.ambiguities[0].candidates.length,2);
+  await assert.rejects(h.api.assertCreativeWorkshopOriginalConflictsResolved(detail),/选择/);
+  await assert.rejects(h.api.syncCreativeWorkshopOriginalConflicts('DLC',detail),/选择/);
+  assert.equal(h.regexes.every(regex=>regex.enabled),true,'no regex mutated before user selection');
+  await assert.rejects(
+    h.api.assertCreativeWorkshopOriginalConflictsResolved(detail,[{referenceItemId:'ref-regex',regexId:'forged'}]),
+    /玩家选择的原版 Regex 已变化/,
+  );
+  const consent = [{referenceItemId:'ref-regex',regexId:'candidate-B'}];
+  await h.api.assertCreativeWorkshopOriginalConflictsResolved(detail,consent);
+  await h.api.syncCreativeWorkshopOriginalConflicts('DLC',detail,consent);
+  assert.equal(h.regexes[0].enabled,true);
+  assert.equal(h.regexes[1].enabled,false);
+}
+{
+  const h = loadHarness({
+    entryName: '世界书完全无关',
+    regexEntries: [
+      {id:'same-A',script_name:'无标签正则',enabled:true},
+      {id:'same-B',script_name:'无标签正则',enabled:true},
+    ],
+  });
+  const d = conflictDetail(true,['无标签正则']); // Historical project: name only.
+  assert.equal((await h.api.inspectCreativeWorkshopOriginalConflicts(d)).ambiguities.length,1);
+  await h.api.syncCreativeWorkshopOriginalConflicts('DLC',d,[{referenceItemId:'legacy:0',regexId:'same-A'}]);
+  assert.equal(h.regexes[0].enabled,false);
+  assert.equal(h.regexes[1].enabled,true);
+}
+{
+  const h = loadHarness({entryName:'无关',regexEntries:[{id:'x',script_name:'目标',enabled:true}]});
+  const detail = typedRegexDetail('id:x','目标');
+  detail.project.originalConflictTargets = null;
+  await assert.rejects(h.api.inspectCreativeWorkshopOriginalConflicts(detail),/基准信息不完整/);
+  assert.equal(h.regexes[0].enabled,true,'missing DB baseline cannot trigger name guessing');
+}
+
 console.log('CreativeWorkshop original-conflict smoke: ok');
