@@ -2657,6 +2657,7 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
 
 /* Dedicated personal DLC manager. Compact, device-friendly and distinct from storefront cards. */
 .installed-manager-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; padding:20px 0 17px; }
+.installed-manager-head-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .installed-manager-head small { font-size:.65rem; color:#bba57e; letter-spacing:.08em; }
 .installed-manager-head h2 { margin:3px 0; font-size:1.35rem; color:#ece9e5; }
 .installed-manager-head p,.installed-manager-description { font-size:.81rem; color:#bbb5aa; line-height:1.6; }
@@ -2691,12 +2692,15 @@ body,.logo h1,.sidebar-brand-copy strong,.mobile-tool-sheet-head strong,.project
 .installed-transfer-dialog > p { color:#c4bfb6; font-size:.81rem; line-height:1.6; }
 .installed-transfer-dialog label { display:grid; gap:5px; color:#c7c2b9; font-size:.78rem; }
 .installed-transfer-dialog label strong { overflow-wrap:anywhere; }
+.installed-transfer-dialog input { width:100%; min-height:43px; background:#1e2025; color:#ececea; border:1px solid #5b5145; border-radius:9px; font:inherit; padding:8px 11px; }
 .installed-transfer-dialog select { width:100%; min-height:43px; background:#1e2025; color:#ececea; border:1px solid #5b5145; border-radius:9px; font:inherit; padding:8px; }
 .installed-transfer-dialog .installed-transfer-warning { color:#e2bf91; }
 .installed-manager-dialog-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 @media (max-width:660px) {
  .installed-manager-head { align-items:flex-start; padding:14px 0 10px; }
  .installed-manager-head h2 { font-size:1.12rem; }
+ .installed-manager-head-actions { width:100%; }
+ .installed-manager-head-actions .btn { flex:1; justify-content:center; min-height:43px; padding:8px 10px; font-size:.76rem; }
  .installed-manager-tabs { flex-wrap:nowrap; overflow:auto; }
  .installed-manager-tabs button { flex:1; min-width:max-content; justify-content:center; font-size:.76rem; padding:10px 7px; }
  .installed-manager-item { align-items:flex-start; flex-wrap:wrap; gap:10px; }

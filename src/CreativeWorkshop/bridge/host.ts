@@ -20,7 +20,7 @@ import {
   verifyCreativeWorkshopApprovedDuplicateState,
 } from '../services/worldbook';
 import { createBridgeMessage, isCreativeWorkshopBridgeMessage } from './protocol';
-import { transferCreativeWorkshopInstalledWorldbook } from '../services/installed-transfer';
+import { createCreativeWorkshopAdditionalWorldbook, transferCreativeWorkshopInstalledWorldbook } from '../services/installed-transfer';
 import { migrateCreativeWorkshopLegacyRegexRecords } from '../services/regex-record';
 
 type HostOption = {
@@ -352,10 +352,11 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
       actionType === 'bridge:transfer-installed-worldbook' ||
       actionType === 'bridge:confirm-project-update' ||
       actionType === 'bridge:repair:project';
+    const isWorldbookCreation = actionType === 'bridge:create-additional-worldbook';
 
     if (isTransferMutation) emitProgress('queued');
     let finishMutation: (() => void) | null = null;
-    if (isProjectMutation || actionType === 'bridge:list-installed-projects') {
+    if (isProjectMutation || isWorldbookCreation || actionType === 'bridge:list-installed-projects') {
       const prior = mutationQueue;
       mutationQueue = new Promise<void>(resolve => { finishMutation = resolve; });
       await prior;
@@ -458,13 +459,23 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             ? String(event.data.payload.targetWorldbookName) : '';
           await transferCreativeWorkshopInstalledWorldbook(projectId, sourceName, targetName);
           const scan = await scanInstalledCreativeWorkshopProjects();
+          const targetScanned = scan.scannedWorldbookNames.includes(targetName);
+          const targetVisible = scan.projects.some(project =>
+            project.projectId === projectId && project.worldbookName === targetName);
           if (!scan.complete || scan.projects.some(project =>
               project.projectId === projectId && project.worldbookName === sourceName) ||
-              !scan.projects.some(project =>
-                project.projectId === projectId && project.worldbookName === targetName))
+              targetVisible !== targetScanned)
+
             throw new Error('迁移写入完成但最终扫描未通过，请检查来源与目标，勿重复操作');
           await post('bridge:transfer-installed-result',
-            { success: true, projectId, ...scan }, event.data.requestId);
+            { success: true, projectId, movedOutsideScan: !targetScanned, ...scan }, event.data.requestId);
+          await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
+          break;
+        }
+        case 'bridge:create-additional-worldbook': {
+          const name = _.isString(event.data.payload?.worldbookName) ? String(event.data.payload.worldbookName) : '';
+          const createdName = await createCreativeWorkshopAdditionalWorldbook(name);
+          await post('bridge:create-additional-worldbook-result', { worldbookName: createdName }, event.data.requestId);
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
           break;
         }

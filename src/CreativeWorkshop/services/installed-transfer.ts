@@ -2,6 +2,30 @@ import { getCreativeWorkshopWorldbookMetadataString } from './install-identity';
 import { getCreativeWorkshopBoundWorldbookNames, getCreativeWorkshopInstallRecord, setCreativeWorkshopInstallRecord } from './install-registry';
 import { matchesCreativeWorkshopWorldbookSnapshot } from './worldbook-stage';
 
+/** Create a new book and bind it to this character without overwriting existing books. */
+export async function createCreativeWorkshopAdditionalWorldbook(rawName: string): Promise<string> {
+  const name = rawName.trim();
+  if (!name || name.length > 120 || /[\r\n]/.test(name))
+    throw new Error('请输入 1–120 字的世界书名称（不能包含换行）');
+  if (getWorldbookNames().some(existing => existing.toLowerCase() === name.toLowerCase()))
+    throw new Error('已有同名世界书，请直接选择现有世界书');
+  await createWorldbook(name, []);
+  if (!getWorldbookNames().includes(name))
+    throw new Error('世界书创建后未能读取，请到 SillyTavern 检查，不要直接重试');
+  const bindings = getCharWorldbookNames('current');
+  try {
+    await rebindCharWorldbooks('current', {
+      primary: bindings.primary,
+      additional: [...new Set([...(bindings.additional || []), name])],
+    });
+  } catch {
+    throw new Error('世界书已创建，但绑定失败。请到 SillyTavern 手动绑定，勿重复创建');
+  }
+  if (!(getCharWorldbookNames('current').additional || []).includes(name))
+    throw new Error('世界书已创建，但绑定未通过验证。请到 SillyTavern 检查');
+  return name;
+}
+
 function entryUid(entry: WorldbookEntry): string {
   return String((entry as any).uid ?? '');
 }
@@ -36,8 +60,8 @@ function verifyCopy(
 }
 
 /**
- * Only migrate a DLC's own worldbook entries between currently bound character
- * worldbooks. Character Regex remains character-scoped, never copied/deleted.
+ * Source must be bound to the current character; destination may be any existing
+ * worldbook without auto-binding it. Character Regex is left unchanged.
  * The source is removed only after the destination has been saved and reread.
  */
 export async function transferCreativeWorkshopInstalledWorldbook(
@@ -50,9 +74,9 @@ export async function transferCreativeWorkshopInstalledWorldbook(
   const bindings = getCharWorldbookNames('current');
   const allowed = new Set([bindings.primary, ...(bindings.additional || [])].filter(Boolean));
   const scanned = new Set(getCreativeWorkshopBoundWorldbookNames());
-  if (!allowed.has(sourceName) || !allowed.has(targetName) ||
-      !scanned.has(sourceName) || !scanned.has(targetName))
-    throw new Error('仅允许在当前角色已绑定、可扫描的主／附加世界书之间迁移');
+  if (!allowed.has(sourceName) ||
+      !scanned.has(sourceName))
+    throw new Error('来源必须是当前角色已绑定、可扫描的主／附加世界书');
   if (!getWorldbookNames().includes(sourceName) || !getWorldbookNames().includes(targetName))
     throw new Error('来源或目标世界书不存在；未作任何修改');
 
@@ -129,7 +153,7 @@ export async function transferCreativeWorkshopInstalledWorldbook(
 
   // Installation metadata is advisory; live worldbook entries are authoritative.
   const record = getCreativeWorkshopInstallRecord(projectId);
-  if (record && record.worldbookName === sourceName) {
+  if (!record || record.worldbookName === sourceName) {
     setCreativeWorkshopInstallRecord(projectId, { worldbookName: targetName });
     if (getCreativeWorkshopInstallRecord(projectId)?.worldbookName !== targetName)
       throw new Error('世界书迁移成功，但本地记录未更新，请重新扫描');

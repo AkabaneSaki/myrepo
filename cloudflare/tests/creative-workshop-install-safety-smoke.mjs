@@ -563,15 +563,38 @@ for (const [sourceLabel, raw] of [
   );
   assert.deepEqual(h.books,before,'duplicate destination must be rejected without writes');
 }
+// An unbound existing book is a valid destination. The transfer must never bind it.
 {
   const h=harness(detail('1.0.0'));
-  h.books.A=[{uid:17,enabled:true,content:'DLC',extra:{cw_project_id:projectId,cw_entry_key:'1'}}];
-  const before=structuredClone(h.books);
-  await assert.rejects(
-    h.load('installed-transfer').transferCreativeWorkshopInstalledWorldbook(projectId,'A','Disabled'),
-    /仅允许在当前角色已绑定/,
-  );
-  assert.deepEqual(h.books,before,'unbound destination is never mutated');
+  const installed=await h.send('bridge:install-project',{projectId,worldbookName:'A'});
+  assert.equal(installed.type,'bridge:install-result');
+  const beforeRegex=structuredClone(h.regexes);
+  const originalBindings=[...h.bound];
+  const moved=await h.send('bridge:transfer-installed-worldbook',{
+    projectId,sourceWorldbookName:'A',targetWorldbookName:'Disabled',
+  });
+  assert.equal(moved.type,'bridge:transfer-installed-result');
+  assert.equal(moved.payload.movedOutsideScan,true);
+  assert.deepEqual(h.bound,originalBindings,'moving to unbound destination never changes bindings');
+  assert.equal(h.books.A.filter(row => row.extra?.cw_project_id===projectId).length,0);
+  assert.ok(h.books.Disabled.some(row => row.extra?.cw_project_id===projectId));
+  assert.deepEqual(h.regexes,beforeRegex,'character Regex remains installed');
+  assert.equal(moved.payload.projects.some(row => row.projectId===projectId),false,
+    'unbound DLC must disappear instead of returning as Regex-only');
+  h.bound.push('Disabled');
+  const rebound=await h.load('install-state').scanInstalledCreativeWorkshopProjects();
+  assert.ok(rebound.projects.some(row => row.projectId===projectId && row.worldbookName==='Disabled'),
+    're-binding the worldbook makes DLC visible again');
+}
+{
+  const h=harness(detail('1.0.0'));
+  const created=await h.send('bridge:create-additional-worldbook',{worldbookName:'New-Additional'});
+  assert.equal(created.type,'bridge:create-additional-worldbook-result');
+  assert.ok(h.bound.includes('New-Additional'));
+  assert.deepEqual(h.books['New-Additional'],[]);
+  const duplicate=await h.send('bridge:create-additional-worldbook',{worldbookName:'new-additional'});
+  assert.equal(duplicate.type,'bridge:error');
+  assert.equal(h.bound.filter(name => name==='New-Additional').length,1);
 }
 {
   const h=harness(detail('1.0.0',true));

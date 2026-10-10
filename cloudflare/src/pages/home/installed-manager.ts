@@ -21,29 +21,30 @@ function renderInstalledManagerPage() {
   const bindings = state.tavern.worldbooks || {};
   const scanned = state.tavern.scannedWorldbookNames || [];
   const unreadable = state.tavern.unreadableWorldbookNames || [];
-  const subscribed = [...state.subsMap].filter(([, value]) => value?.subscribed).map(([id]) => id);
+
   const tabs = [
     ['installed', '已安装 DLC', instances.length],
-    ['subscribed', '已订阅', subscribed.length],
+
     ['scan', '扫描范围', scanned.length],
   ];
   const header = '<section class="installed-manager-head"><div><small>LOCAL WORKSHOP LIBRARY</small><h2>我的工坊</h2>' +
     '<p>管理当前角色已安装的 DLC。安装状态以 SillyTavern 本机实际扫描为准。</p></div>' +
-    '<button class="btn btn-outline" type="button" id="installedManagerRefresh"><i class="fas fa-arrows-rotate"></i> 重新扫描</button></section>';
+    '<div class="installed-manager-head-actions"><button class="btn btn-outline" type="button" id="installedManagerCreateBook"><i class="fas fa-plus"></i> 新建附加世界书</button>' +
+    '<button class="btn btn-outline" type="button" id="installedManagerRefresh"><i class="fas fa-arrows-rotate"></i> 重新扫描</button></div></section>';
   const nav = '<nav class="installed-manager-tabs" aria-label="我的工坊分类">' + tabs.map(([id, label, count]) =>
     '<button type="button" class="' + (id === tab ? 'active' : '') +
     '" data-installed-tab="' + id + '" aria-selected="' + (id === tab) + '">' +
     escapeHtml(label) + '<span>' + count + '</span></button>').join('') + '</nav>';
   const scanWarning = connected && loaded && !complete ?
     '<p class="installed-manager-warning"><i class="fas fa-triangle-exclamation"></i>部分世界书读取失败。当前列表可能不完整，迁移暂时禁用，请先重新扫描。</p>' : '';
-  if (!connected && tab !== 'subscribed')
+  if (!connected)
     return header + nav + '<p class="installed-manager-empty">请先在 SillyTavern 中打开工坊，连接后才能管理本机 DLC。</p>';
-  if (!loaded && tab !== 'subscribed')
+  if (!loaded)
     return header + nav + '<p class="installed-manager-empty">正在读取本机 DLC 与绑定世界书……</p>';
   let content = '';
   if (tab === 'installed') {
-    const targets = [bindings.primary, ...(bindings.additional || [])].filter(name =>
-      Boolean(name) && scanned.includes(name) && !unreadable.includes(name));
+    const targets = (bindings.available || []).filter(name =>
+      Boolean(name) && !unreadable.includes(name));
     content = instances.length ? '<div class="installed-manager-list">' + instances.map(instance => {
       const id = instance.projectId;
       const project = installedManagerProjectMeta(id);
@@ -68,27 +69,12 @@ function renderInstalledManagerPage() {
         '</div><div class="installed-manager-actions">' +
         '<button class="btn btn-outline" type="button" data-installed-transfer="' + escapeHtml(id) +
         '" data-source-book="' + escapeHtml(name || '') + '" ' + (canTransfer && !busy ? '' : 'disabled') +
-        ' title="' + (canTransfer ? '迁移到另一已绑定世界书' : '此项目暂无可安全迁移的目标') +
+        ' title="' + (canTransfer ? '迁移到其他世界书（允许未绑定目标）' : '此项目暂无可安全迁移的目标') +
         '"><i class="fas fa-right-left"></i> 迁移</button>' +
         '<button class="btn btn-outline" type="button" data-installed-uninstall="' + escapeHtml(id) +
         '" data-source-book="' + escapeHtml(name || '') + '" ' + (busy || !complete ? 'disabled' : '') +
         '><i class="fas fa-trash-can"></i> 卸载</button></div></article>';
     }).join('') + '</div>' : '<p class="installed-manager-empty">当前扫描范围内未发现已安装 DLC。</p>';
-  } else if (tab === 'subscribed') {
-    content = !state.currentUser ? '<p class="installed-manager-empty">登录 Discord 后可以查看订阅的项目。</p>' :
-      subscribed.length ? '<div class="installed-manager-list">' + subscribed.map(id => {
-        const project = installedManagerProjectMeta(id);
-        const title = project?.name || '项目 ' + id;
-        const installed = instances.some(item => item.projectId === id);
-        return '<article class="installed-manager-item"><span class="installed-manager-cover installed-manager-cover--empty"><i class="fas fa-bookmark"></i></span>' +
-          '<div class="installed-manager-copy"><strong>' + escapeHtml(title) + '</strong><p>' +
-          (installed ? '本机已安装' : '尚未在本机安装') + '</p></div>' +
-          '<div class="installed-manager-actions">' +
-          (project ? '<button class="btn btn-outline" type="button" data-subscribed-detail="' +
-            escapeHtml(id) + '">查看项目</button>' : '') +
-          '<button class="btn btn-outline" type="button" data-subscribed-remove="' + escapeHtml(id) +
-          '">取消订阅</button></div></article>';
-      }).join('') + '</div>' : '<p class="installed-manager-empty">暂时没有订阅项目。</p>';
   } else {
     const names = [...new Set([...scanned, ...unreadable])];
     content = '<p class="installed-manager-description">仅扫描当前角色已绑定的主／附加世界书、全局世界书及当前聊天世界书。其他未绑定的书不会被扫描。</p>' +
@@ -104,36 +90,79 @@ function renderInstalledManagerPage() {
 
 function openInstalledManagerTransferDialog(projectId, sourceName) {
   const books = state.tavern.worldbooks || {};
-  const allowed = [books.primary, ...(books.additional || [])];
+  const allowed = books.available || [];
   const options = [...new Set(allowed)].filter(name =>
-    name && name !== sourceName && (state.tavern.scannedWorldbookNames || []).includes(name) &&
+    name && name !== sourceName &&
     !(state.tavern.unreadableWorldbookNames || []).includes(name));
   if (!state.tavern.installedProjectsComplete || !options.length ||
       !state.tavern.installedManagerTransferSupported) {
-    showToast('扫描不完整、ST Client 太旧或没有其他已绑定世界书，无法迁移', 'warning');
+    showToast('扫描不完整、ST Client 太旧或没有其他可用世界书，无法迁移', 'warning');
     return;
   }
   const source = getLocalProjectInstallations(projectId).find(item =>
     item.worldbookName === sourceName && item.entryCount > 0);
   if (!source) { showToast('来源安装位置已变化，请重新扫描', 'warning'); return; }
-  const form = '<div class="installed-transfer-dialog"><p>只移动这一个 DLC 的世界书条目；角色 Regex 不受影响。</p>' +
+  const form = '<div class="installed-transfer-dialog"><p>只移动这一个 DLC 的世界书条目；角色 Regex 不会移动或卸载，仍可能继续生效。</p>' +
     '<label>来源世界书<strong>' + escapeHtml(sourceName) + '</strong></label>' +
     '<label for="installedTransferTarget">目标世界书</label>' +
     '<select id="installedTransferTarget">' + options.map(name =>
-      '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('') + '</select>' +
-    '<p class="installed-transfer-warning">先复制并校验目标，再删除来源。中途中断时可能留下副本，请先重新扫描，不要直接重试。</p>' +
+      '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) +
+      ((state.tavern.scannedWorldbookNames || []).includes(name) ? '' : '（未绑定／未扫描）') + '</option>').join('') + '</select>' +
+    '<p class="installed-transfer-warning" data-transfer-visibility-hint></p>' +
+    '<p class="installed-transfer-warning">先复制并校验目标，再删除来源。中途中断时可能留下副本，请检查目标，不要直接重试。</p>' +
     '<div class="installed-manager-dialog-actions"><button class="btn btn-outline" type="button" data-transfer-cancel>取消</button>' +
     '<button class="btn btn-primary" type="button" data-transfer-confirm>确认迁移</button></div></div>';
   const overlay = openModal(form, '迁移已安装 DLC');
+  const targetInput = overlay.querySelector('#installedTransferTarget');
+  const updateVisibilityHint = () => {
+    const outside = !(state.tavern.scannedWorldbookNames || []).includes(targetInput.value);
+    overlay.querySelector('[data-transfer-visibility-hint]').textContent = outside
+      ? '目标不在扫描范围：迁移后 DLC 会从「已安装」列表消失，不会自动绑定。'
+      : '目标在扫描范围内：迁移后 DLC 仍会显示在「已安装」列表。';
+  };
+  targetInput.onchange = updateVisibilityHint;
+  updateVisibilityHint();
   overlay.querySelector('[data-transfer-cancel]').onclick = () => overlay.remove();
   overlay.querySelector('[data-transfer-confirm]').onclick = event => {
-    const destination = overlay.querySelector('#installedTransferTarget')?.value || '';
+    const destination = targetInput.value || '';
     if (!options.includes(destination) || destination === sourceName) return;
     try {
       requestInstalledWorldbookTransfer(projectId, sourceName, destination);
       overlay.remove();
     } catch (error) { showToast(error.message || String(error), 'error'); }
   };
+}
+function openInstalledManagerCreateBookDialog() {
+  if (!state.tavern.connected || !state.tavern.installedManagerTransferSupported) {
+    showToast('请在 SillyTavern 中使用最新版工坊脚本创建世界书', 'warning');
+    return;
+  }
+  const html = '<div class="installed-transfer-dialog"><p>新建世界书并自动绑定为当前角色的附加世界书，随后会进入扫描范围。</p>' +
+    '<label for="installedManagerBookName">世界书名称</label>' +
+    '<input type="text" id="installedManagerBookName" maxlength="120" placeholder="例如：角色 DLC" autocomplete="off">' +
+    '<div class="installed-manager-dialog-actions"><button type="button" class="btn btn-outline" data-create-book-cancel>取消</button>' +
+    '<button type="button" class="btn btn-primary" data-create-book-confirm>创建并绑定</button></div></div>';
+  const overlay = openModal(html, '新建附加世界书');
+  const input = overlay.querySelector('#installedManagerBookName');
+  const confirm = overlay.querySelector('[data-create-book-confirm]');
+  overlay.querySelector('[data-create-book-cancel]').onclick = () => overlay.remove();
+  confirm.onclick = () => {
+    const name = input.value.trim();
+    if (!name || name.length > 120) {
+      showToast('请输入 1–120 字的世界书名称', 'warning'); input.focus(); return;
+    }
+    if ((state.tavern.worldbooks?.available || []).some(existing => existing.toLowerCase() === name.toLowerCase())) {
+      showToast('已有同名世界书，请选择现有世界书', 'warning'); return;
+    }
+    confirm.disabled = true;
+    try {
+      postBridgeMessage('bridge:create-additional-worldbook', { worldbookName:name });
+      overlay.remove();
+      showToast('正在创建并绑定附加世界书', 'info');
+    } catch (error) { showToast(error.message || String(error), 'error'); confirm.disabled = false; }
+  };
+  input.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); confirm.click(); } };
+  input.focus();
 }
 function openInstalledManagerUninstallDialog(projectId, sourceName) {
   const row = getLocalProjectInstallations(projectId).find(item =>
@@ -161,31 +190,15 @@ function bindInstalledManagerActions() {
     state.mobileToolMode = '';
     renderApp();
     if (state.tavern.connected) postBridgeMessage('bridge:list-installed-projects');
-    if (state.currentUser) await fetchSubscriptions().catch(error =>
-      console.warn('[CreativeWorkshop] subscriptions unavailable', error));
+
     if (state.tavern.connected) await fetchInstalledProjectDetails().catch(error =>
       console.warn('[CreativeWorkshop] local DLC details unavailable', error));
     renderApp();
   };
   const desktop = document.getElementById('desktopInstalledManagerBtn');
+  const createBook = document.getElementById('installedManagerCreateBook');
+  if (createBook) createBook.onclick = () => openInstalledManagerCreateBookDialog();
   if (desktop) desktop.onclick = event => { event.preventDefault(); void openManager(); };
-  document.querySelectorAll('[data-subscribed-detail]').forEach(button => {
-    button.onclick = () => {
-      const project = installedManagerProjectMeta(button.dataset.subscribedDetail);
-      if (project) showProjectDetail(project);
-    };
-  });
-  document.querySelectorAll('[data-subscribed-remove]').forEach(button => {
-    button.onclick = async () => {
-      const projectId = button.dataset.subscribedRemove;
-      if (!projectId) return;
-      button.disabled = true;
-      try {
-        await setProjectSubscription(projectId, false);
-        showToast('已取消订阅；本机已安装 DLC 不受影响');
-      } catch (error) { showToast('取消订阅失败：' + error.message, 'error'); button.disabled = false; }
-    };
-  });
   document.querySelectorAll('[data-installed-tab]').forEach(button => {
     button.onclick = () => {
       state.installedManagerTab = button.dataset.installedTab;
