@@ -218,7 +218,7 @@ function getMyDevTeamRecommendation(projectId) {
 function setProjects(projects) {
   state.projects = Array.isArray(projects) ? projects : [];
   if (state.tavern.installedProjectsLoaded) {
-    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
+    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [getInstalledInstanceKey(project), project])));
   }
 }
 
@@ -262,7 +262,7 @@ function setProjectsPage(payload) {
   };
   state.projectPagination.loadingPage = false;
   if (state.tavern.installedProjectsLoaded) {
-    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, project])));
+    rebuildInstalledProjectState(new Map(state.tavern.installedProjects.map(project => [getInstalledInstanceKey(project), project])));
   }
 }
 
@@ -398,6 +398,12 @@ function normalizeInstalledProject(project) {
     canUpdate: Boolean(project.canUpdate),
     hasUpdate: Boolean(project.hasUpdate),
     worldbookName: project.worldbookName || null,
+    installKey: project.installKey || JSON.stringify([installedProjectId, project.worldbookName || null]),
+    mixedVersions: Boolean(project.mixedVersions),
+    regexVersionMismatch: Boolean(project.regexVersionMismatch),
+    regexInstallPending: Boolean(project.regexInstallPending),
+    regexRecordWorldbookName: project.regexRecordWorldbookName || null,
+    worldbookBound: project.worldbookBound !== false,
   };
 }
 
@@ -456,34 +462,49 @@ function confirmInstalledProjectRebind(installedProjectId, remoteProject) {
   state.tavern.installedRemoteProjectMap.set(targetId, remoteProject);
   state.tavern.installedProjectRebindCandidates.delete(sourceId);
   rebuildInstalledProjectState(new Map(
-    state.tavern.installedProjects.map(project => [project.installedProjectId || project.projectId || project.id, project]),
+    state.tavern.installedProjects.map(project => [getInstalledInstanceKey(project), project]),
   ));
   return true;
 }
 
+function getInstalledInstanceKey(project) {
+  if (!project) return '';
+  return String(project.installKey || JSON.stringify([
+    project.installedProjectId || project.projectId || project.id,
+    project.worldbookName || null,
+  ]));
+}
+
+function getLocalProjectInstallations(projectId) {
+  return state.tavern.installedProjects.filter(project => project.projectId === projectId);
+}
+
 function rebuildInstalledProjectState(installedProjectMap) {
-  const resolvedProjectMap = new Map();
+  const byInstance = new Map();
   Array.from(installedProjectMap.values()).forEach(rawProject => {
     const project = resolveInstalledProjectIdentity(normalizeInstalledProject(rawProject));
-    if (!project?.projectId) return;
-    const existing = resolvedProjectMap.get(project.projectId);
-    if (!existing) {
-      resolvedProjectMap.set(project.projectId, project);
-      return;
-    }
-    resolvedProjectMap.set(project.projectId, {
-      ...existing,
-      ...project,
-      legacyProjectName: existing.legacyProjectName || project.legacyProjectName || null,
-      localVersion: project.localVersion || existing.localVersion || null,
-      worldbookName: project.worldbookName || existing.worldbookName || null,
-      entryCount: Math.max(Number(existing.entryCount || 0), Number(project.entryCount || 0)),
-      regexCount: Math.max(Number(existing.regexCount || 0), Number(project.regexCount || 0)),
-    });
+    if (project?.projectId) byInstance.set(getInstalledInstanceKey(project), project);
   });
-  const list = Array.from(resolvedProjectMap.values());
+  const list = Array.from(byInstance.values());
   state.tavern.installedProjects = list;
-  state.tavern.localProjectMap = new Map(list.map(project => [project.projectId, project]));
+  const byProject = new Map();
+  list.forEach(project => {
+    const previous = byProject.get(project.projectId);
+    if (!previous) {
+      byProject.set(project.projectId, project);
+    } else {
+      byProject.set(project.projectId, {
+        ...previous,
+        localVersion: previous.localVersion === project.localVersion ? previous.localVersion : null,
+        worldbookName: null,
+        mixedVersions: previous.mixedVersions || project.mixedVersions ||
+          previous.localVersion !== project.localVersion,
+        entryCount: previous.entryCount + project.entryCount,
+        regexCount: Math.max(previous.regexCount, project.regexCount),
+      });
+    }
+  });
+  state.tavern.localProjectMap = byProject;
   const installedIds = new Set(list.map(project => project.projectId).filter(Boolean));
   const installedSourceIds = new Set(list.map(project => project.installedProjectId || project.projectId).filter(Boolean));
   state.tavern.installedRemoteProjectMap = new Map(
@@ -519,17 +540,19 @@ function setInstalledProjects(projects, options) {
   const mode = options && options.mode === 'merge' ? 'merge' : 'replace';
   const removeProjectId = options && options.removeProjectId ? options.removeProjectId : null;
   const installedProjectMap = mode === 'merge'
-    ? new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]))
+    ? new Map(state.tavern.installedProjects.map(project => [getInstalledInstanceKey(project), normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]))
     : new Map();
 
   list.forEach(project => {
     const normalized = normalizeInstalledProject(project);
     if (!normalized) return;
-    installedProjectMap.set(normalized.projectId, normalized);
+    installedProjectMap.set(getInstalledInstanceKey(normalized), normalized);
   });
 
   if (removeProjectId) {
-    installedProjectMap.delete(removeProjectId);
+    for (const [key, project] of installedProjectMap) {
+      if (project.projectId === removeProjectId) installedProjectMap.delete(key);
+    }
   }
 
   rebuildInstalledProjectState(new Map(Array.from(installedProjectMap.entries()).filter(entry => Boolean(entry[1]))));
@@ -537,8 +560,10 @@ function setInstalledProjects(projects, options) {
 
 function clearInstalledProject(projectId) {
   if (!projectId) return;
-  const installedProjectMap = new Map(state.tavern.installedProjects.map(project => [project.projectId || project.id, normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]));
-  installedProjectMap.delete(projectId);
+  const installedProjectMap = new Map(state.tavern.installedProjects.map(project => [getInstalledInstanceKey(project), normalizeInstalledProject(project)]).filter(entry => entry[0] && entry[1]));
+  for (const [key, project] of installedProjectMap) {
+    if (project.projectId === projectId) installedProjectMap.delete(key);
+  }
   rebuildInstalledProjectState(installedProjectMap);
 }
 
@@ -611,6 +636,11 @@ function getFilteredProjects() {
           return Boolean(localMeta) || isSubscribedProject(project.id);
         }
         return isSubscribedProject(project.id);
+      }).flatMap(project => {
+        const installations = getLocalProjectInstallations(project.id);
+        return installations.length
+          ? installations.map(instance => ({ ...project, __installedInstance: instance }))
+          : [project];
       })
     : source;
 

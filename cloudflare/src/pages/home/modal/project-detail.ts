@@ -351,6 +351,7 @@ export const homeProjectDetailModalScript = [
   '        const targetProject = detail.project || project;',
   '        if (!targetProject?.id) return;',
   '        if (!requireDiscordLoginForDownload("更新 DLC")) return;',
+  '        if (getLocalProjectInstallations(targetProject.id).filter(item => item.worldbookName).length > 1) { openProjectUpdateModal(targetProject, null); return; }',
   '        const restore = setButtonLoading(button, "加载差异");',
   '        requestProjectDiff(targetProject.id, targetProject.version)',
   '          .then(diff => openProjectUpdateModal(targetProject, diff))',

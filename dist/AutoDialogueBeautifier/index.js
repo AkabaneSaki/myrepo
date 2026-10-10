@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./config/workshop.json
-const workshop_namespaceObject = /*#__PURE__*/JSON.parse('{"Sn":{"mz":"2.2.1"},"_r":{"J":"AkabaneSaki/myrepo"}}');
+const workshop_namespaceObject = /*#__PURE__*/JSON.parse('{"Sn":{"mz":"2.3.0"},"_r":{"J":"AkabaneSaki/myrepo"}}');
 ;// ./src/AutoDialogueBeautifier/index.ts
 
 // 自适应正则脚本
@@ -227,15 +227,8 @@ $(async () => {
     // 获取角色卡当前已注册的所有正则 scriptName
     const getCharacterCardRegexNames = async () => {
         const names = new Set();
-        try {
-            const regexes = await updateTavernRegexesWith((regexes) => {
-                regexes.forEach(r => names.add(r.script_name));
-                return regexes;
-            });
-        }
-        catch (e) {
-            console.warn('获取角色卡正则列表失败:', e);
-        }
+        const regexes = getTavernRegexes({ type: 'character' });
+        regexes.forEach(r => names.add(r.script_name));
         return names;
     };
     // 注册单个正则规则
@@ -245,10 +238,11 @@ $(async () => {
                 // 避免重复注册同名正则
                 const filtered = regexes.filter((r) => r.script_name !== rule.script_name);
                 return [...filtered, rule];
-            });
+            }, { type: 'character' });
         }
         catch (e) {
             console.warn(`注册正则失败: ${rule.script_name}`, e);
+            throw e;
         }
     };
     // 同步正则列表：对比变量列表和角色卡正则列表
@@ -322,7 +316,7 @@ $(async () => {
         try {
             await updateTavernRegexesWith((regexes) => {
                 return regexes.filter((r) => !names.includes(r.script_name));
-            });
+            }, { type: 'character' });
             console.info(`自适应正则: 已移除 ${names.length} 条规则`);
         }
         catch (e) {
@@ -362,7 +356,8 @@ $(async () => {
                 await syncRegexWithVariable();
             }
             else {
-                console.info('自适应正则: 无变化，不更新');
+                // 上次注册可能失败：名称未变化时仍尝试补齐角色卡内缺失的正则。
+                await syncRegexWithVariable();
             }
         }
         catch (e) {

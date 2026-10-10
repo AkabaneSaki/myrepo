@@ -3,6 +3,7 @@ import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { CHECKER_LIMITS } from '../src/utils/ejs-checker/limits.mjs';
+import * as projectVersionApi from '../src/utils/version.js';
 
 async function readExportExpression(relativePath, exportName) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -16,7 +17,7 @@ async function readExportExpression(relativePath, exportName) {
 
 async function evaluateStandalone(relativePath, exportName) {
   const expression = await readExportExpression(relativePath, exportName);
-  return Function(`return (${expression});`)();
+  return Function(...Object.keys(projectVersionApi), `return (${expression});`)(...Object.values(projectVersionApi));
 }
 
 const homeAppSource = (await Promise.all([
@@ -768,7 +769,7 @@ const cardViewModelUi = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()}; ${projectVersionApi.compareProjectVersions.toString()}; ${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
@@ -809,7 +810,7 @@ const cardRenderUi = Function(
   'getProjectPublishedAt',
   'getProjectDisplayTags',
   'PROJECT_TAXONOMY',
-  `${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
+  `${projectVersionApi.parseProjectVersion.toString()}; ${projectVersionApi.compareProjectVersions.toString()}; ${fragments.homeCardsRenderScript}; return { renderProjectCard };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
@@ -947,7 +948,7 @@ const migratedCardUi = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()};${projectVersionApi.compareProjectVersions.toString()};${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => ({ projectId: canonicalProjectId, legacyProjectName: '旧工坊项目', localVersion: null }),
@@ -959,7 +960,7 @@ const migratedCardUi = Function(
 );
 assert.equal(
   migratedCardUi.buildProjectCardViewModel({ id: canonicalProjectId, name: '旧工坊项目', version: '2.0.0' }).canUpdate,
-  true,
+  false,
 );
 
 const legacyConflictView = Function(
@@ -970,7 +971,7 @@ const legacyConflictView = Function(
   'getProjectPendingAction',
   'state',
   'escapeHtml',
-  `${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
+  `${projectVersionApi.parseProjectVersion.toString()};${projectVersionApi.compareProjectVersions.toString()};${fragments.homeCardsRenderScript}; return { buildProjectCardViewModel };`,
 )(
   () => ({ liked: false, count: 0 }),
   () => null,
@@ -1043,22 +1044,33 @@ const versionBridgeUi = Function(
   () => { versionNoticeCount += 1; }, () => {},
   version => { versionState.tavern.clientVersion = version; versionState.tavern.clientVersionResolved = true; },
   () => {});
-const versionHandshake = version => versionBridgeUi.handleBridgeMessage({ data: {
-  namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', payload: { clientVersion: version },
+const versionHostSource = {};
+const versionHandshake = (version, verifiedDlcInstall = false) => versionBridgeUi.handleBridgeMessage({ source: versionHostSource, data: {
+  requestId: versionBridgeUi.postBridgeMessage('bridge:handshake'),
+  namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', payload: { clientVersion: version, capabilities: { verifiedDlcInstall } },
 } });
 versionHandshake('2.1.3');
 assert.ok(versionNoticeCount > 0);
-assert.equal(versionMessages.length, 0, 'outdated handshake must not scan installed DLC');
+assert.equal(versionMessages.filter(message => message.type !== 'bridge:handshake').length, 0, 'outdated handshake must not scan installed DLC');
 for (const type of ['bridge:install-project', 'bridge:confirm-project-update', 'bridge:uninstall-project',
   'bridge:repair:project', 'bridge:repair:scan', 'bridge:get-project-diff']) {
   assert.throws(() => versionBridgeUi.postBridgeMessage(type, {}), { code: 'CLIENT_UPDATE_REQUIRED' }, type);
 }
-assert.equal(versionMessages.length, 0, 'blocked operations must never reach the client');
+assert.equal(versionMessages.filter(message => message.type !== 'bridge:handshake').length, 0, 'blocked operations must never reach the client');
 versionBridgeUi.requestCloseWorkshop();
 assert.equal(versionMessages.pop().type, 'bridge:close-workshop', 'outdated client can still close the Workshop');
+versionMessages.length = 0;
 versionHandshake(workshopConfig.client.stable);
 assert.deepEqual(versionMessages.splice(0).map(message => message.type),
-  ['bridge:list-installed-projects', 'bridge:list-script-dependencies']);
+  ['bridge:handshake', 'bridge:list-installed-projects', 'bridge:get-context', 'bridge:list-script-dependencies']);
+for (const type of ['bridge:install-project', 'bridge:confirm-project-update', 'bridge:uninstall-project', 'bridge:get-project-diff', 'bridge:repair:project']) {
+  assert.throws(() => versionBridgeUi.postBridgeMessage(type, { worldbookName: 'B' }), /不支持安全安装/, 'same-version legacy client cannot ignore installation location');
+}
+assert.equal(versionMessages.length, 0);
+versionBridgeUi.handleBridgeMessage({ source: {}, data: { namespace: 'creative-workshop-bridge', type: 'bridge:handshake:ok', requestId: 'forged', payload: { clientVersion: workshopConfig.client.stable, capabilities: { verifiedDlcInstall: true } } } });
+assert.equal(versionState.tavern.verifiedDlcInstall, false, 'unrequested handshake cannot enable writes');
+versionHandshake(workshopConfig.client.stable, true);
+versionMessages.length = 0;
 versionBridgeUi.postBridgeMessage('bridge:install-project', { projectId: 'latest-client-project' });
 assert.equal(versionMessages.pop().payload.projectId, 'latest-client-project');
 

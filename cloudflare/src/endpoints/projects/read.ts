@@ -9,7 +9,7 @@ import { attachWorldbookEjsLengthEstimates } from '../../utils/project-entry-est
 import { parseRegexEntriesPreview, parseWorldbookEntriesPreview } from '../../utils/project-preview';
 import { readProjectContentForEdit } from './content';
 import { r2Storage } from '../../utils/r2';
-import { normalizeProjectVersionBase } from '../../utils/version.js';
+import { normalizeProjectVersionBase, compareProjectVersions } from '../../utils/version.js';
 
 const projectListSortSchema = z.enum(['discover', 'published', 'rating', 'updated', 'likes', 'subscribes', 'downloads', 'downloads_7d', 'downloads_30d', 'likes_7d', 'likes_30d']);
 
@@ -316,7 +316,8 @@ export class ProjectVersionCheck extends OpenAPIRoute {
     const updates = (result.results || []).flatMap(row => {
       const installedVersion = byId.get(String(row.id)) || null;
       const latestVersion = normalizeProjectVersionBase(row.version);
-      if (installedVersion && latestVersion && installedVersion === latestVersion) return [];
+      if (compareProjectVersions(row.version, row.version) !== 0) return [];
+      if (installedVersion && compareProjectVersions(latestVersion, installedVersion) !== 1) return [];
       return [{
         id: String(row.id),
         name: String(row.name || ''),
@@ -539,10 +540,16 @@ export class ProjectInstallInfo extends OpenAPIRoute {
       }, 409);
     }
 
+    // Regex-only projects have a separate URL; their JSON must not masquerade as a worldbook.
+    const regexKey = `projects/${project.id}/regex-${project.id}.json`;
+    const regexDownloadUrl = !project.download_url && await c.env.R2_BUCKET.head(regexKey)
+      ? r2Storage.getProxyUrl(c, regexKey) + (currentVersion ? `?v=${encodeURIComponent(currentVersion)}` : '')
+      : null;
     return {
       success: true,
       projectId: project.id,
       version: currentVersion || null,
+      regexDownloadUrl,
       downloadUrl: project.download_url
         ? `${r2Storage.getProxyUrl(c, project.download_url.replace(/^.*\/api\/files\//, '').split(/[?#]/, 1)[0])}${currentVersion ? `?v=${encodeURIComponent(currentVersion)}` : ''}`
         : null,

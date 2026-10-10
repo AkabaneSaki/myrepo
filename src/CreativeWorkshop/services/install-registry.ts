@@ -134,6 +134,7 @@ function addRegexIdentity(
 
 export function createCreativeWorkshopRegexIdentityResolver(
   regexes: Array<Record<string, any>>,
+  worldbookRecords: CreativeWorkshopRegexRecordMetadata[] = [],
 ): (regex: Record<string, any>) => CreativeWorkshopRegexIdentity | null {
   const identities = new Map<string, CreativeWorkshopRegexIdentity>();
   const ambiguousIds = new Set<string>();
@@ -145,7 +146,7 @@ export function createCreativeWorkshopRegexIdentityResolver(
         schemaVersion: 2,
         projectId: record.projectId,
         entryKey: entry.entryKey,
-        installedVersion: entry.installedVersion ?? record.installedVersion ?? null,
+        installedVersion: null, // History can recover ownership, never the current saved version.
       });
     }
   }
@@ -160,6 +161,16 @@ export function createCreativeWorkshopRegexIdentityResolver(
         schemaVersion: 2,
         projectId: record.projectId,
         entryKey: entry.entryKey,
+        installedVersion: entry.installedVersion ?? record.installedVersion ?? null,
+      });
+    }
+  }
+
+  for (const record of worldbookRecords) {
+    for (const entry of record.entries) {
+      if (!presentIds.has(entry.regexId)) continue;
+      addRegexIdentity(identities, ambiguousIds, entry.regexId, {
+        schemaVersion: 2, projectId: record.projectId, entryKey: entry.entryKey,
         installedVersion: entry.installedVersion ?? record.installedVersion ?? null,
       });
     }
@@ -269,7 +280,12 @@ export function setCreativeWorkshopInstallRecord(
       : normalizeWorldbookEntryKeys(current?.worldbookEntryKeys),
     installedAt: Date.now(),
   };
-  writeInstallRegistry(registry);
+  let writeError: unknown;
+  try { writeInstallRegistry(registry); } catch (error) { writeError = error; }
+  const saved = getCreativeWorkshopInstallRecord(projectId);
+  if (!saved || Object.keys(patch).some(key => patch[key] !== undefined &&
+      JSON.stringify(saved[key]) !== JSON.stringify(registry[scopeKey][projectId][key])))
+    throw new Error('部分完成：安装记录保存后验收失败，请重新扫描并重试');
 }
 
 export function deleteCreativeWorkshopInstallRecord(projectId: string) {
@@ -281,4 +297,5 @@ export function deleteCreativeWorkshopInstallRecord(projectId: string) {
     delete registry[scopeKey];
   }
   writeInstallRegistry(registry);
+  if (getCreativeWorkshopInstallRecord(projectId)) throw new Error('卸载记录未完成，请重新扫描');
 }

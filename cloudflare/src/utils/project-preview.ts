@@ -102,6 +102,21 @@ export function parseWorldbookEntriesPreview(projectFileText: string): Worldbook
   });
 }
 
+function getRegexSurfaceDestination(
+  entry: Record<string, unknown>,
+  exportedKey: 'markdownOnly' | 'promptOnly',
+  legacyKey: 'markdown_only' | 'prompt_only',
+  tavernHelperKey: 'display' | 'prompt',
+): boolean {
+  // ST's native export uses markdownOnly / promptOnly. TavernHelper character
+  // Regex snapshots use destination.display / destination.prompt. Respect
+  // an explicitly supplied native value; only fall back when it is absent.
+  const exported = entry[exportedKey] ?? entry[legacyKey];
+  if (typeof exported === 'boolean') return exported;
+  const destination = getNestedRecord(entry.destination);
+  return destination?.[tavernHelperKey] === true;
+}
+
 export function parseRegexEntriesPreview(regexFileText: string): RegexEntryPreviewType[] {
   const raw = safeParseJson(regexFileText);
   return extractProjectEntries(raw, 'regex').map(({ entry: item, entryKey }, index) => {
@@ -133,8 +148,8 @@ export function parseRegexEntriesPreview(regexFileText: string): RegexEntryPrevi
           ? item.trim_strings.filter(value => typeof value === 'string')
           : [],
       disabled: Boolean(item.disabled),
-      markdownOnly: Boolean(item.markdownOnly ?? item.markdown_only),
-      promptOnly: Boolean(item.promptOnly ?? item.prompt_only),
+      markdownOnly: getRegexSurfaceDestination(item, 'markdownOnly', 'markdown_only', 'display'),
+      promptOnly: getRegexSurfaceDestination(item, 'promptOnly', 'prompt_only', 'prompt'),
       runOnEdit: Boolean(item.runOnEdit ?? item.run_on_edit),
       substituteRegex:
         typeof item.substituteRegex === 'number' || typeof item.substituteRegex === 'boolean'

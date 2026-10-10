@@ -1,4 +1,6 @@
-export const homeUtilsScript = String.raw`
+import { parseProjectVersion, compareProjectVersions } from '../../utils/version.js';
+
+export const homeUtilsScript = parseProjectVersion.toString() + '\n' + compareProjectVersions.toString() + '\n' + String.raw`
 const BASE_TAG_META = [
   { value: '系统核心', label: '系统核心', typeClass: 'system' },
   { value: '扩展', label: '扩展', typeClass: 'extension' },

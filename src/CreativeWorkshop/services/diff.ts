@@ -1,8 +1,9 @@
 import {
   createCreativeWorkshopRegexIdentityResolver,
-  resolveCreativeWorkshopInstallWorldbook,
 } from './install-registry';
+import { readCreativeWorkshopRegexManifest } from './regex-record';
 import { fetchCreativeWorkshopProjectDetail } from './project-fetch';
+import { findCreativeWorkshopInstallLocations } from './worldbook-stage';
 import { formatCreativeWorkshopEntryName } from './project-type';
 import {
   getCreativeWorkshopRegexIdentityKey,
@@ -191,10 +192,16 @@ export async function getCreativeWorkshopProjectDiff(
   projectId: string,
   expectedVersion?: string,
   legacyProjectName?: string,
+  requestedWorldbookName?: string,
 ) {
   const detail = await fetchCreativeWorkshopProjectDetail(projectId, expectedVersion);
-  const charWorldbooks = getCharWorldbookNames('current');
-  const worldbookName = (await resolveCreativeWorkshopInstallWorldbook(projectId, legacyProjectName)) || charWorldbooks.primary;
+  const found = await findCreativeWorkshopInstallLocations(
+    projectId, legacyProjectName, requestedWorldbookName ? [requestedWorldbookName] : [], Boolean(requestedWorldbookName));
+  if (requestedWorldbookName && !found.includes(requestedWorldbookName))
+    throw new Error('所选世界书找不到此 DLC，无法生成准确更新差异');
+  if (!requestedWorldbookName && found.length > 1)
+    throw new Error('此 DLC 在多本世界书中，请先选择一处安装位置');
+  const worldbookName = requestedWorldbookName || found[0] || null;
   const worldbookEntries = worldbookName && getWorldbookNames().includes(worldbookName)
     ? await getWorldbook(worldbookName)
     : [];
@@ -224,7 +231,8 @@ export async function getCreativeWorkshopProjectDiff(
   });
 
   const allRegexes = getTavernRegexes({ scope: 'character', enable_state: 'all' });
-  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes);
+  const manifest = await readCreativeWorkshopRegexManifest();
+  const resolveRegexIdentity = createCreativeWorkshopRegexIdentityResolver(allRegexes, [...manifest.projects, ...manifest.pending]);
   const localRegexes = allRegexes
     .filter(regex => {
       const identity = resolveRegexIdentity(regex);

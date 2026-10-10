@@ -3,6 +3,9 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import ts from '../../node_modules/typescript/lib/typescript.js';
+import * as projectVersionApi from '../src/utils/version.js';
+import { z } from 'zod';
+const { compareProjectVersions } = projectVersionApi;
 
 async function compile(relativePath) {
   const source = await readFile(new URL('../' + relativePath, import.meta.url), 'utf8');
@@ -23,6 +26,7 @@ function loadCommonJs(compiled, context, filename) {
 }
 
 const workshopConfig = JSON.parse(await readFile(new URL('../../config/workshop.json', import.meta.url), 'utf8'));
+const externalLinkPolicy = await import('../src/utils/external-links/policy.mjs');
 assert.deepEqual(workshopConfig.projectCommunity.discordGuildIds, ['1417861565679669272']);
 
 const discordApi = loadCommonJs(
@@ -35,6 +39,7 @@ const discordApi = loadCommonJs(
     String,
     require(specifier) {
       if (specifier === '../../../config/workshop.json') return workshopConfig;
+      if (specifier === './external-links/policy.mjs') return externalLinkPolicy;
       throw new Error('Unexpected require: ' + specifier);
     },
   },
@@ -109,6 +114,8 @@ let nextApiResult = {
   updates: [{ id: 'project-1', name: 'One', installedVersion: '1.0.0', latestVersion: '1.1.0' }],
 };
 const updateContext = {
+  compareProjectVersions,
+  getLocalProjectInstallations: id => state.tavern.installedProjects.filter(item => item.projectId === id),
   state,
   localStorage,
   console,
@@ -179,7 +186,7 @@ assert.match(editorSource, /id=\"discordThreadUrl\"/);
 assert.match(detailSource, /detail-discord-thread/);
 assert.match(detailSource, />Discord 讨论帖</);
 assert.match(detailSource, /target=\"_blank\" rel=\"noopener noreferrer\"/);
-assert.match(layoutSource, /<span>有更新<\/span>/);
+assert.match(layoutSource, /<strong>有更新<\/strong>/);
 assert.match(layoutSource, /无更新/);
 
 const versionCheckClass = readEndpointSource.slice(
@@ -189,5 +196,41 @@ const versionCheckClass = readEndpointSource.slice(
 assert.match(versionCheckClass, /SELECT p\.id, p\.name, p\.version/);
 assert.doesNotMatch(versionCheckClass, /SELECT p\.\*/);
 assert.doesNotMatch(versionCheckClass, /enrichProjects/);
+
+const readApi = loadCommonJs(await compile('src/endpoints/projects/read.ts'), {
+  require(specifier) {
+    if (specifier === 'chanfana') return { OpenAPIRoute: class {} };
+    if (specifier === 'zod') return { z };
+    if (specifier === '../../utils/version.js') return projectVersionApi;
+    return {};
+  },
+}, 'read.ts');
+for (const [installedVersion, expected] of [
+  ['1.3.25', false], ['1.3.19', false], ['v1.3.19', false],
+  ['1.3.9', true], ['unknown', false], [null, true],
+]) {
+  let queryCount = 0;
+  const response = await readApi.ProjectVersionCheck.prototype.handle.call({
+    getValidatedData: async () => ({ body: { projects: [
+      { id: 'battle-dlc', installedVersion }, { id: 'battle-dlc', installedVersion },
+    ] } }),
+  }, { env: { DB: { prepare() {
+    queryCount += 1;
+    return { bind(ids) {
+      assert.deepEqual(JSON.parse(ids), ['battle-dlc'], 'locations still share one remote project lookup');
+      return { all: async () => ({ results: [{ id: 'battle-dlc', name: 'Battle', version: '1.3.19' }] }) };
+    } };
+  } } } });
+  assert.equal(response.hasUpdate, expected, 'version-check for ' + installedVersion);
+  assert.equal(queryCount, 1);
+}
+
+state.tavern.installedProjects = [{ projectId: 'project-1', localVersion: '1.3.25', regexVersionMismatch: true }];
+nextApiResult = { success: true, hasUpdate: true, updates: [{ id: 'project-1', latestVersion: '1.3.19' }] };
+result = await updateApi.requestDlcVersionCheck({ fresh: true });
+assert.equal(result.hasUpdate, false, 'an outdated server response must not offer a downgrade');
+nextApiResult.updates[0].latestVersion = '1.3.25';
+result = await updateApi.requestDlcVersionCheck({ fresh: true });
+assert.equal(result.hasUpdate, true, 'equal-version Regex recovery remains available');
 
 console.log('project Discord link + DLC update center smoke: ok');

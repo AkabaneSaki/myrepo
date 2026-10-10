@@ -55,6 +55,7 @@ function loadInstallStateHarness({
   boundNames = ['DLC'],
   regexes = [],
   installRecords = {},
+  manifest = { projects: [], pending: [] },
 }) {
   let names = [...initialNames];
   let refreshCount = 0;
@@ -73,6 +74,7 @@ function loadInstallStateHarness({
           getCreativeWorkshopBoundWorldbookNames: () => [...boundNames],
         };
       }
+      if (specifier === './regex-record') return { readCreativeWorkshopRegexManifest: async () => structuredClone(manifest) };
       if (specifier === './install-identity') return identityApi;
       if (specifier === './regex-name') {
         return {
@@ -92,6 +94,7 @@ function loadInstallStateHarness({
       return Array.isArray(value) ? value : [];
     },
     getTavernRegexes: () => structuredClone(regexes),
+    getCharWorldbookNames: () => ({ primary: boundNames[0] || null, additional: boundNames.slice(1) }),
     SillyTavern: {
       getContext: () => ({
         updateWorldInfoList: async () => {
@@ -239,4 +242,41 @@ assert.match(indexSource, /打开时间较长，可以退出后重试/);
 assert.doesNotMatch(indexSource, /location\.replace\(creativeWorkshopUrl\)/);
 assert.doesNotMatch(source, /loadWorldInfo/);
 
+
+{
+  const second = structuredClone(managedEntry);
+  second.extra.cw_project_version = '2.0.0';
+  const harness = loadInstallStateHarness({
+    initialNames: ['A', 'B'],
+    namesAfterRefresh: ['A', 'B'],
+    relevantNames: ['A', 'B'],
+    boundNames: ['A', 'B'],
+    worldbooks: { A: [managedEntry], B: [second] },
+    installRecords: { [projectId]: { projectId, worldbookName: 'OUTDATED', installedVersion: '9.9.9' } },
+  });
+  const scan = await harness.api.scanInstalledCreativeWorkshopProjects();
+  assert.equal(scan.complete, true);
+  assert.equal(scan.projects.length, 2, 'two bound worldbooks must remain two installations');
+  assert.deepEqual(Array.from(scan.projects, item => item.worldbookName).sort(), ['A', 'B']);
+  assert.deepEqual(Array.from(scan.projects, item => item.localVersion).sort(), ['1.0.0', '2.0.0']);
+  assert.equal(new Set(scan.projects.map(item => item.installKey)).size, 2);
+  assert.equal(scan.projects.every(item => item.worldbookBound === true), true);
+}
+
+
+{
+  const h = loadInstallStateHarness({
+    initialNames: ['DLC'], namesAfterRefresh: ['DLC'], worldbooks: { DLC: [] },
+    manifest: { projects: [], pending: [{
+      schemaVersion: 1, projectId, projectNameDisplay: '等待完成的 Regex DLC',
+      installedVersion: '2.0.0', entries: [{ regexId: 'missing-regex', entryKey: 'entry-1', installedVersion: '2.0.0' }],
+    }] },
+  });
+  const scan = await h.api.scanInstalledCreativeWorkshopProjects();
+  assert.equal(scan.projects.length, 1, 'pending regex-only installs must not disappear from installed view');
+  assert.equal(scan.projects[0].regexInstallPending, true);
+  assert.equal(scan.projects[0].regexRecordWorldbookName, 'DLC');
+  assert.equal(scan.projects[0].localVersion, null, 'pending version is not verified installed version');
+  assert.equal(scan.projects[0].worldbookName, null);
+}
 console.log('CreativeWorkshop install-state readiness smoke: ok');

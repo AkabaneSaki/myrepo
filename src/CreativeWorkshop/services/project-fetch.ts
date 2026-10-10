@@ -1,4 +1,5 @@
 import { getCreativeWorkshopUrl } from './config';
+import { extractProjectEntries } from '../../../cloudflare/src/utils/project-content';
 
 const CREATIVE_WORKSHOP_CACHE_KEY = 'creative_workshop_cache';
 const PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -11,6 +12,8 @@ export type CreativeWorkshopProjectDetail = {
 };
 
 export type CreativeWorkshopWorldbookSourceEntry = Partial<WorldbookEntry> & Record<string, any>;
+
+export type CreativeWorkshopTransferProgress = (stage: string, details?: { loadedBytes?: number; totalBytes?: number; source?: string }) => void;
 
 
 type CreativeWorkshopCacheStore = {
@@ -169,23 +172,26 @@ function normalizeWorldbookSourceEntries(raw: unknown): CreativeWorkshopWorldboo
   return [];
 }
 
-export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail: CreativeWorkshopProjectDetail) {
+export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail: CreativeWorkshopProjectDetail, onProgress?: CreativeWorkshopTransferProgress) {
   const projectId = _.get(projectDetail, 'project.id');
   const downloadUrl = _.get(projectDetail, 'project.downloadUrl');
   const projectVersion = _.isString(_.get(projectDetail, 'project.version'))
     ? String(_.get(projectDetail, 'project.version'))
     : null;
   if (!_.isString(downloadUrl) || !downloadUrl) {
+    onProgress?.('download', { source: 'none' });
     return [] as CreativeWorkshopWorldbookSourceEntry[];
   }
 
   if (_.isString(projectId) && projectId) {
     const cached = getCachedWorldbookSource(projectId, downloadUrl, projectVersion || undefined);
     if (cached) {
+      onProgress?.('download', { source: 'cache' });
       return cached;
     }
   }
 
+  onProgress?.('download', { source: 'network' });
   try {
     const response = await fetch(downloadUrl, {
       cache: 'no-store',
@@ -194,7 +200,40 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
       throw new Error(`获取世界书原始配置失败: ${response.status}`);
     }
 
-    const raw = await response.json();
+    let raw: unknown;
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      const statedTotal = Number(response.headers.get('content-length'));
+      const totalBytes = Number.isSafeInteger(statedTotal) && statedTotal > 0 ? statedTotal : undefined;
+      const decoder = new TextDecoder();
+      const parts: string[] = [];
+      let loadedBytes = 0;
+      let previousBucket = -1;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        loadedBytes += value.byteLength;
+        parts.push(decoder.decode(value, { stream: true }));
+        // Limit messages without pretending that downloaded bytes equal install progress.
+        const bucket = totalBytes
+          ? Math.floor((loadedBytes / totalBytes) * 20)
+          : Math.floor(loadedBytes / (128 * 1024));
+        if (bucket !== previousBucket) {
+          previousBucket = bucket;
+          onProgress?.('download', {
+            loadedBytes,
+            ...(totalBytes && loadedBytes <= totalBytes ? { totalBytes } : {}),
+          });
+        }
+      }
+      parts.push(decoder.decode());
+      onProgress?.('download', { loadedBytes, ...(totalBytes && loadedBytes === totalBytes ? { totalBytes } : {}) });
+      raw = JSON.parse(parts.join(''));
+    } else {
+      raw = await response.json();
+      onProgress?.('download', { source: 'complete' });
+    }
     const normalized = normalizeWorldbookSourceEntries(raw);
     if (_.isString(projectId) && projectId) {
       setCachedWorldbookSource(projectId, downloadUrl, projectVersion, normalized);
@@ -209,6 +248,51 @@ export async function fetchCreativeWorkshopProjectWorldbookSource(projectDetail:
       }
     }
     throw error;
+  }
+}
+
+
+/**
+ * Regex-only install/update: fetch the actual published Regex JSON rather than
+ * treating it as a worldbook. Its authorized /api/files/ GET is the same
+ * real-download accounting path as normal worldbook downloads.
+ * Deliberately not cached: each deliberate install/update is a download.
+ */
+export async function fetchCreativeWorkshopProjectRegexSource(
+  downloadUrl: string,
+  detail: CreativeWorkshopProjectDetail,
+  onProgress?: CreativeWorkshopTransferProgress,
+): Promise<void> {
+  const projectId = String(detail.project.id || '');
+  const expectedKey = 'projects/' + projectId + '/regex-' + projectId + '.json';
+  const base = new URL(getCreativeWorkshopUrl());
+  const url = new URL(downloadUrl);
+  if (!projectId || url.origin !== base.origin ||
+      decodeURIComponent(url.pathname) !== '/api/files/' + expectedKey)
+    throw new Error('DLC 正则下载地址与当前工坊或项目身份不符');
+  onProgress?.('download', { source: 'network' });
+  const response = await fetch(url.toString(), { cache: 'no-store' });
+  if (!response.ok) throw new Error('获取 DLC 正则文件失败：' + response.status);
+  const source = await response.text();
+  onProgress?.('download', { loadedBytes: new TextEncoder().encode(source).byteLength });
+  onProgress?.('validate');
+  let raw: unknown;
+  try { raw = JSON.parse(source); }
+  catch { throw new Error('DLC 正则文件不是有效 JSON'); }
+  const entries = extractProjectEntries(raw, 'regex');
+  const preview = detail.regexEntriesPreview || [];
+  if (!entries.length || entries.length !== preview.length)
+    throw new Error('DLC 正则文件与项目预览条目数量不一致');
+  const seen = new Set<string>();
+  for (const { entry, entryKey } of entries) {
+    if (seen.has(entryKey)) throw new Error('DLC 正则文件含重复条目身份');
+    seen.add(entryKey);
+    const expected = preview.filter(item => item.entryKey === entryKey);
+    const findRegex = entry.findRegex ?? entry.find_regex;
+    const replaceString = entry.replaceString ?? entry.replace_string;
+    if (expected.length !== 1 || findRegex !== expected[0].findRegex ||
+        replaceString !== expected[0].replaceString)
+      throw new Error('DLC 正则下载内容与所选版本不一致，已停止安装');
   }
 }
 

@@ -2,21 +2,25 @@ import { getCreativeWorkshopOrigin } from '../services/config';
 import { getCurrentCreativeWorkshopContext } from '../services/context';
 import { CREATIVE_WORKSHOP_CLIENT_VERSION } from '../version';
 import { getCreativeWorkshopProjectDiff } from '../services/diff';
-import { listInstalledCreativeWorkshopProjects, scanInstalledCreativeWorkshopProjects } from '../services/install-state';
-import { deleteCreativeWorkshopInstallRecord } from '../services/install-registry';
+import { scanInstalledCreativeWorkshopProjects } from '../services/install-state';
+import { deleteCreativeWorkshopInstallRecord, setCreativeWorkshopInstallRecord, getCreativeWorkshopInstallRecord } from '../services/install-registry';
 import { repairCreativeWorkshopProject, scanCreativeWorkshopRepairCandidates } from '../services/repair';
 import { listCreativeWorkshopScriptDependencies } from '../services/script-dependency';
 import {
-  installCreativeWorkshopRegex,
+  applyPreparedCreativeWorkshopRegex,
+  prepareCreativeWorkshopRegexEntries,
   uninstallCreativeWorkshopRegex,
-  updateCreativeWorkshopRegex,
+  verifyCreativeWorkshopRegexInstallation,
 } from '../services/regex';
 import {
   installCreativeWorkshopProject,
   uninstallCreativeWorkshopProject,
   updateCreativeWorkshopProject,
+  removeCreativeWorkshopApprovedDuplicates,
+  verifyCreativeWorkshopApprovedDuplicateState,
 } from '../services/worldbook';
 import { createBridgeMessage, isCreativeWorkshopBridgeMessage } from './protocol';
+import { migrateCreativeWorkshopLegacyRegexRecords } from '../services/regex-record';
 
 type HostOption = {
   iframe: HTMLIFrameElement;
@@ -31,6 +35,7 @@ const OAUTH_POPUP_NAME = 'creative-workshop-oauth';
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_POPUP_CLOSE_GUARD_MS = 8000;
 const INITIAL_INSTALL_SCAN_TIMEOUT_MS = 8000;
+let mutationQueue: Promise<void> = Promise.resolve();
 
 type OAuthCallbackSuccessMessage = {
   type: 'oauth-success';
@@ -75,6 +80,48 @@ function redactOAuthLogPayload(value: unknown) {
   };
 }
 
+// Stable, searchable error codes. Do not change a code's meaning after release.
+// A code identifies the failed phase; requestId identifies the specific attempt.
+const DLC_PHASE_ERROR_CODE: Record<string, string> = {
+  queued: '001',
+  preflight: '010',
+  download: '020',
+  validate: '030',
+  recover: '035',
+  install: '040',
+  install_verify: '050',
+  remove_old: '060',
+  worldbook_verify: '070',
+  conflicts: '080',
+  regex: '090',
+  regex_verify: '100',
+  cleanup: '110',
+  registry: '120',
+  final_verify: '130',
+};
+function getDlcPhaseErrorCode(action: string, phase: string): string {
+  const kind = action === 'bridge:confirm-project-update' ? 'U' : 'I';
+  return 'CW-' + kind + '-' + (DLC_PHASE_ERROR_CODE[phase] || '999');
+}
+
+async function verifyFinalCreativeWorkshopInstallScan(
+  projectId: string,
+  version: string,
+  worldbookName: string | null,
+) {
+  const scan = await scanInstalledCreativeWorkshopProjects();
+  if (!scan.complete) {
+    throw new Error('最终验收未完成：部分世界书暂时无法读取，请重新扫描并检查安装状态');
+  }
+  const matching = scan.projects.filter(project =>
+    project.projectId === projectId && (project.worldbookName || null) === worldbookName);
+  if (matching.length !== 1 || matching[0].localVersion !== version ||
+      matching[0].mixedVersions || matching[0].regexVersionMismatch || matching[0].regexInstallPending) {
+    throw new Error('最终验收失败：目标 DLC 的安装位置、版本或 Regex 状态仍不一致，请重新扫描');
+  }
+  return scan;
+}
+
 export function createCreativeWorkshopBridgeHost(option: HostOption) {
   const { iframe, targetOrigin, hostWindow = window.parent !== window ? window.parent : window, onClose, onReady } = option;
   const oauthOrigin = getCreativeWorkshopOrigin();
@@ -86,6 +133,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
   let oauthPopupOpenedAt = 0;
   let initialInstalledProjectScanInFlight: ReturnType<typeof scanInstalledCreativeWorkshopProjects> | null = null;
   const projectMutationInFlight = new Set<string>();
+  // Serialize all installations writing to the same character/worldbook/regex scope.
 
   async function getInitialInstalledProjectScan() {
     if (initialInstalledProjectScanInFlight) return initialInstalledProjectScanInFlight;
@@ -285,35 +333,42 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
+    const isTransferMutation = actionType === 'bridge:install-project' || actionType === 'bridge:confirm-project-update';
+    let currentPhase = isTransferMutation ? 'queued' : '';
+    const emitProgress = (phase: string, details?: { loadedBytes?: number; totalBytes?: number; source?: string }) => {
+      if (!isTransferMutation) return;
+      currentPhase = phase;
+      void post('bridge:operation-progress', {
+        projectId: actionProjectId,
+        action: actionType,
+        phase,
+        ...(details || {}),
+      }, event.data.requestId);
+    };
     const isProjectMutation =
       actionType === 'bridge:install-project' ||
       actionType === 'bridge:uninstall-project' ||
       actionType === 'bridge:confirm-project-update' ||
       actionType === 'bridge:repair:project';
 
-    if (isProjectMutation && actionProjectId) {
-      if (projectMutationInFlight.has(actionProjectId)) {
-        await post(
-          'bridge:error',
-          {
-            message: '此项目已有安装、更新或卸载操作正在进行，请等待完成',
-            projectId: actionProjectId,
-            action: actionType,
-          },
-          event.data.requestId,
-        );
-        return;
-      }
-      projectMutationInFlight.add(actionProjectId);
+    if (isTransferMutation) emitProgress('queued');
+    let finishMutation: (() => void) | null = null;
+    if (isProjectMutation || actionType === 'bridge:list-installed-projects') {
+      const prior = mutationQueue;
+      mutationQueue = new Promise<void>(resolve => { finishMutation = resolve; });
+      await prior;
+      if (actionProjectId) projectMutationInFlight.add(actionProjectId);
     }
 
     try {
+      if (isTransferMutation) emitProgress('preflight');
+      if (isProjectMutation || actionType === 'bridge:list-installed-projects') await migrateCreativeWorkshopLegacyRegexRecords();
       switch (event.data.type) {
         case 'bridge:handshake':
           onReady?.();
           await post(
             'bridge:handshake:ok',
-            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION },
+            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true } },
             event.data.requestId,
           );
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
@@ -349,25 +404,44 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           if (!_.isString(_.get(event.data, 'payload.projectId'))) {
             throw new Error('缺少 projectId');
           }
-          await installCreativeWorkshopProject(
+          const installedDetail = await installCreativeWorkshopProject(
             String(event.data.payload?.projectId),
             Array.isArray(event.data.payload?.worldbookEntryKeys) ? event.data.payload?.worldbookEntryKeys.map(String) : undefined,
             _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
             event.data.payload?.manageOriginalConflicts === true,
             _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined,
+            Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined,
+            emitProgress,
+            _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
           );
-          await installCreativeWorkshopRegex(
+          emitProgress('regex');
+          try { await applyPreparedCreativeWorkshopRegex(String(event.data.payload?.projectId), installedDetail,
+            prepareCreativeWorkshopRegexEntries(installedDetail, Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined));
+          } catch (error) { throw new Error('部分完成：DLC 世界书阶段已完成，角色正则未通过验收。请重新扫描并重试：' + (error instanceof Error ? error.message : String(error))); }
+          emitProgress('regex_verify');
+          await verifyCreativeWorkshopRegexInstallation(
             String(event.data.payload?.projectId),
-            Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload?.regexEntryKeys.map(String) : undefined,
-            _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
+            installedDetail,
+            undefined,
+            Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined,
+          );
+          emitProgress('registry');
+          setCreativeWorkshopInstallRecord(String(event.data.payload?.projectId), installedDetail.installRecord);
+          if (getCreativeWorkshopInstallRecord(String(event.data.payload?.projectId))?.installedVersion !== installedDetail.installRecord.installedVersion)
+            throw new Error('部分完成：安装记录未保存，请重新扫描');
+          emitProgress('final_verify');
+          const verifiedInstallScan = await verifyFinalCreativeWorkshopInstallScan(
+            String(event.data.payload?.projectId),
+            String(installedDetail.project.version),
+            installedDetail.installRecord.worldbookName,
           );
           await post(
             'bridge:install-result',
             {
               success: true,
               projectId: String(event.data.payload?.projectId),
-              projects: await listInstalledCreativeWorkshopProjects(),
+              ...verifiedInstallScan,
             },
             event.data.requestId,
           );
@@ -377,29 +451,32 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           if (!_.isString(_.get(event.data, 'payload.projectId'))) {
             throw new Error('缺少 projectId');
           }
-          await uninstallCreativeWorkshopProject(String(event.data.payload?.projectId), actionLegacyProjectName);
-          await uninstallCreativeWorkshopRegex(String(event.data.payload?.projectId), actionLegacyProjectName);
-          const remainingProjects = await listInstalledCreativeWorkshopProjects();
-          const stillInstalled = remainingProjects.some(project =>
-            project.projectId === String(event.data.payload?.projectId) ||
-            Boolean(
-              actionLegacyProjectName &&
-                (project.projectId === actionLegacyProjectName || project.legacyProjectName === actionLegacyProjectName),
-            ),
+          await uninstallCreativeWorkshopProject(
+            String(event.data.payload?.projectId),
+            actionLegacyProjectName,
+            _.isString(event.data.payload?.worldbookName) ? String(event.data.payload.worldbookName) : undefined,
           );
-          if (stillInstalled) {
-            throw new Error('卸载未完全完成：仍检测到旧工坊安装条目，请重试或手动检查世界书/正则');
+          const remainingScan = await scanInstalledCreativeWorkshopProjects();
+          if (!remainingScan.complete) {
+            throw new Error('所选世界书已执行卸载，但其他世界书暂时读不到。共享 Regex 已保留，请重新扫描确认后再继续');
           }
-          deleteCreativeWorkshopInstallRecord(String(event.data.payload?.projectId));
-          if (actionLegacyProjectName && actionLegacyProjectName !== String(event.data.payload?.projectId)) {
-            deleteCreativeWorkshopInstallRecord(actionLegacyProjectName);
+          const remainingProjects = remainingScan.projects;
+          const stillInstalled = remainingProjects.some(project =>
+            project.entryCount > 0 &&
+            (project.projectId === String(event.data.payload?.projectId) ||
+              Boolean(actionLegacyProjectName && project.projectId === actionLegacyProjectName)));
+          if (!stillInstalled) {
+            await uninstallCreativeWorkshopRegex(String(event.data.payload?.projectId), actionLegacyProjectName);
+            deleteCreativeWorkshopInstallRecord(String(event.data.payload?.projectId));
+            if (actionLegacyProjectName && actionLegacyProjectName !== String(event.data.payload?.projectId))
+              deleteCreativeWorkshopInstallRecord(actionLegacyProjectName);
           }
           await post(
             'bridge:uninstall-result',
             {
               success: true,
               projectId: String(event.data.payload?.projectId),
-              projects: remainingProjects,
+              ...await scanInstalledCreativeWorkshopProjects(),
             },
             event.data.requestId,
           );
@@ -412,6 +489,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             String(event.data.payload?.projectId),
             _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
             actionLegacyProjectName,
+            _.isString(event.data.payload?.worldbookName) ? String(event.data.payload.worldbookName) : undefined,
           );
           await post('bridge:project-diff', diffResult, event.data.requestId);
           break;
@@ -423,20 +501,52 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           const expectedVersion = _.isString(event.data.payload?.projectVersion)
             ? String(event.data.payload?.projectVersion)
             : undefined;
-          await updateCreativeWorkshopProject(
+          const updatedDetail = await updateCreativeWorkshopProject(
             String(event.data.payload?.projectId),
             expectedVersion,
             actionLegacyProjectName,
             event.data.payload?.manageOriginalConflicts === true,
             _.isString(event.data.payload?.downloadUrl) ? String(event.data.payload?.downloadUrl) : undefined,
+            _.isString(event.data.payload?.worldbookName) ? String(event.data.payload?.worldbookName) : undefined,
+            Array.isArray(event.data.payload?.approvedDuplicates) ? event.data.payload.approvedDuplicates : [],
+            emitProgress,
+            _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
           );
-          await updateCreativeWorkshopRegex(String(event.data.payload?.projectId), expectedVersion, actionLegacyProjectName);
+          emitProgress('worldbook_verify');
+          try {
+            await verifyCreativeWorkshopApprovedDuplicateState(String(event.data.payload?.projectId), updatedDetail.worldbookVerification?.worldbookName || null, updatedDetail.duplicateSnapshots, actionLegacyProjectName);
+          } catch (error) {
+            throw new Error('部分完成：世界书已更新，但重复副本检查失败，请重新扫描：' +
+              (error instanceof Error ? error.message : String(error)));
+          }
+          emitProgress('regex');
+          try {
+            await applyPreparedCreativeWorkshopRegex(String(event.data.payload?.projectId), updatedDetail,
+            prepareCreativeWorkshopRegexEntries(updatedDetail), actionLegacyProjectName);
+          } catch (error) { throw new Error('部分完成：世界书已更新，角色正则未通过验收。请重新扫描并重试：' + (error instanceof Error ? error.message : String(error))); }
+          emitProgress('regex_verify');
+          await verifyCreativeWorkshopRegexInstallation(String(event.data.payload?.projectId), updatedDetail, actionLegacyProjectName);
+          if (updatedDetail.duplicateSnapshots?.length) emitProgress('cleanup');
+          try { await removeCreativeWorkshopApprovedDuplicates(String(event.data.payload?.projectId), updatedDetail.duplicateSnapshots, actionLegacyProjectName, updatedDetail.worldbookVerification); }
+          catch (error) { throw new Error('部分完成：选定位置已更新，但重复副本清理未通过验收，请重新扫描并确认：' + (error instanceof Error ? error.message : String(error))); }
+          emitProgress('registry');
+          setCreativeWorkshopInstallRecord(String(event.data.payload?.projectId), updatedDetail.installRecord);
+          if (getCreativeWorkshopInstallRecord(String(event.data.payload?.projectId))?.installedVersion !== updatedDetail.installRecord.installedVersion)
+            throw new Error('部分完成：安装记录未保存，请重新扫描');
+          if (actionLegacyProjectName && actionLegacyProjectName !== String(event.data.payload?.projectId))
+            deleteCreativeWorkshopInstallRecord(actionLegacyProjectName);
+          emitProgress('final_verify');
+          const verifiedUpdateScan = await verifyFinalCreativeWorkshopInstallScan(
+            String(event.data.payload?.projectId),
+            String(updatedDetail.project.version),
+            updatedDetail.installRecord.worldbookName,
+          );
           await post(
             'bridge:update-result',
             {
               success: true,
               projectId: String(event.data.payload?.projectId),
-              projects: await listInstalledCreativeWorkshopProjects(),
+              ...verifiedUpdateScan,
             },
             event.data.requestId,
           );
@@ -544,19 +654,37 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
         }
       }
     } catch (error) {
+      if (isTransferMutation) {
+        console.error('[CreativeWorkshop DLC operation failed]', {
+          errorCode: getDlcPhaseErrorCode(actionType, currentPhase),
+          phase: currentPhase,
+          action: actionType,
+          projectId: actionProjectId,
+          requestId: event.data.requestId,
+          error,
+        });
+      }
+      let failedScan;
+      if (isProjectMutation) {
+        try { failedScan = await scanInstalledCreativeWorkshopProjects(); }
+        catch { failedScan = { projects: [], complete: false, unreadableWorldbookNames: [] }; }
+      }
       await post(
         'bridge:error',
         {
           message: error instanceof Error ? error.message : String(error),
+          ...(isTransferMutation ? { errorCode: getDlcPhaseErrorCode(actionType, currentPhase), phase: currentPhase } : {}),
           projectId: actionProjectId,
           action: actionType,
+          ...failedScan,
         },
         event.data.requestId,
       );
     } finally {
-      if (isProjectMutation && actionProjectId) {
-        projectMutationInFlight.delete(actionProjectId);
-      }
+      if (isProjectMutation && actionProjectId) projectMutationInFlight.delete(actionProjectId);
+      // Both mutations and installed-project scans enter this queue.
+      // A scan must release the queue even when migration/scanning fails.
+      finishMutation?.();
     }
   }
 

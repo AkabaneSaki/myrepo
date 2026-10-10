@@ -11,6 +11,8 @@ const compiled = ts.transpileModule(source, {
     esModuleInterop: true,
   },
 }).outputText;
+const stageSource = await readFile(new URL('../../src/CreativeWorkshop/services/worldbook-stage.ts', import.meta.url), 'utf8');
+const stageCompiled = ts.transpileModule(stageSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 
 const ORIGINAL_ENTRY_NAME = '[本体][势力][诺斯加德联盟][城镇][白曜城]五馆街';
 
@@ -18,6 +20,7 @@ function loadHarness({
   entryEnabled = true,
   entryName = ORIGINAL_ENTRY_NAME,
   entryUid = null,
+  regexEntries = [],
 } = {}) {
   const worldbooks = {
     Original: [
@@ -30,7 +33,9 @@ function loadHarness({
     ],
   };
   const records = {};
+  let regexes = structuredClone(regexEntries);
   const module = { exports: {} };
+  let stageApi;
   const context = {
     module,
     exports: module.exports,
@@ -41,6 +46,8 @@ function loadHarness({
           getCreativeWorkshopInstallRecords: () => records,
         };
       }
+      if (specifier === './install-identity') return {};
+      if (specifier === './worldbook-stage') return stageApi;
       throw new Error(`Unexpected require: ${specifier}`);
     },
     Promise,
@@ -52,16 +59,24 @@ function loadHarness({
       uniq: values => [...new Set(values)],
     },
     getCharWorldbookNames: () => ({ primary: 'Original', additional: [] }),
+    getTavernRegexes: () => structuredClone(regexes),
+    updateTavernRegexesWith: async updater => {
+      regexes = updater(structuredClone(regexes));
+      return regexes;
+    },
     getWorldbookNames: () => Object.keys(worldbooks),
-    getWorldbook: async name => worldbooks[name] || [],
+    getWorldbook: async name => structuredClone(worldbooks[name] || []),
     updateWorldbookWith: async (name, updater) => {
       const next = await updater(worldbooks[name] || []);
       worldbooks[name] = Array.isArray(next) ? next : worldbooks[name];
       return worldbooks[name];
     },
   };
+  const stageModule = { exports: {} };
+  vm.runInNewContext(stageCompiled, { ...context, module: stageModule, exports: stageModule.exports });
+  stageApi = stageModule.exports;
   vm.runInNewContext(compiled, context, { filename: 'original-conflicts.ts' });
-  return { api: module.exports, worldbooks, records };
+  return { api: module.exports, worldbooks, records, get regexes() { return regexes; } };
 }
 
 function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENTRY_NAME]) {
@@ -84,8 +99,8 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   assert.equal(states[0].wasEnabled, true);
   assert.equal(harness.worldbooks.Original[0].enabled, false);
   harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: states };
-  await harness.api.restoreCreativeWorkshopOriginalConflicts('A');
-  assert.equal(harness.worldbooks.Original[0].enabled, true);
+  assert.equal(harness.api.restoreCreativeWorkshopOriginalConflicts, undefined, 'historical restore API is removed');
+  assert.equal(harness.worldbooks.Original[0].enabled, false, 'uninstall must not replay an obsolete historical snapshot');
 }
 
 {
@@ -93,7 +108,6 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true));
   assert.equal(states[0].wasEnabled, false);
   harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: states };
-  await harness.api.restoreCreativeWorkshopOriginalConflicts('A');
   assert.equal(harness.worldbooks.Original[0].enabled, false, 'pre-disabled original content must stay disabled');
 }
 
@@ -103,13 +117,11 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: statesA };
   const statesB = await harness.api.syncCreativeWorkshopOriginalConflicts('B', conflictDetail(true));
   harness.records.B = { projectId: 'B', worldbookName: 'DLC-B', originalEntryStates: statesB };
-  assert.equal(statesB[0].wasEnabled, true, 'second DLC must inherit the original pre-disable state');
+  assert.equal(statesB[0].wasEnabled, false, 'new consent observes the current state, not a historical snapshot');
 
-  await harness.api.restoreCreativeWorkshopOriginalConflicts('A');
   assert.equal(harness.worldbooks.Original[0].enabled, false, 'removing one claimant must not re-enable an entry still claimed by another DLC');
   delete harness.records.A;
-  await harness.api.restoreCreativeWorkshopOriginalConflicts('B');
-  assert.equal(harness.worldbooks.Original[0].enabled, true, 'last claimant must restore the original state');
+  assert.equal(harness.worldbooks.Original[0].enabled, false, 'uninstall must not override a user-controlled state');
 }
 
 {
@@ -118,7 +130,7 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   harness.records.A = { projectId: 'A', worldbookName: 'DLC-A', originalEntryStates: states };
   const nextStates = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(false));
   assert.deepEqual(Array.from(nextStates), []);
-  assert.equal(harness.worldbooks.Original[0].enabled, true, 'updating a DLC to no longer conflict must restore the entry');
+  assert.equal(harness.worldbooks.Original[0].enabled, false, 'dropping conflicts must not restore old snapshots');
 }
 
 {
@@ -127,11 +139,8 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
     entryName: '[本体][玩家改名]五馆街',
     entryUid: '7',
   });
-  await assert.rejects(
-    () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true)),
-    /找不到原版内容.*自己关闭/,
-    'player-renamed entries are intentionally not inferred from UID',
-  );
+  const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true));
+  assert.equal(states.length, 0, 'a deleted/renamed original is not guessed from a historical UID');
   assert.equal(harness.worldbooks.Original[0].enabled, true);
 }
 
@@ -140,7 +149,7 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   harness.worldbooks.Original.push({ ...harness.worldbooks.Original[0] });
   await assert.rejects(
     () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true)),
-    /多个同名原版内容.*自己关闭/,
+    /多个同名原版内容/,
     'ambiguous duplicate names must fail closed instead of toggling every match',
   );
   assert.equal(harness.worldbooks.Original.every(entry => entry.enabled === true), true);
@@ -161,6 +170,31 @@ function conflictDetail(conflictsWithOriginal = true, entryNames = [ORIGINAL_ENT
   harness.worldbooks.Original[0].disable = true;
   const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true));
   assert.equal(states[0].wasEnabled, false, 'legacy disable=true must be remembered as originally disabled');
+}
+
+
+{
+  const harness = loadHarness({
+    entryName: '无关原版世界书',
+    regexEntries: [{ id: 'regex-1', script_name: '原版冲突 Regex', enabled: true, find_regex: 'X', replace_string: 'Y' }],
+  });
+  const states = await harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true, ['原版冲突 Regex']));
+  assert.equal(states.length, 0, 'regex-only conflict has no worldbook entry');
+  assert.equal(harness.regexes[0].enabled, false, 'matching original Regex must be disabled after consent');
+  assert.equal(harness.regexes[0].enabled, false, 'uninstall must not automatically reactivate regex');
+}
+
+{
+  const harness = loadHarness({
+    regexEntries: [{ id: 'regex-2', script_name: ORIGINAL_ENTRY_NAME, enabled: true }],
+  });
+  await assert.rejects(
+    () => harness.api.syncCreativeWorkshopOriginalConflicts('A', conflictDetail(true)),
+    /同时匹配多个世界书\/Regex/,
+    'matching WB and Regex by the same name must not silently pick one',
+  );
+  assert.equal(harness.regexes[0].enabled, true);
+  assert.equal(harness.worldbooks.Original[0].enabled, true);
 }
 
 console.log('CreativeWorkshop original-conflict smoke: ok');
