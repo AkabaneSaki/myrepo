@@ -32,6 +32,7 @@
     "check:project-ranking-snapshot": "node tests/project-ranking-snapshot-smoke.mjs",
     "check:character-reference": "node tests/character-reference-fingerprint.mjs",
     "check:character-reference-registry": "node tests/character-reference-registry-smoke.mjs",
+    "check:publish-original-regex-picker": "node tests/publish-original-regex-picker-smoke.mjs",
     "check:creative-workshop-syntax": "node scripts/check-creative-workshop-syntax.mjs",
     "check:creative-workshop-regex-identity": "node tests/creative-workshop-regex-identity-smoke.mjs",
     "check:creative-workshop-install-identity": "node tests/creative-workshop-install-identity-smoke.mjs",

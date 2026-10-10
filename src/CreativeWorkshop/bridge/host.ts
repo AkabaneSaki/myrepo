@@ -22,6 +22,8 @@ import {
 import { createBridgeMessage, isCreativeWorkshopBridgeMessage } from './protocol';
 import { createCreativeWorkshopAdditionalWorldbook, transferCreativeWorkshopInstalledWorldbook } from '../services/installed-transfer';
 import { migrateCreativeWorkshopLegacyRegexRecords } from '../services/regex-record';
+import { inspectCreativeWorkshopOriginalConflicts } from '../services/original-conflicts';
+import { fetchCreativeWorkshopProjectDetail, invalidateCreativeWorkshopProjectCache } from '../services/project-fetch';
 
 type HostOption = {
   iframe: HTMLIFrameElement;
@@ -334,6 +336,12 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
     const actionProjectId = _.isString(_.get(event.data, 'payload.projectId'))
       ? String(event.data.payload?.projectId)
       : undefined;
+    const originalConflictSelections = Array.isArray(event.data.payload?.originalConflictSelections)
+      ? event.data.payload.originalConflictSelections.map(item => ({
+          referenceItemId: String((item as any)?.referenceItemId || ''),
+          regexId: String((item as any)?.regexId || ''),
+        }))
+      : [];
     const isTransferMutation = actionType === 'bridge:install-project' || actionType === 'bridge:confirm-project-update';
     let currentPhase = isTransferMutation ? 'queued' : '';
     const emitProgress = (phase: string, details?: { loadedBytes?: number; totalBytes?: number; source?: string }) => {
@@ -372,7 +380,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
           onReady?.();
           await post(
             'bridge:handshake:ok',
-            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true } },
+            { connected: true, clientVersion: CREATIVE_WORKSHOP_CLIENT_VERSION, capabilities: { verifiedDlcInstall: true, duplicateDlcConsolidation: true, installedManagerTransfer: true, originalConflictDisambiguation: true } },
             event.data.requestId,
           );
           await post('bridge:context', getCurrentCreativeWorkshopContext(), event.data.requestId);
@@ -404,6 +412,21 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             event.data.requestId,
           );
           break;
+        case 'bridge:inspect-original-conflicts': {
+          if (!_.isString(_.get(event.data, 'payload.projectId')))
+            throw new Error('缺少 projectId');
+          // Preflight must use the current approved baseline, not a possibly
+          // stale detail cached before the new reference targets were published.
+          invalidateCreativeWorkshopProjectCache(String(event.data.payload?.projectId));
+          const detail = await fetchCreativeWorkshopProjectDetail(
+            String(event.data.payload?.projectId),
+            _.isString(event.data.payload?.projectVersion) ? String(event.data.payload?.projectVersion) : undefined,
+          );
+          const result = await inspectCreativeWorkshopOriginalConflicts(detail);
+          await post('bridge:original-conflict-preview',
+            { projectId: String(event.data.payload?.projectId), ...result }, event.data.requestId);
+          break;
+        }
         case 'bridge:install-project':
           if (!_.isString(_.get(event.data, 'payload.projectId'))) {
             throw new Error('缺少 projectId');
@@ -418,6 +441,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             Array.isArray(event.data.payload?.regexEntryKeys) ? event.data.payload.regexEntryKeys.map(String) : undefined,
             emitProgress,
             _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
+            originalConflictSelections,
           );
           emitProgress('regex');
           try { await applyPreparedCreativeWorkshopRegex(String(event.data.payload?.projectId), installedDetail,
@@ -543,6 +567,7 @@ export function createCreativeWorkshopBridgeHost(option: HostOption) {
             Array.isArray(event.data.payload?.approvedDuplicates) ? event.data.payload.approvedDuplicates : [],
             emitProgress,
             _.isString(event.data.payload?.regexDownloadUrl) ? String(event.data.payload.regexDownloadUrl) : undefined,
+            originalConflictSelections,
           );
           emitProgress('worldbook_verify');
           try {
