@@ -237,14 +237,8 @@ $(async () => {
   // 获取角色卡当前已注册的所有正则 scriptName
   const getCharacterCardRegexNames = async (): Promise<Set<string>> => {
     const names = new Set<string>();
-    try {
-      const regexes = await updateTavernRegexesWith((regexes: TavernRegex[]) => {
-        regexes.forEach(r => names.add(r.script_name));
-        return regexes;
-      });
-    } catch (e) {
-      console.warn('获取角色卡正则列表失败:', e);
-    }
+    const regexes = getTavernRegexes({ type: 'character' });
+    regexes.forEach(r => names.add(r.script_name));
     return names;
   };
 
@@ -255,9 +249,10 @@ $(async () => {
         // 避免重复注册同名正则
         const filtered = regexes.filter((r: TavernRegex) => r.script_name !== rule.script_name);
         return [...filtered, rule];
-      });
+      }, { type: 'character' });
     } catch (e) {
       console.warn(`注册正则失败: ${rule.script_name}`, e);
+      throw e;
     }
   };
 
@@ -339,7 +334,7 @@ $(async () => {
     try {
       await updateTavernRegexesWith((regexes: TavernRegex[]) => {
         return regexes.filter((r: TavernRegex) => !names.includes(r.script_name));
-      });
+      }, { type: 'character' });
       console.info(`自适应正则: 已移除 ${names.length} 条规则`);
     } catch (e) {
       console.warn('移除正则失败:', e);
@@ -386,7 +381,8 @@ $(async () => {
         saveStoredRegexNames(combinedNames);
         await syncRegexWithVariable();
       } else {
-        console.info('自适应正则: 无变化，不更新');
+        // 上次注册可能失败：名称未变化时仍尝试补齐角色卡内缺失的正则。
+        await syncRegexWithVariable();
       }
     } catch (e) {
       console.error('扫描消息更新变量失败:', e);
