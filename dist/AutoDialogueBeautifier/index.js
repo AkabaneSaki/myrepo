@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 
 ;// ./config/workshop.json
-const workshop_namespaceObject = /*#__PURE__*/JSON.parse('{"Sn":{"mz":"2.3.0"},"_r":{"J":"AkabaneSaki/myrepo"}}');
+const workshop_namespaceObject = /*#__PURE__*/JSON.parse('{"Sn":{"mz":"2.3.1"},"_r":{"J":"AkabaneSaki/myrepo"}}');
 ;// ./src/AutoDialogueBeautifier/index.ts
 
 // 自适应正则脚本
