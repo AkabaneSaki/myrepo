@@ -1,6 +1,6 @@
 {
   "client": {
-    "stable": "2.3.0",
+    "stable": "2.3.1",
     "staging": "2.3.0-dev1",
     "publicPath": "dist/CreativeWorkshop/index.js",
     "migrations": [
@@ -37,7 +37,7 @@
       "key": "AkabaneSaki/myrepo",
       "displayName": "【命定之诗】自动正则",
       "publicPath": "dist/AutoDialogueBeautifier/index.js",
-      "latestVersion": "2.3.0"
+      "latestVersion": "2.3.1"
     }
   ],
   "release": {
