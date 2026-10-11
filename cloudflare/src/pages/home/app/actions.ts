@@ -46,7 +46,6 @@ export const homeAppActionsScript = String.raw`
     const mobileLoginBtn = document.getElementById('mobileLoginBtn');
     const mobileLocalAdminLoginBtn = document.getElementById('mobileLocalAdminLoginBtn');
     const mobileInstalledProjectsBtn = document.getElementById('mobileInstalledProjectsBtn');
-    const mobileDlcRepairBtn = document.getElementById('mobileDlcRepairBtn');
     const mobileDlcUpdateStatusBtn = document.getElementById('mobileDlcUpdateStatusBtn');
     const mobileHeaderNoticeBtn = document.getElementById('mobileHeaderNoticeBtn');
     const mobileMyProjectsBtn = document.getElementById('mobileMyProjectsBtn');
@@ -230,11 +229,6 @@ export const homeAppActionsScript = String.raw`
     if (dlcRepairBtn) dlcRepairBtn.onclick = event => {
       event.stopPropagation();
       state.userMenuOpen = false;
-      openDlcRepairModal();
-    };
-    if (mobileDlcRepairBtn) mobileDlcRepairBtn.onclick = event => {
-      event.stopPropagation();
-      closeMobileTool();
       openDlcRepairModal();
     };
     if (logoutBtn) logoutBtn.onclick = logout;
@@ -600,7 +594,8 @@ export const homeAppActionsScript = String.raw`
         const nextTagButton = event.target instanceof Element ? event.target.closest('[data-base-tag]') : null;
         if (!nextTagButton) return;
         const nextTag = nextTagButton.dataset.baseTag || 'all';
-        if (state.viewMode === 'catalog' && state.activeBaseTag === nextTag) return;
+        if (!state.showSubscribedAndInstalledProjects && state.viewMode === 'catalog' && state.activeBaseTag === nextTag) return;
+        state.showSubscribedAndInstalledProjects = false;
         state.viewMode = 'catalog';
         if (state.sortMode === 'discover') state.sortMode = 'published';
         state.activeBaseTag = nextTag;

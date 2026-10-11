@@ -30,11 +30,13 @@ const mock = {
     worldbooks:{primary:'CardMain',additional:['CardExtra'],available:['CardMain','CardExtra','GlobalOne','ChatBook','Archive'],global:['GlobalOne'],chat:'ChatBook'},
   },
 };
-const render = new Function('state','escapeHtml',script + String.fromCharCode(10) + 'return renderInstalledManagerPage;')(mock,escapeHtml);
+const render = new Function('state','escapeHtml','isEmbedded',script + String.fromCharCode(10) + 'return renderInstalledManagerPage;')(mock,escapeHtml,true);
 const installed = render();
 assert.match(installed,/我的工坊/);
 assert.match(installed,/已安装 DLC/);
 assert.match(installed,/新建附加世界书/);
+assert.match(installed,/data-return-all-projects/);
+assert.match(installed,/id="dlcRepairBtn"/,'repair belongs to the installed manager');
 assert.doesNotMatch(installed,/已订阅|取消订阅/);
 assert.match(installed,/扫描范围/);
 assert.match(installed,/CardMain/);
@@ -77,6 +79,7 @@ const [layout, actions, bridge, host, scanState, protocol] = await Promise.all([
 ]);
 assert.doesNotMatch(layout,/installedProjectsToggle/,'desktop filter toggle removed');
 assert.match(layout,/desktopInstalledManagerBtn/);
+assert.doesNotMatch(layout,/id="(?:dlcRepairBtn|mobileDlcRepairBtn)"/,'global navigation omits repair');
 assert.match(layout,/renderInstalledManagerPage/);
 assert.match(actions,/bindInstalledManagerActions/);
 assert.match(bridge,/requestInstalledWorldbookTransfer/);
