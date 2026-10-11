@@ -71,6 +71,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 .btn-primary { background:#bea47d; border:1px solid #cdb38b; color:#151619; box-shadow:none; }
 .btn-primary:hover { transform:none; background:#cdb38b; border-color:#d7bf99; box-shadow:none; }
 .btn-outline:hover,.action-btn:hover { background:rgba(190,164,125,.08); border-color:rgba(190,164,125,.28); }
+.btn.workshop-community-btn { background:#5865f2; border-color:#5865f2; color:#fff; }
+.btn.workshop-community-btn:hover { background:#4752c4; border-color:#4752c4; }
+.btn.workshop-community-btn:focus-visible { outline:2px solid #b6beff; outline-offset:3px; }
+.workshop-update-hub-btn { position:relative; }
+.workshop-update-hub-btn::after { content:""; position:absolute; top:-3px; right:-3px; width:12px; height:12px; border:2px solid #191a1c; border-radius:50%; background:#ef4444; pointer-events:none; }
 .workshop-close-btn { min-height:44px; padding:8px 14px; border-color:rgba(248,113,113,0.45); background:rgba(127,29,29,0.22); color:#FECACA; }
 .workshop-close-btn:hover { background:rgba(185,28,28,0.42); border-color:#F87171; color:#FFFFFF; transform:translateY(-1px); }
 .is-loading { position:relative; opacity:0.92; cursor:progress; }
