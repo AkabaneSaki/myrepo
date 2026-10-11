@@ -27,9 +27,11 @@ function renderInstalledManagerPage() {
 
     ['scan', '扫描范围', scanned.length],
   ];
+  const repairHtml = isEmbedded ? '<button class="btn btn-outline" type="button" id="dlcRepairBtn"><i class="fas fa-screwdriver-wrench"></i> DLC 修复</button>' : '';
   const header = '<section class="installed-manager-head"><div><small>LOCAL WORKSHOP LIBRARY</small><h2>我的工坊</h2>' +
     '<p>管理当前角色已安装的 DLC。安装状态以 SillyTavern 本机实际扫描为准。</p></div>' +
-    '<div class="installed-manager-head-actions"><button class="btn btn-outline" type="button" id="installedManagerCreateBook"><i class="fas fa-plus"></i> 新建附加世界书</button>' +
+    '<div class="installed-manager-head-actions"><button class="btn btn-outline" type="button" data-return-all-projects><i class="fas fa-arrow-left"></i> 返回全部项目</button>' + repairHtml +
+    '<button class="btn btn-outline" type="button" id="installedManagerCreateBook"><i class="fas fa-plus"></i> 新建附加世界书</button>' +
     '<button class="btn btn-outline" type="button" id="installedManagerRefresh"><i class="fas fa-arrows-rotate"></i> 重新扫描</button></div></section>';
   const nav = '<nav class="installed-manager-tabs" aria-label="我的工坊分类">' + tabs.map(([id, label, count]) =>
     '<button type="button" class="' + (id === tab ? 'active' : '') +
